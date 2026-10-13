@@ -27,14 +27,14 @@ interface FormValues {
 }
 
 const inputClass =
-    'w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70';
+    'w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70';
 
 const Field: React.FC<{
     label: string;
     hint?: string;
     children: React.ReactNode;
 }> = ({ label, hint, children }) => (
-    <label className="block space-y-1">
+    <label className="block space-y-1 min-w-0">
         <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
             {label}
         </span>
@@ -134,7 +134,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
                 />
             </Field>
 
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <Field label="Cycle start">
                     <input
                         type="date"
@@ -168,7 +168,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
                 />
             </Field>
 
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <Field label="Budget Additions" hint="Optional initial extra cash block.">
                     <input
                         type="number"
@@ -482,7 +482,6 @@ export const BudgetView: React.FC = () => {
                 </button>
             </div>
 
-            {/* Quick Ledger Adjustments Tool */}
             <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800/80 space-y-3">
                 <div>
                     <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
