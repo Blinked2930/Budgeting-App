@@ -1,3 +1,4 @@
+// src/components/LockScreen.tsx
 import { useState, useEffect } from 'react';
 import { Lock, Delete } from 'lucide-react';
 import { cn } from '../utils/cn';
@@ -6,9 +7,6 @@ interface LockScreenProps {
     onUnlock: () => void;
 }
 
-// Read the PIN hash from the build-time environment.
-// Set VITE_PIN_HASH in Vercel → Settings → Environment Variables,
-// and in .env.local for local dev.
 const PIN_HASH = import.meta.env.VITE_PIN_HASH as string | undefined;
 const PIN_LENGTH = 6;
 
@@ -30,6 +28,10 @@ export const LockScreen = ({ onUnlock }: LockScreenProps) => {
             const hex = [...new Uint8Array(buf)]
                 .map((x) => x.toString(16).padStart(2, '0'))
                 .join('');
+
+            console.log('[LockScreen] env hash    :', PIN_HASH);
+            console.log('[LockScreen] entered hash:', hex);
+            console.log('[LockScreen] match       :', hex === PIN_HASH);
 
             if (cancelled) return;
 
