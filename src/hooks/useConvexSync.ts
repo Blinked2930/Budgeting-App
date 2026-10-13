@@ -1,18 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { db } from '../db';
+import { getUnsyncedExpenses, markExpensesAsSynced } from '../db';
 
 export function useConvexSync() {
     const [isSyncing, setIsSyncing] = useState(false);
+    const isSyncingRef = useRef(false);
     const syncExpenseMutation = useMutation(api.expenses.syncExpense);
 
-    const syncPendingExpenses = async () => {
-        if (!navigator.onLine || isSyncing) return;
+    const syncPendingExpenses = useCallback(async () => {
+        if (!navigator.onLine || isSyncingRef.current) return;
 
         try {
+            isSyncingRef.current = true;
             setIsSyncing(true);
-            const unsynced = await db.expenses.where('isSynced').equals(0).toArray();
+
+            const unsynced = await getUnsyncedExpenses();
+            const syncedIds: string[] = [];
 
             for (const item of unsynced) {
                 const convexId = await syncExpenseMutation({
@@ -29,18 +33,20 @@ export function useConvexSync() {
                 });
 
                 if (convexId) {
-                    await db.expenses.update(item.id, {
-                        isSynced: true,
-                        convexId: convexId as string,
-                    });
+                    syncedIds.push(item.id);
                 }
+            }
+
+            if (syncedIds.length > 0) {
+                await markExpensesAsSynced(syncedIds);
             }
         } catch (err) {
             console.error('Background sync failed:', err);
         } finally {
+            isSyncingRef.current = false;
             setIsSyncing(false);
         }
-    };
+    }, [syncExpenseMutation]);
 
     useEffect(() => {
         syncPendingExpenses();
@@ -54,7 +60,7 @@ export function useConvexSync() {
             window.removeEventListener('online', handleOnline);
             clearInterval(interval);
         };
-    }, []);
+    }, [syncPendingExpenses]);
 
     return { syncPendingExpenses, isSyncing };
 }
