@@ -63,7 +63,6 @@ interface Suggestion {
   latest: ExpenseRecord;
 }
 
-/** Past item names in this category, most-used first, filtered by what's typed. */
 function buildSuggestions(
   expenses: ExpenseRecord[],
   category: Category,
@@ -71,7 +70,6 @@ function buildSuggestions(
 ): Suggestion[] {
   const byName = new Map<string, Suggestion>();
 
-  // `expenses` is newest first, so the first record seen per name is the latest.
   for (const e of expenses) {
     if (e.category !== category || !e.itemName) continue;
     const name = e.itemName.trim();
@@ -172,7 +170,6 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
       className={cn('fixed inset-0 z-50', !isOpen && 'pointer-events-none')}
       aria-hidden={!isOpen}
     >
-      {/* Backdrop */}
       <div
         onClick={onClose}
         className={cn(
@@ -181,7 +178,6 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
         )}
       />
 
-      {/* Sheet */}
       <div
         role="dialog"
         aria-label="Advanced entry"
@@ -203,7 +199,6 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
         </div>
 
         <div className="overflow-y-auto px-5 py-4 space-y-5">
-          {/* Category */}
           <div>
             <SectionLabel>Category</SectionLabel>
             <div className="flex flex-wrap gap-1.5">
@@ -216,12 +211,11 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
             </div>
           </div>
 
-          {/* Subcategory (not for Food, which has its own detail section) */}
           {subcategories.length > 0 && (
             <div>
               <SectionLabel>Type of {category.toLowerCase()}</SectionLabel>
               <div className="flex flex-wrap gap-1.5">
-                {subcategories.map((sub) => (
+                {subcategories.map((sub: string) => (
                   <Chip
                     key={sub}
                     selected={subcategory === sub}
@@ -234,7 +228,6 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
             </div>
           )}
 
-          {/* Item name with suggestions from past entries in this category */}
           <div>
             <SectionLabel>{config.itemLabel}</SectionLabel>
             <input
@@ -252,7 +245,6 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
                   <button
                     key={s.name}
                     type="button"
-                    // onMouseDown keeps the input from blurring before the tap registers
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => applySuggestion(s)}
                     className="px-2.5 py-1 rounded-xl bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/50 text-[11px] font-medium text-slate-300 hover:text-white cursor-pointer"
@@ -265,12 +257,11 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
             )}
           </div>
 
-          {/* Vendor (only when it makes sense for this category/type) */}
           {vendorOptions.length > 0 && (
             <div>
               <SectionLabel>Where?</SectionLabel>
               <div className="flex flex-wrap gap-1.5">
-                {vendorOptions.map((v) => (
+                {vendorOptions.map((v: VendorType) => (
                   <Chip
                     key={v}
                     selected={vendorType === v}
@@ -283,7 +274,6 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
             </div>
           )}
 
-          {/* Food-only details */}
           {isFood && (
             <>
               <div>
