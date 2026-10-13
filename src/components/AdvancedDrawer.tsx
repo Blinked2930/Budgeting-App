@@ -1,59 +1,50 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  X,
-  Store,
-  Coffee,
-  ShoppingBag,
-  Croissant,
-  UtensilsCrossed,
-  Tag,
-  Check,
-  Sparkles,
-  Utensils,
-  Lightbulb,
   Bus,
-  Users,
-  Plane,
-  MoreHorizontal,
+  Lightbulb,
   Minus,
+  MoreHorizontal,
+  Plane,
   Plus,
+  Users,
+  Utensils,
+  X,
 } from 'lucide-react';
 import {
-  type Category,
   CATEGORIES,
-  type FoodType,
   FOOD_TYPES,
+  type Category,
+  type ExpenseRecord,
+  type FoodType,
   type VendorType,
-  VENDORS,
 } from '../types';
-import { useHistoricalSuggestions, type ItemSuggestion } from '../hooks/useHistoricalSuggestions';
-
+import { useExpenses } from '../hooks/useExpenses';
+import {
+  CATEGORY_CONFIG,
+  getSubcategories,
+  getVendorOptions,
+  showFoodDetails,
+} from '../utils/categoryConfig';
 import { cn } from '../utils/cn';
 
 interface AdvancedDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   itemName: string;
-  setItemName: (val: string) => void;
+  setItemName: (value: string) => void;
   category: Category;
-  setCategory: (val: Category) => void;
-  vendorType?: VendorType;
-  setVendorType: (val: VendorType | undefined) => void;
-  foodType?: FoodType;
-  setFoodType: (val: FoodType | undefined) => void;
-  estimatedMeals?: number;
-  setEstimatedMeals: (val: number | undefined) => void;
-  onApplyAndClose?: () => void;
+  setCategory: (value: Category) => void;
+  subcategory: string | undefined;
+  setSubcategory: (value: string | undefined) => void;
+  vendorType: VendorType | undefined;
+  setVendorType: (value: VendorType | undefined) => void;
+  foodType: FoodType | undefined;
+  setFoodType: (value: FoodType | undefined) => void;
+  estimatedMeals: number | undefined;
+  setEstimatedMeals: (value: number | undefined) => void;
+  onApplyAndClose: () => void;
+  onClear: () => void;
 }
-
-const VENDOR_ICONS: Record<VendorType, React.ReactNode> = {
-  Pazar: <Store className="w-3.5 h-3.5" />,
-  Supermarket: <ShoppingBag className="w-3.5 h-3.5" />,
-  Café: <Coffee className="w-3.5 h-3.5" />,
-  Bakery: <Croissant className="w-3.5 h-3.5" />,
-  Restaurant: <UtensilsCrossed className="w-3.5 h-3.5" />,
-  Other: <Tag className="w-3.5 h-3.5" />,
-};
 
 const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
   Food: <Utensils className="w-3.5 h-3.5 text-emerald-400" />,
@@ -64,6 +55,71 @@ const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
   Other: <MoreHorizontal className="w-3.5 h-3.5 text-slate-400" />,
 };
 
+const MEAL_PRESETS = [1, 2, 3, 4, 6];
+
+interface Suggestion {
+  name: string;
+  count: number;
+  latest: ExpenseRecord;
+}
+
+/** Past item names in this category, most-used first, filtered by what's typed. */
+function buildSuggestions(
+  expenses: ExpenseRecord[],
+  category: Category,
+  query: string
+): Suggestion[] {
+  const byName = new Map<string, Suggestion>();
+
+  // `expenses` is newest first, so the first record seen per name is the latest.
+  for (const e of expenses) {
+    if (e.category !== category || !e.itemName) continue;
+    const name = e.itemName.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    const existing = byName.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      byName.set(key, { name, count: 1, latest: e });
+    }
+  }
+
+  const q = query.trim().toLowerCase();
+  return Array.from(byName.values())
+    .filter((s) => {
+      const lower = s.name.toLowerCase();
+      return q ? lower.includes(q) && lower !== q : true;
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+}
+
+const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+    {children}
+  </p>
+);
+
+const Chip: React.FC<{
+  selected: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}> = ({ selected, onClick, children }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    className={cn(
+      'flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer',
+      selected
+        ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
+        : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+    )}
+  >
+    {children}
+  </button>
+);
+
 export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
   isOpen,
   onClose,
@@ -71,6 +127,8 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
   setItemName,
   category,
   setCategory,
+  subcategory,
+  setSubcategory,
   vendorType,
   setVendorType,
   foodType,
@@ -78,287 +136,238 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
   estimatedMeals,
   setEstimatedMeals,
   onApplyAndClose,
+  onClear,
 }) => {
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const suggestions = useHistoricalSuggestions(itemName);
+  const { expenses } = useExpenses();
+  const [isFocused, setIsFocused] = useState(false);
 
-  if (!isOpen) return null;
+  const config = CATEGORY_CONFIG[category];
+  const subcategories = getSubcategories(category);
+  const vendorOptions = getVendorOptions(category, subcategory);
+  const isFood = showFoodDetails(category);
 
-  const handleSelectSuggestion = (s: ItemSuggestion) => {
-    setItemName(s.itemName);
-    if (s.category) setCategory(s.category);
-    if (s.vendorType) setVendorType(s.vendorType);
-    if (s.foodType) setFoodType(s.foodType);
-    setShowSuggestions(false);
+  const suggestions = useMemo(
+    () => buildSuggestions(expenses, category, itemName),
+    [expenses, category, itemName]
+  );
+
+  const applySuggestion = (s: Suggestion) => {
+    setItemName(s.name);
+    setSubcategory(s.latest.subcategory);
+    setVendorType(s.latest.vendorType);
+    setFoodType(s.latest.foodType);
+    setEstimatedMeals(s.latest.estimatedMeals);
   };
 
-  const handleClearDetails = () => {
-    setItemName('');
-    setVendorType(undefined);
-    setFoodType(undefined);
-    setEstimatedMeals(undefined);
+  const toggle = <T,>(current: T | undefined, value: T, set: (v: T | undefined) => void) =>
+    set(current === value ? undefined : value);
+
+  const adjustMeals = (delta: number) => {
+    const next = (estimatedMeals ?? 0) + delta;
+    setEstimatedMeals(next > 0 ? next : undefined);
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm animate-fade-in">
-      {/* Click outside to close */}
-      <div className="absolute inset-0" onClick={onClose} />
+    <div
+      className={cn('fixed inset-0 z-50', !isOpen && 'pointer-events-none')}
+      aria-hidden={!isOpen}
+    >
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        className={cn(
+          'absolute inset-0 bg-black/60 transition-opacity duration-300',
+          isOpen ? 'opacity-100' : 'opacity-0'
+        )}
+      />
 
-      {/* Slide-up Container */}
-      <div className="relative w-full max-w-md bg-slate-900 border-t border-slate-800 rounded-t-3xl p-5 shadow-2xl max-h-[90vh] overflow-y-auto pb-10 z-10 animate-slide-up">
-        {/* Grab Handle */}
-        <div className="w-12 h-1.5 bg-slate-700/80 rounded-full mx-auto mb-4" />
-
-        <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-          <div>
-            <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <span>Advanced Details</span>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-emerald-400 border border-slate-700">
-                Optional
-              </span>
-            </h2>
-            <p className="text-xs text-slate-400">Add context to your expense</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {(itemName || vendorType || foodType || estimatedMeals) && (
-              <button
-                type="button"
-                onClick={handleClearDetails}
-                className="text-xs text-slate-400 hover:text-rose-400 px-2 py-1 transition-colors cursor-pointer"
-              >
-                Reset
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 rounded-full bg-slate-800 text-slate-300 hover:text-white transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+      {/* Sheet */}
+      <div
+        role="dialog"
+        aria-label="Advanced entry"
+        className={cn(
+          'absolute bottom-0 inset-x-0 mx-auto max-w-md flex flex-col max-h-[88vh] bg-slate-900 border-t border-x border-slate-800 rounded-t-3xl shadow-2xl transition-transform duration-300',
+          isOpen ? 'translate-y-0' : 'translate-y-full'
+        )}
+      >
+        <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-800/80">
+          <h2 className="text-base font-bold text-white">Advanced entry</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        <div className="space-y-5 pt-4">
-          {/* Item Name Input with Smart Auto-suggestions */}
-          <div className="relative">
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Item Name / Description</span>
-              </label>
-              {suggestions.length > 0 && !showSuggestions && (
-                <span className="text-[10px] text-slate-500">
-                  {suggestions.length} past items found
-                </span>
-              )}
+        <div className="overflow-y-auto px-5 py-4 space-y-5">
+          {/* Category */}
+          <div>
+            <SectionLabel>Category</SectionLabel>
+            <div className="flex flex-wrap gap-1.5">
+              {CATEGORIES.map((cat) => (
+                <Chip key={cat} selected={category === cat} onClick={() => setCategory(cat)}>
+                  {CATEGORY_ICONS[cat]}
+                  {cat}
+                </Chip>
+              ))}
             </div>
+          </div>
 
+          {/* Subcategory (not for Food, which has its own detail section) */}
+          {subcategories.length > 0 && (
+            <div>
+              <SectionLabel>Type of {category.toLowerCase()}</SectionLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {subcategories.map((sub) => (
+                  <Chip
+                    key={sub}
+                    selected={subcategory === sub}
+                    onClick={() => toggle(subcategory, sub, setSubcategory)}
+                  >
+                    {sub}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Item name with suggestions from past entries in this category */}
+          <div>
+            <SectionLabel>{config.itemLabel}</SectionLabel>
             <input
               type="text"
               value={itemName}
-              onChange={(e) => {
-                setItemName(e.target.value);
-                setShowSuggestions(true);
-              }}
-              onFocus={() => setShowSuggestions(true)}
-              placeholder="e.g. Buka, Kafe me qumësht, Djathë..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all font-medium"
+              onChange={(e) => setItemName(e.target.value)}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              placeholder={config.itemPlaceholder}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/70"
             />
-
-            {/* Suggestions list */}
-            {showSuggestions && suggestions.length > 0 && (
-              <div className="mt-2 p-2 bg-slate-950/90 rounded-2xl border border-slate-800/80 shadow-lg space-y-1">
-                <div className="px-2 py-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex justify-between">
-                  <span>Past Entries Auto-Suggest</span>
+            {suggestions.length > 0 && (isFocused || itemName.length === 0) && (
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {suggestions.map((s) => (
                   <button
-                    onClick={() => setShowSuggestions(false)}
-                    className="text-[10px] text-emerald-400 hover:underline cursor-pointer"
+                    key={s.name}
+                    type="button"
+                    // onMouseDown keeps the input from blurring before the tap registers
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => applySuggestion(s)}
+                    className="px-2.5 py-1 rounded-xl bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/50 text-[11px] font-medium text-slate-300 hover:text-white cursor-pointer"
+                    title={`Used ${s.count} time${s.count === 1 ? '' : 's'}. Tap to reuse its details.`}
                   >
-                    Hide
+                    {s.name}
                   </button>
-                </div>
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {suggestions.map((s) => (
-                    <button
-                      key={s.itemName}
-                      type="button"
-                      onClick={() => handleSelectSuggestion(s)}
-                      className="px-2.5 py-1.5 rounded-xl bg-slate-800/90 hover:bg-emerald-950/40 hover:border-emerald-500/50 border border-slate-700/60 text-xs text-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <span>{s.itemName}</span>
-                      {s.vendorType && (
-                        <span className="text-[10px] text-slate-400">
-                          ({s.vendorType})
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                ))}
               </div>
             )}
           </div>
 
-          {/* Category Assignment Selector */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-              Category
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {CATEGORIES.map((cat) => {
-                const isSelected = category === cat;
-                return (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setCategory(cat)}
-                    className={cn(
-                      'flex items-center gap-2 p-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer text-left',
-                      isSelected
-                        ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300 shadow-sm shadow-emerald-500/20'
-                        : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                    )}
-                  >
-                    <span className="shrink-0">{CATEGORY_ICONS[cat]}</span>
-                    <span className="truncate">{cat}</span>
-                    {isSelected && <Check className="w-3 h-3 ml-auto text-emerald-400 shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Vendor Selector */}
-          <div>
-            <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-              Vendor Type
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {VENDORS.map((v) => {
-                const isSelected = vendorType === v;
-                return (
-                  <button
+          {/* Vendor (only when it makes sense for this category/type) */}
+          {vendorOptions.length > 0 && (
+            <div>
+              <SectionLabel>Where?</SectionLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {vendorOptions.map((v) => (
+                  <Chip
                     key={v}
-                    type="button"
-                    onClick={() => setVendorType(isSelected ? undefined : v)}
-                    className={cn(
-                      'flex items-center gap-2 p-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer',
-                      isSelected
-                        ? 'bg-teal-500/15 border-teal-500 text-teal-300 shadow-sm shadow-teal-500/20'
-                        : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
-                    )}
+                    selected={vendorType === v}
+                    onClick={() => toggle(vendorType, v, setVendorType)}
                   >
-                    <span>{VENDOR_ICONS[v]}</span>
-                    <span className="truncate">{v}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Food Type & Estimated Meals (Shown for Food or food vendors) */}
-          <div className="bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800/80 space-y-3.5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Utensils className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Food & Nutrition Details</span>
-              </span>
-              <span className="text-[10px] text-slate-500">Peace Corps Per-Meal Tracker</span>
-            </div>
-
-            <div>
-              <p className="text-[11px] text-slate-400 mb-1.5 font-medium">Food Classification</p>
-              <div className="grid grid-cols-2 gap-2">
-                {FOOD_TYPES.map((ft) => {
-                  const isSelected = foodType === ft;
-                  return (
-                    <button
-                      key={ft}
-                      type="button"
-                      onClick={() => setFoodType(isSelected ? undefined : ft)}
-                      className={cn(
-                        'px-3 py-2 rounded-xl border text-xs font-medium transition-all cursor-pointer text-center',
-                        isSelected
-                          ? 'bg-emerald-500/20 border-emerald-500/80 text-emerald-300'
-                          : 'bg-slate-900 border-slate-800/80 text-slate-400 hover:text-slate-200'
-                      )}
-                    >
-                      {ft}
-                    </button>
-                  );
-                })}
+                    {v}
+                  </Chip>
+                ))}
               </div>
             </div>
+          )}
 
-            {/* Estimated Meals */}
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <p className="text-[11px] text-slate-400 font-medium">Estimated Meals Provided</p>
-                <span className="text-xs font-mono font-bold text-emerald-400">
-                  {estimatedMeals !== undefined ? `${estimatedMeals} ${estimatedMeals === 1 ? 'meal' : 'meals'}` : 'Unspecified'}
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center bg-slate-900 rounded-xl border border-slate-800 p-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const cur = estimatedMeals || 0;
-                      if (cur > 1) setEstimatedMeals(cur - 1);
-                      else setEstimatedMeals(undefined);
-                    }}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-                  >
-                    <Minus className="w-4 h-4" />
-                  </button>
-                  <span className="w-10 text-center text-sm font-bold text-white font-mono">
-                    {estimatedMeals ?? '-'}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const cur = estimatedMeals || 0;
-                      setEstimatedMeals(cur + 1);
-                    }}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </button>
-                </div>
-
-                {/* Quick meal pills */}
-                <div className="flex items-center gap-1.5 flex-1 overflow-x-auto py-0.5">
-                  {[1, 2, 3, 5].map((count) => (
-                    <button
-                      key={count}
-                      type="button"
-                      onClick={() => setEstimatedMeals(count)}
-                      className={cn(
-                        'px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer',
-                        estimatedMeals === count
-                          ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                          : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
-                      )}
+          {/* Food-only details */}
+          {isFood && (
+            <>
+              <div>
+                <SectionLabel>What kind of food?</SectionLabel>
+                <div className="flex flex-wrap gap-1.5">
+                  {FOOD_TYPES.map((f) => (
+                    <Chip
+                      key={f}
+                      selected={foodType === f}
+                      onClick={() => toggle(foodType, f, setFoodType)}
                     >
-                      {count}x
-                    </button>
+                      {f}
+                    </Chip>
                   ))}
                 </div>
               </div>
-            </div>
-          </div>
 
-          {/* Action Button */}
+              <div>
+                <SectionLabel>Meals this covers</SectionLabel>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => adjustMeals(-1)}
+                      className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:text-white cursor-pointer"
+                      aria-label="Fewer meals"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="w-8 text-center font-mono text-base font-bold text-white">
+                      {estimatedMeals ?? '—'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => adjustMeals(1)}
+                      className="p-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-300 hover:text-white cursor-pointer"
+                      aria-label="More meals"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {MEAL_PRESETS.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setEstimatedMeals(estimatedMeals === n ? undefined : n)}
+                        className={cn(
+                          'w-8 h-8 rounded-xl border text-xs font-mono font-semibold cursor-pointer',
+                          estimatedMeals === n
+                            ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
+                            : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                        )}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-600 mt-1.5">
+                  Feeds the cost-per-meal numbers on the Insights tab.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div
+          className="px-5 pt-3 pb-4 border-t border-slate-800/80 grid grid-cols-3 gap-2"
+          style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+        >
           <button
             type="button"
-            onClick={() => {
-              if (onApplyAndClose) onApplyAndClose();
-              else onClose();
-            }}
-            className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-bold text-sm shadow-lg shadow-emerald-500/20 hover:opacity-95 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2"
+            onClick={onClear}
+            className="py-3 rounded-2xl bg-slate-950 border border-slate-800 text-xs font-semibold text-slate-400 hover:text-white cursor-pointer"
           >
-            <Check className="w-4 h-4 stroke-[2.5]" />
-            <span>Apply Details</span>
+            Clear
+          </button>
+          <button
+            type="button"
+            onClick={onApplyAndClose}
+            className="col-span-2 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 text-sm font-bold cursor-pointer active:scale-[0.98]"
+          >
+            Done
           </button>
         </div>
       </div>

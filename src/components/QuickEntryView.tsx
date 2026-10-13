@@ -11,6 +11,7 @@ import {
   MoreHorizontal,
   RotateCcw,
   Zap,
+  CalendarDays,
 } from 'lucide-react';
 import {
   type Currency,
@@ -25,6 +26,8 @@ import { RecentTransactions } from './RecentTransactions';
 import { addExpense } from '../db';
 import { useExpenses } from '../hooks/useExpenses';
 import { convertToALL, formatCurrency } from '../utils/currency';
+import { dateToNoonISO, toDateInputValue } from '../utils/budget';
+import { getVendorOptions, showFoodDetails } from '../utils/categoryConfig';
 import { cn } from '../utils/cn';
 
 const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
@@ -44,9 +47,14 @@ export const QuickEntryView: React.FC = () => {
   const [currency, setCurrency] = useState<Currency>('ALL');
   const [category, setCategory] = useState<Category>('Food');
 
+  // null = "now". Set it to back-date entries (e.g. catching up on a past week).
+  const [dateOverride, setDateOverride] = useState<string | null>(null);
+  const todayStr = toDateInputValue(new Date());
+
   // Advanced Drawer state
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [itemName, setItemName] = useState<string>('');
+  const [subcategory, setSubcategory] = useState<string | undefined>(undefined);
   const [vendorType, setVendorType] = useState<VendorType | undefined>(undefined);
   const [foodType, setFoodType] = useState<FoodType | undefined>(undefined);
   const [estimatedMeals, setEstimatedMeals] = useState<number | undefined>(undefined);
@@ -67,8 +75,34 @@ export const QuickEntryView: React.FC = () => {
 
   // Has custom advanced data
   const hasAdvancedData = Boolean(
-    itemName.trim() || vendorType || foodType || estimatedMeals
+    itemName.trim() || subcategory || vendorType || foodType || estimatedMeals
   );
+
+  /** Switching category clears any detail that no longer applies to it. */
+  const handleCategoryChange = (next: Category) => {
+    setCategory(next);
+    setSubcategory(undefined);
+
+    if (!showFoodDetails(next)) {
+      setFoodType(undefined);
+      setEstimatedMeals(undefined);
+    }
+
+    const allowedVendors = getVendorOptions(next, undefined);
+    if (vendorType && !allowedVendors.includes(vendorType)) {
+      setVendorType(undefined);
+    }
+  };
+
+  /** Switching sub-type clears a vendor that doesn't fit the new one. */
+  const handleSubcategoryChange = (next: string | undefined) => {
+    setSubcategory(next);
+
+    const allowedVendors = getVendorOptions(category, next);
+    if (vendorType && !allowedVendors.includes(vendorType)) {
+      setVendorType(undefined);
+    }
+  };
 
   const handleQuickAdd = (inc: number) => {
     setAmountStr((prev) => {
@@ -78,12 +112,17 @@ export const QuickEntryView: React.FC = () => {
     inputRef.current?.focus();
   };
 
-  const handleResetForm = () => {
-    setAmountStr('');
+  const handleClearAdvanced = () => {
     setItemName('');
+    setSubcategory(undefined);
     setVendorType(undefined);
     setFoodType(undefined);
     setEstimatedMeals(undefined);
+  };
+
+  const handleResetForm = () => {
+    setAmountStr('');
+    handleClearAdvanced();
     inputRef.current?.focus();
   };
 
@@ -103,19 +142,23 @@ export const QuickEntryView: React.FC = () => {
         currency,
         category,
         itemName: itemName.trim() || undefined,
+        subcategory,
         vendorType,
         foodType,
         estimatedMeals,
+        timestamp: dateOverride ? dateToNoonISO(dateOverride) : undefined,
       });
 
       const latencyMs = Math.round(performance.now() - startTime);
 
       setFeedback(
-        `Logged ${formatCurrency(parsedAmount, currency)} in ${latencyMs}ms ⚡ (Dexie local)`
+        dateOverride
+          ? `Logged ${formatCurrency(parsedAmount, currency)} for ${dateOverride}`
+          : `Logged ${formatCurrency(parsedAmount, currency)} in ${latencyMs}ms ⚡ (Dexie local)`
       );
       setTimeout(() => setFeedback(null), 2500);
 
-      // Reset form
+      // Reset form (the date stays so you can log several entries for the same day)
       handleResetForm();
     } catch (err) {
       console.error('Failed to log expense locally:', err);
@@ -210,7 +253,7 @@ export const QuickEntryView: React.FC = () => {
               Category
             </span>
             <span className="text-[11px] text-emerald-400 font-medium">
-              {category}
+              {subcategory ? `${category} · ${subcategory}` : category}
             </span>
           </div>
 
@@ -221,7 +264,7 @@ export const QuickEntryView: React.FC = () => {
                 <button
                   key={cat}
                   type="button"
-                  onClick={() => setCategory(cat)}
+                  onClick={() => handleCategoryChange(cat)}
                   className={cn(
                     'flex items-center gap-2 p-2.5 rounded-2xl border text-xs font-semibold transition-all cursor-pointer text-left',
                     isSelected
@@ -237,13 +280,47 @@ export const QuickEntryView: React.FC = () => {
           </div>
         </div>
 
+        {/* Date (change it to catch up on past expenses) */}
+        <div className="flex items-center justify-between gap-3 px-1">
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            <CalendarDays className="w-3.5 h-3.5" />
+            Date
+          </span>
+          <div className="flex items-center gap-2">
+            {dateOverride && (
+              <button
+                type="button"
+                onClick={() => setDateOverride(null)}
+                className="text-[11px] text-emerald-400 hover:underline cursor-pointer"
+              >
+                Back to today
+              </button>
+            )}
+            <input
+              type="date"
+              value={dateOverride ?? todayStr}
+              max={todayStr}
+              onChange={(e) => {
+                const value = e.target.value;
+                setDateOverride(value && value !== todayStr ? value : null);
+              }}
+              className={cn(
+                'bg-slate-950 border rounded-xl px-2.5 py-1.5 text-xs font-mono focus:outline-none',
+                dateOverride
+                  ? 'border-amber-500/60 text-amber-300'
+                  : 'border-slate-800 text-slate-300'
+              )}
+            />
+          </div>
+        </div>
+
         {/* Advanced details preview pill (if user added details in drawer) */}
         {hasAdvancedData && (
           <div className="p-2.5 rounded-2xl bg-slate-950/70 border border-slate-800 text-xs flex items-center justify-between">
             <div className="flex items-center gap-1.5 truncate text-slate-300 font-medium">
               <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span className="truncate">
-                {itemName || 'Item'} {vendorType ? `• ${vendorType}` : ''}{' '}
+                {itemName || subcategory || 'Item'} {vendorType ? `• ${vendorType}` : ''}{' '}
                 {estimatedMeals ? `• ${estimatedMeals} meal(s)` : ''}
               </span>
             </div>
@@ -302,7 +379,9 @@ export const QuickEntryView: React.FC = () => {
         itemName={itemName}
         setItemName={setItemName}
         category={category}
-        setCategory={setCategory}
+        setCategory={handleCategoryChange}
+        subcategory={subcategory}
+        setSubcategory={handleSubcategoryChange}
         vendorType={vendorType}
         setVendorType={setVendorType}
         foodType={foodType}
@@ -310,6 +389,7 @@ export const QuickEntryView: React.FC = () => {
         estimatedMeals={estimatedMeals}
         setEstimatedMeals={setEstimatedMeals}
         onApplyAndClose={() => setIsDrawerOpen(false)}
+        onClear={handleClearAdvanced}
       />
 
       {/* Recent Transactions List from Dexie */}
