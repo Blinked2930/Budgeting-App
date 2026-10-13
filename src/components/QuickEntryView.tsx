@@ -13,6 +13,8 @@ import {
   RotateCcw,
   Zap,
   CalendarDays,
+  Pencil,
+  X,
 } from 'lucide-react';
 import {
   type Currency,
@@ -20,11 +22,12 @@ import {
   CATEGORIES,
   type VendorType,
   type FoodType,
+  type ExpenseRecord,
 } from '../types';
 import { CurrencyToggle } from './CurrencyToggle';
 import { AdvancedDrawer } from './AdvancedDrawer';
 import { RecentTransactions } from './RecentTransactions';
-import { addExpense } from '../db';
+import { addExpense, updateExpense } from '../db';
 import { useExpenses } from '../hooks/useExpenses';
 import { convertToALL, formatCurrency } from '../utils/currency';
 import { dateToNoonISO, toDateInputValue } from '../utils/budget';
@@ -57,10 +60,15 @@ export const QuickEntryView: React.FC = () => {
   const [foodType, setFoodType] = useState<FoodType | undefined>(undefined);
   const [estimatedMeals, setEstimatedMeals] = useState<number | undefined>(undefined);
 
+  // Edit mode
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [originalDateOverride, setOriginalDateOverride] = useState<string | null>(null);
+
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -119,6 +127,34 @@ export const QuickEntryView: React.FC = () => {
     inputRef.current?.focus();
   };
 
+  const handleStartEdit = (expense: ExpenseRecord) => {
+    setEditingId(expense.id);
+    setAmountStr(String(expense.amount));
+    setCurrency(expense.currency);
+    setCategory(expense.category);
+    setItemName(expense.itemName ?? '');
+    setSubcategory(expense.subcategory);
+    setVendorType(expense.vendorType);
+    setFoodType(expense.foodType);
+    setEstimatedMeals(expense.estimatedMeals);
+
+    const expenseDate = toDateInputValue(new Date(expense.timestamp));
+    const override = expenseDate === todayStr ? null : expenseDate;
+    setDateOverride(override);
+    setOriginalDateOverride(override);
+
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 50);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setOriginalDateOverride(null);
+    setDateOverride(null);
+    handleResetForm();
+  };
+
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!parsedAmount || parsedAmount <= 0) {
@@ -130,7 +166,7 @@ export const QuickEntryView: React.FC = () => {
       setIsSaving(true);
       const startTime = performance.now();
 
-      await addExpense({
+      const baseData = {
         amount: parsedAmount,
         currency,
         category,
@@ -139,21 +175,43 @@ export const QuickEntryView: React.FC = () => {
         vendorType,
         foodType,
         estimatedMeals,
-        timestamp: dateOverride ? dateToNoonISO(dateOverride) : undefined,
-      });
+      };
 
-      const latencyMs = Math.round(performance.now() - startTime);
+      if (editingId) {
+        const updates: Partial<Omit<ExpenseRecord, 'id'>> = { ...baseData };
 
-      setFeedback(
-        dateOverride
-          ? `Logged ${formatCurrency(parsedAmount, currency)} for ${dateOverride}`
-          : `Logged ${formatCurrency(parsedAmount, currency)} in ${latencyMs}ms ⚡ (Dexie local)`
-      );
+        const dateChanged = dateOverride !== originalDateOverride;
+        if (dateChanged) {
+          updates.timestamp = dateOverride
+            ? dateToNoonISO(dateOverride)
+            : new Date().toISOString();
+        }
+
+        await updateExpense(editingId, updates);
+
+        const latencyMs = Math.round(performance.now() - startTime);
+        setFeedback(`Updated in ${latencyMs}ms ⚡`);
+      } else {
+        await addExpense({
+          ...baseData,
+          timestamp: dateOverride ? dateToNoonISO(dateOverride) : undefined,
+        });
+
+        const latencyMs = Math.round(performance.now() - startTime);
+        setFeedback(
+          dateOverride
+            ? `Logged ${formatCurrency(parsedAmount, currency)} for ${dateOverride}`
+            : `Logged ${formatCurrency(parsedAmount, currency)} in ${latencyMs}ms ⚡ (Dexie local)`
+        );
+      }
+
       setTimeout(() => setFeedback(null), 2500);
 
+      setEditingId(null);
+      setOriginalDateOverride(null);
       handleResetForm();
     } catch (err) {
-      console.error('Failed to log expense locally:', err);
+      console.error('Failed to save expense:', err);
     } finally {
       setIsSaving(false);
     }
@@ -179,9 +237,28 @@ export const QuickEntryView: React.FC = () => {
 
       {/* Main Entry Card */}
       <form
+        ref={formRef}
         onSubmit={handleSave}
         className="relative bg-slate-900/90 border border-slate-800/90 rounded-3xl p-6 shadow-2xl space-y-5"
       >
+        {/* Editing banner */}
+        {editingId && (
+          <div className="flex items-center justify-between p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-xs">
+            <div className="flex items-center gap-1.5 text-amber-300 font-medium">
+              <Pencil className="w-3.5 h-3.5" />
+              <span>Editing existing entry</span>
+            </div>
+            <button
+              type="button"
+              onClick={handleCancelEdit}
+              className="text-[11px] text-amber-400 hover:underline cursor-pointer flex items-center gap-1"
+            >
+              <X className="w-3 h-3" />
+              Cancel
+            </button>
+          </div>
+        )}
+
         {/* Currency Switcher */}
         <div className="flex justify-center">
           <CurrencyToggle selected={currency} onChange={setCurrency} />
@@ -341,7 +418,7 @@ export const QuickEntryView: React.FC = () => {
             )}
           >
             <Zap className="w-5 h-5 fill-current" />
-            <span>Save Expense</span>
+            <span>{editingId ? 'Update Expense' : 'Save Expense'}</span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </button>
 
@@ -383,7 +460,7 @@ export const QuickEntryView: React.FC = () => {
         onClear={handleClearAdvanced}
       />
 
-      <RecentTransactions expenses={expenses} />
+      <RecentTransactions expenses={expenses} onEdit={handleStartEdit} />
     </div>
   );
 };

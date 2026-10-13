@@ -1,13 +1,14 @@
+// src/components/RecentTransactions.tsx
 import React from 'react';
-import { Trash2, CheckCircle2, Clock, Utensils, Lightbulb, Bus, Users, Plane, MoreHorizontal } from 'lucide-react';
+import { Trash2, Pencil, CheckCircle2, Clock, Utensils, Lightbulb, Bus, Users, Plane, MoreHorizontal } from 'lucide-react';
 import type { ExpenseRecord, Category } from '../types';
 import { formatCurrency } from '../utils/currency';
 import { deleteExpense } from '../db';
 
-
 interface RecentTransactionsProps {
   expenses: ExpenseRecord[];
   onDeleted?: () => void;
+  onEdit?: (expense: ExpenseRecord) => void;
 }
 
 const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
@@ -42,11 +43,17 @@ function formatRelativeTime(isoString: string): string {
 export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   expenses,
   onDeleted,
+  onEdit,
 }) => {
   const handleDelete = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     await deleteExpense(id);
     if (onDeleted) onDeleted();
+  };
+
+  const handleEdit = (expense: ExpenseRecord, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onEdit) onEdit(expense);
   };
 
   if (!expenses || expenses.length === 0) {
@@ -116,12 +123,11 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                       )}
                       <span className="text-[10px]">{expense.isSynced ? 'Synced' : 'Offline'}</span>
                     </span>
-
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-3 shrink-0 ml-2">
+              <div className="flex items-center gap-2 shrink-0 ml-2">
                 <div className="text-right">
                   <p className="text-sm font-bold font-mono text-white tracking-tight">
                     {formatCurrency(expense.amount, expense.currency)}
@@ -133,14 +139,25 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                   )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={(e) => handleDelete(expense.id, e)}
-                  className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
-                  title="Delete record"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={(e) => handleEdit(expense, e)}
+                    className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all cursor-pointer"
+                    title="Edit record"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => handleDelete(expense.id, e)}
+                    className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
+                    title="Delete record"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           );
