@@ -20,9 +20,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => {
     return (
         <nav
             className="shrink-0 w-full border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-md"
-            style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+            style={{ paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom))' }}
         >
-            <div className="max-w-md mx-auto grid grid-cols-3 px-4 py-2 gap-2">
+            <div className="max-w-md mx-auto grid grid-cols-3 px-4 pt-1.5 gap-1">
                 {TABS.map((tab) => {
                     const isActive = tab.id === active;
                     return (
@@ -31,7 +31,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => {
                             type="button"
                             onClick={() => onChange(tab.id)}
                             className={cn(
-                                'flex flex-col items-center gap-1 py-2 rounded-2xl text-[11px] font-semibold transition-colors cursor-pointer',
+                                'flex flex-col items-center gap-0.5 py-1.5 rounded-2xl text-[11px] font-semibold transition-colors cursor-pointer',
                                 isActive
                                     ? 'bg-emerald-500/15 text-emerald-300'
                                     : 'text-slate-500 hover:text-slate-300'
