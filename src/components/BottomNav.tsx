@@ -1,3 +1,4 @@
+// src/components/BottomNav.tsx
 import React from 'react';
 import { ChartColumn, Wallet, Zap } from 'lucide-react';
 import { cn } from '../utils/cn';
@@ -18,8 +19,8 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => {
     return (
         <nav
-            className="fixed bottom-0 inset-x-0 z-20 border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-md"
-            style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+            className="shrink-0 w-full border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-md"
+            style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
         >
             <div className="max-w-md mx-auto grid grid-cols-3 px-4 py-2 gap-2">
                 {TABS.map((tab) => {
