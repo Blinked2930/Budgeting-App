@@ -6,12 +6,10 @@ interface LockScreenProps {
     onUnlock: () => void;
 }
 
-// SHA-256 hash of the correct PIN. Default PIN is "0000".
-// To set your own, open your browser console on the running app and run:
-//   crypto.subtle.digest('SHA-256', new TextEncoder().encode('YOUR_PIN'))
-//     .then(b => console.log([...new Uint8Array(b)].map(x => x.toString(16).padStart(2,'0')).join('')))
-// Paste the output below, replacing PIN_HASH.
-const PIN_HASH = '9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0';
+// Read the PIN hash from the build-time environment.
+// Set VITE_PIN_HASH in Vercel → Settings → Environment Variables,
+// and in .env.local for local dev.
+const PIN_HASH = import.meta.env.VITE_PIN_HASH as string | undefined;
 const PIN_LENGTH = 6;
 
 export const LockScreen = ({ onUnlock }: LockScreenProps) => {
@@ -20,6 +18,7 @@ export const LockScreen = ({ onUnlock }: LockScreenProps) => {
     const [shake, setShake] = useState<boolean>(false);
 
     useEffect(() => {
+        if (!PIN_HASH) return;
         if (entered.length !== PIN_LENGTH) return;
 
         let cancelled = false;
@@ -52,6 +51,19 @@ export const LockScreen = ({ onUnlock }: LockScreenProps) => {
             cancelled = true;
         };
     }, [entered, onUnlock]);
+
+    if (!PIN_HASH) {
+        return (
+            <div className="min-h-dvh bg-slate-950 text-slate-100 flex items-center justify-center px-6">
+                <div className="max-w-xs text-center space-y-2">
+                    <p className="text-sm font-semibold text-rose-400">Configuration error</p>
+                    <p className="text-xs text-slate-500">
+                        VITE_PIN_HASH is not set. Add it in Vercel and redeploy.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     const handleDigit = (d: string) => {
         if (entered.length < PIN_LENGTH) setEntered((p) => p + d);
