@@ -1,7 +1,6 @@
 import { Header } from './components/Header';
 import { QuickEntryView } from './components/QuickEntryView';
 import { useExpenses } from './hooks/useExpenses';
-import { ShieldCheck, Database } from 'lucide-react';
 
 export function App() {
   const { unsyncedCount } = useExpenses();
