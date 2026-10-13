@@ -1,3 +1,4 @@
+// src/types/index.ts
 // LekFlow Data Schema Definitions
 
 export type Currency = 'ALL' | 'EUR' | 'USD';
@@ -31,7 +32,7 @@ export interface ExpenseRecord {
   currency: Currency;
   amountInALL: number; // Normalized base amount for analytics
   category: Category;
-  subcategory?: string; // ADDED THIS
+  subcategory?: string;
   vendorType?: VendorType;
   foodType?: FoodType;
   itemName?: string;
@@ -44,12 +45,16 @@ export interface ExpenseRecord {
 
 export interface BudgetCycle {
   id: string;
+  convexId?: string; // Convex document ID once synced
   startDate: string;
   targetEndDate: string;
   stipendAmountALL: number;
   startingRaiffeisenBalanceALL: number;
   bufferPoolALL: number;
   travelStashALL: number;
+  isSynced?: boolean; // Sync flag — set by saveBudgetCycle, not the caller
+  updatedAt?: string; // ISO 8601 string for conflict resolution
+  deleted?: boolean; // Soft-delete tombstone
 }
 
 export interface ExchangeRates {

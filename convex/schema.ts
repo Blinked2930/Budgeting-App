@@ -1,3 +1,4 @@
+// convex/schema.ts
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -13,10 +14,19 @@ export default defineSchema({
         itemName: v.optional(v.string()),
         estimatedMeals: v.optional(v.number()),
         timestamp: v.string(),
-        // Optional so rows created before this change still validate.
-        // When missing, `timestamp` is used as the last-modified time.
         updatedAt: v.optional(v.string()),
-        // Soft delete flag so deletions can sync to other devices.
+        deleted: v.optional(v.boolean()),
+    }).index("by_localId", ["localId"]),
+
+    budgetCycles: defineTable({
+        localId: v.string(),
+        startDate: v.string(),
+        targetEndDate: v.string(),
+        stipendAmountALL: v.number(),
+        startingRaiffeisenBalanceALL: v.number(),
+        bufferPoolALL: v.number(),
+        travelStashALL: v.number(),
+        updatedAt: v.optional(v.string()),
         deleted: v.optional(v.boolean()),
     }).index("by_localId", ["localId"]),
 });

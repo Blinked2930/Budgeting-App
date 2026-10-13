@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as budgetCycles from "../budgetCycles.js";
 import type * as expenses from "../expenses.js";
 
 import type {
@@ -17,6 +18,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  budgetCycles: typeof budgetCycles;
   expenses: typeof expenses;
 }>;
 

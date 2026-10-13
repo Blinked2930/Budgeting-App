@@ -1,3 +1,4 @@
+// src/db/index.ts
 import Dexie, { type Table } from 'dexie';
 import type {
   BudgetCycle,
@@ -20,6 +21,12 @@ export class LekFlowDatabase extends Dexie {
       expenses: 'id, timestamp, category, vendorType, isSynced, amountInALL',
       budgetCycles: 'id, startDate, targetEndDate',
     });
+    // v2 adds sync fields (isSynced, updatedAt, deleted) to budgetCycles.
+    // Existing rows are preserved; new optional fields default to undefined.
+    this.version(2).stores({
+      expenses: 'id, timestamp, category, vendorType, isSynced, amountInALL',
+      budgetCycles: 'id, startDate, targetEndDate, isSynced, updatedAt',
+    });
   }
 }
 
@@ -41,6 +48,21 @@ export interface RemoteExpense {
   updatedAt?: string;
   deleted?: boolean;
 }
+
+export interface RemoteBudgetCycle {
+  _id?: string;
+  localId: string;
+  startDate: string;
+  targetEndDate: string;
+  stipendAmountALL: number;
+  startingRaiffeisenBalanceALL: number;
+  bufferPoolALL: number;
+  travelStashALL: number;
+  updatedAt?: string;
+  deleted?: boolean;
+}
+
+// ---------- Expense helpers ----------
 
 export async function addExpense(
   expenseData: Omit<ExpenseRecord, 'id' | 'timestamp' | 'isSynced' | 'amountInALL'> & {
@@ -193,6 +215,80 @@ export async function getHistoricalItemNames(): Promise<string[]> {
   return Array.from(namesSet);
 }
 
+// ---------- Budget cycle helpers ----------
+
+export async function saveBudgetCycle(cycle: BudgetCycle): Promise<void> {
+  const now = new Date().toISOString();
+  await db.budgetCycles.put({
+    ...cycle,
+    isSynced: false,
+    updatedAt: cycle.updatedAt ?? now,
+  });
+}
+
+export async function getCurrentBudgetCycle(): Promise<BudgetCycle | undefined> {
+  return db.budgetCycles
+    .orderBy('startDate')
+    .reverse()
+    .filter((c) => !c.deleted)
+    .first();
+}
+
+export async function getUnsyncedBudgetCycles(): Promise<BudgetCycle[]> {
+  return db.budgetCycles.filter((c) => !c.isSynced).toArray();
+}
+
+export async function markBudgetCyclesSyncedIfUnchanged(
+  entries: { id: string; updatedAt: string; convexId?: string }[]
+): Promise<void> {
+  await db.transaction('rw', db.budgetCycles, async () => {
+    for (const entry of entries) {
+      const current = await db.budgetCycles.get(entry.id);
+      if (!current) continue;
+
+      const currentUpdatedAt = current.updatedAt ?? current.startDate;
+      if (currentUpdatedAt === entry.updatedAt) {
+        await db.budgetCycles.update(entry.id, {
+          isSynced: true,
+          convexId: entry.convexId,
+        });
+      }
+    }
+  });
+}
+
+export async function applyRemoteBudgetCycles(remote: RemoteBudgetCycle[]): Promise<void> {
+  await db.transaction('rw', db.budgetCycles, async () => {
+    for (const r of remote) {
+      const local = await db.budgetCycles.get(r.localId);
+      const remoteUpdatedAt = r.updatedAt ?? r.startDate;
+
+      if (local) {
+        const localUpdatedAt = local.updatedAt ?? local.startDate;
+        if (remoteUpdatedAt <= localUpdatedAt) continue;
+      } else if (r.deleted) {
+        continue;
+      }
+
+      await db.budgetCycles.put({
+        id: r.localId,
+        convexId: r._id ?? local?.convexId,
+        startDate: r.startDate,
+        targetEndDate: r.targetEndDate,
+        stipendAmountALL: r.stipendAmountALL,
+        startingRaiffeisenBalanceALL: r.startingRaiffeisenBalanceALL,
+        bufferPoolALL: r.bufferPoolALL,
+        travelStashALL: r.travelStashALL,
+        updatedAt: remoteUpdatedAt,
+        deleted: r.deleted,
+        isSynced: true,
+      });
+    }
+  });
+}
+
+// ---------- Export helpers ----------
+
 export async function exportToCSV(): Promise<string> {
   const expenses = await getExpenses();
   return generateCSV(expenses);
@@ -201,12 +297,4 @@ export async function exportToCSV(): Promise<string> {
 export async function exportToJSON(): Promise<string> {
   const expenses = await getExpenses();
   return generateJSON(expenses);
-}
-
-export async function saveBudgetCycle(cycle: BudgetCycle): Promise<void> {
-  await db.budgetCycles.put(cycle);
-}
-
-export async function getCurrentBudgetCycle(): Promise<BudgetCycle | undefined> {
-  return db.budgetCycles.orderBy('startDate').reverse().first();
 }
