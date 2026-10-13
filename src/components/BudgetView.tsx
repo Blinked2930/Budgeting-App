@@ -1,3 +1,4 @@
+// src/components/BudgetView.tsx
 import React, { useState } from 'react';
 import {
     CalendarDays,
@@ -111,7 +112,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
     return (
         <form
             onSubmit={handleSubmit}
-            className="bg-slate-900/90 border border-slate-800/90 rounded-3xl p-5 shadow-2xl space-y-4"
+            className="bg-slate-900/90 border border-slate-800/90 rounded-3xl p-4 sm:p-5 shadow-2xl space-y-4"
         >
             <h2 className="text-base font-bold text-white">{title}</h2>
 
@@ -133,7 +134,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
                 />
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
                 <Field label="Cycle start">
                     <input
                         type="date"
@@ -167,7 +168,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
                 />
             </Field>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
                 <Field label="Budget Additions" hint="Optional initial extra cash block.">
                     <input
                         type="number"
@@ -223,20 +224,20 @@ const StatTile: React.FC<{
     sub?: string;
     negative?: boolean;
 }> = ({ icon, label, value, sub, negative }) => (
-    <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800/80">
-        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+    <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800/80 min-w-0">
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
             {icon}
-            <span>{label}</span>
+            <span className="truncate">{label}</span>
         </div>
         <p
             className={cn(
-                'mt-1.5 text-lg font-mono font-bold tracking-tight',
+                'mt-1 text-base sm:text-lg font-mono font-bold tracking-tight truncate',
                 negative ? 'text-rose-400' : 'text-white'
             )}
         >
             {value}
         </p>
-        {sub && <p className="text-[10px] text-slate-500 mt-0.5">{sub}</p>}
+        {sub && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{sub}</p>}
     </div>
 );
 
@@ -274,7 +275,7 @@ export const BudgetView: React.FC = () => {
 
     if (!cycle || !stats) {
         return (
-            <div className="w-full max-w-md mx-auto px-4 py-4">
+            <div className="w-full max-w-md mx-auto px-3 sm:px-4 py-4">
                 <CycleForm
                     key="first"
                     title="Set up your first cycle"
@@ -296,7 +297,7 @@ export const BudgetView: React.FC = () => {
 
     if (formMode === 'edit') {
         return (
-            <div className="w-full max-w-md mx-auto px-4 py-4">
+            <div className="w-full max-w-md mx-auto px-3 sm:px-4 py-4">
                 <CycleForm
                     key="edit"
                     title="Edit cycle"
@@ -319,7 +320,7 @@ export const BudgetView: React.FC = () => {
     if (formMode === 'next') {
         const newStash = Math.round(stats.travelStashBalance + stats.projectedSurplus);
         return (
-            <div className="w-full max-w-md mx-auto px-4 py-4">
+            <div className="w-full max-w-md mx-auto px-3 sm:px-4 py-4">
                 <CycleForm
                     key="next"
                     title="Start next cycle"
@@ -353,7 +354,7 @@ export const BudgetView: React.FC = () => {
                 : 'bg-emerald-400';
 
     return (
-        <div className="w-full max-w-md mx-auto px-4 py-4 space-y-4">
+        <div className="w-full max-w-md mx-auto px-3 sm:px-4 py-4 space-y-3.5">
             {stats.isPaydayReached && (
                 <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-3">
                     <span className="font-medium">Payday date reached. Ready for the next cycle?</span>
@@ -367,13 +368,13 @@ export const BudgetView: React.FC = () => {
                 </div>
             )}
 
-            <div className="p-5 rounded-3xl bg-gradient-to-br from-slate-900 to-slate-900/80 border border-slate-800 shadow-xl">
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-slate-900 to-slate-900/80 border border-slate-800 shadow-xl">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                     Left to spend today
                 </p>
                 <p
                     className={cn(
-                        'mt-1 text-4xl font-mono font-extrabold tracking-tight',
+                        'mt-1 text-3xl sm:text-4xl font-mono font-extrabold tracking-tight leading-tight',
                         stats.leftToday < 0 ? 'text-rose-400' : 'text-emerald-300'
                     )}
                 >
@@ -384,7 +385,7 @@ export const BudgetView: React.FC = () => {
                     {formatCurrency(stats.spentToday, 'ALL')} spent
                 </p>
 
-                <div className="mt-4">
+                <div className="mt-3.5">
                     <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
                         <div
                             className={cn('h-full rounded-full transition-all', barColor)}
@@ -398,7 +399,7 @@ export const BudgetView: React.FC = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
                 <StatTile
                     icon={<Wallet className="w-3.5 h-3.5 text-emerald-400" />}
                     label="Remaining"
@@ -435,11 +436,11 @@ export const BudgetView: React.FC = () => {
                 />
             </div>
 
-            <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800/80 flex items-center justify-between gap-3">
+            <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div className="flex items-center gap-2.5 min-w-0">
                     <Landmark className="w-4 h-4 text-slate-400 shrink-0" />
                     <div className="min-w-0">
-                        <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                             Estimated Raiffeisen balance
                         </p>
                         <p className="text-[10px] text-slate-600">start + stipend − tracked expenses</p>
@@ -447,7 +448,7 @@ export const BudgetView: React.FC = () => {
                 </div>
                 <p
                     className={cn(
-                        'text-base font-mono font-bold shrink-0',
+                        'text-base font-mono font-bold shrink-0 sm:text-right',
                         stats.estimatedBankBalance < 0 ? 'text-rose-400' : 'text-white'
                     )}
                 >
@@ -462,7 +463,7 @@ export const BudgetView: React.FC = () => {
                 </p>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
                 <button
                     type="button"
                     onClick={() => setFormMode('edit')}
@@ -482,13 +483,15 @@ export const BudgetView: React.FC = () => {
             </div>
 
             {/* Quick Ledger Adjustments Tool */}
-            <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800/80 space-y-3 mt-4">
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Ledger Adjustment
-                </p>
-                <p className="text-[10px] text-slate-500">
-                    Log additions (like refunds) or subtractions line-by-line without needing to edit your full cycle stats.
-                </p>
+            <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800/80 space-y-3">
+                <div>
+                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                        Ledger Adjustment
+                    </p>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                        Log additions (like refunds) or subtractions line-by-line without needing to edit your full cycle stats.
+                    </p>
+                </div>
                 <div className="flex gap-2">
                     <input
                         type="number"
@@ -497,21 +500,21 @@ export const BudgetView: React.FC = () => {
                         value={adjAmount}
                         onChange={(e) => setAdjAmount(e.target.value)}
                         placeholder="Amount (Lek)"
-                        className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+                        className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
                     />
                     <button
                         disabled={isAdjusting || !adjAmount}
                         onClick={() => handleQuickAdjustment('add')}
-                        className="px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-xs disabled:opacity-50 transition-colors cursor-pointer"
+                        className="px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-xs disabled:opacity-50 transition-colors cursor-pointer shrink-0"
                     >
                         + Add
                     </button>
                     <button
                         disabled={isAdjusting || !adjAmount}
                         onClick={() => handleQuickAdjustment('sub')}
-                        className="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs disabled:opacity-50 transition-colors cursor-pointer"
+                        className="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs disabled:opacity-50 transition-colors cursor-pointer shrink-0"
                     >
-                        - Sub
+                        − Sub
                     </button>
                 </div>
             </div>
