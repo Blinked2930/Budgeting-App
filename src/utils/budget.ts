@@ -1,3 +1,4 @@
+// src/utils/budget.ts
 import type { BudgetCycle, ExpenseRecord } from '../types';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -48,7 +49,7 @@ export interface BudgetStats {
     dailyAllowance: number;
     spentToday: number;
     leftToday: number;
-    /** Unspent allowance from earlier days of this cycle. */
+    /** Real savings: days where you logged spending under the base rate. */
     bufferPool: number;
     /** Stash balance at cycle start minus travel spending since. */
     travelStashBalance: number;
@@ -56,6 +57,14 @@ export interface BudgetStats {
     projectedSurplus: number;
     /** Starting balance + stipend - every tracked expense in the cycle. */
     estimatedBankBalance: number;
+}
+
+/** Local-time YYYY-MM-DD key for grouping expenses by day. */
+function dayKey(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
 }
 
 export function computeBudgetStats(
@@ -79,12 +88,16 @@ export function computeBudgetStats(
     let spent = 0;
     let travelSpent = 0;
     let spentToday = 0;
-    let spentBeforeToday = 0;
     let allTracked = 0;
+
+    // Sum spending per day, so we can compute the buffer from days that
+    // actually have logs. Unlogged days contribute nothing to the buffer.
+    const spentByDay = new Map<string, number>();
 
     for (const e of expenses) {
         if (e.deleted) continue;
-        const whenMs = new Date(e.timestamp).getTime();
+        const when = new Date(e.timestamp);
+        const whenMs = when.getTime();
         if (whenMs < startMs) continue;
 
         allTracked += e.amountInALL;
@@ -98,7 +111,8 @@ export function computeBudgetStats(
         if (whenMs >= todayMs) {
             spentToday += e.amountInALL;
         } else {
-            spentBeforeToday += e.amountInALL;
+            const key = dayKey(when);
+            spentByDay.set(key, (spentByDay.get(key) ?? 0) + e.amountInALL);
         }
     }
 
@@ -107,8 +121,15 @@ export function computeBudgetStats(
     const dailyAllowance = (remaining + spentToday) / daysLeft;
     const leftToday = dailyAllowance - spentToday;
 
+    // Buffer pool = sum over elapsed-and-logged days of (baseDaily - thatDay'sSpend),
+    // clamped at 0 per day. Unlogged days are skipped so we never credit savings
+    // that we can't verify happened.
     const baseDaily = cycleBudget / totalDays;
-    const bufferPool = Math.max(0, baseDaily * daysElapsed - spentBeforeToday);
+    let bufferPool = 0;
+    for (const daySpend of spentByDay.values()) {
+        const diff = baseDaily - daySpend;
+        if (diff > 0) bufferPool += diff;
+    }
 
     return {
         cycleBudget,
