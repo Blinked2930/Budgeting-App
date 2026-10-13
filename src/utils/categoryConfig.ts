@@ -1,4 +1,4 @@
-import { CATEGORIES, type Category, type VendorType } from '../types';
+import { type Category, type VendorType } from '../types';
 
 export interface CategoryConfig {
     itemLabel: string;
@@ -27,7 +27,7 @@ export function getSubcategories(category: Category): string[] {
     }
 }
 
-export function getVendorOptions(category: Category, subcategory?: string): VendorType[] {
+export function getVendorOptions(category: Category, _subcategory?: string): VendorType[] {
     if (category === 'Food') {
         return ['Pazar', 'Supermarket', 'Café', 'Bakery', 'Restaurant', 'Other'];
     }
