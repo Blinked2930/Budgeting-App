@@ -15,6 +15,8 @@ import {
   CalendarDays,
   Pencil,
   X,
+  Wallet,
+  Banknote,
 } from 'lucide-react';
 import {
   type Currency,
@@ -22,6 +24,7 @@ import {
   CATEGORIES,
   type VendorType,
   type FoodType,
+  type PaymentSource,
   type ExpenseRecord,
 } from '../types';
 import { CurrencyToggle } from './CurrencyToggle';
@@ -29,6 +32,7 @@ import { AdvancedDrawer } from './AdvancedDrawer';
 import { RecentTransactions } from './RecentTransactions';
 import { addExpense, updateExpense } from '../db';
 import { useExpenses } from '../hooks/useExpenses';
+import { useTransfers } from '../hooks/useTransfers';
 import { convertToALL, formatCurrency } from '../utils/currency';
 import { dateToNoonISO, toDateInputValue } from '../utils/budget';
 import { getVendorOptions, showFoodDetails } from '../utils/categoryConfig';
@@ -45,10 +49,12 @@ const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
 
 export const QuickEntryView: React.FC = () => {
   const { expenses, totalSpentALL } = useExpenses();
+  const { transfers } = useTransfers();
 
   const [amountStr, setAmountStr] = useState<string>('');
   const [currency, setCurrency] = useState<Currency>('ALL');
   const [category, setCategory] = useState<Category>('Food');
+  const [paidWith, setPaidWith] = useState<PaymentSource>('Cash');
 
   const [dateOverride, setDateOverride] = useState<string | null>(null);
   const todayStr = toDateInputValue(new Date());
@@ -60,7 +66,6 @@ export const QuickEntryView: React.FC = () => {
   const [foodType, setFoodType] = useState<FoodType | undefined>(undefined);
   const [estimatedMeals, setEstimatedMeals] = useState<number | undefined>(undefined);
 
-  // Edit mode
   const [editingId, setEditingId] = useState<string | null>(null);
   const [originalDateOverride, setOriginalDateOverride] = useState<string | null>(null);
 
@@ -132,6 +137,7 @@ export const QuickEntryView: React.FC = () => {
     setAmountStr(String(expense.amount));
     setCurrency(expense.currency);
     setCategory(expense.category);
+    setPaidWith(expense.paidWith ?? 'Card');
     setItemName(expense.itemName ?? '');
     setSubcategory(expense.subcategory);
     setVendorType(expense.vendorType);
@@ -170,6 +176,7 @@ export const QuickEntryView: React.FC = () => {
         amount: parsedAmount,
         currency,
         category,
+        paidWith,
         itemName: itemName.trim() || undefined,
         subcategory,
         vendorType,
@@ -219,7 +226,6 @@ export const QuickEntryView: React.FC = () => {
 
   return (
     <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
-      {/* Quick Summary Pill Banner */}
       <div className="flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-slate-900/90 border border-slate-800 shadow-sm">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -235,13 +241,11 @@ export const QuickEntryView: React.FC = () => {
         </div>
       </div>
 
-      {/* Main Entry Card */}
       <form
         ref={formRef}
         onSubmit={handleSave}
         className="relative bg-slate-900/90 border border-slate-800/90 rounded-3xl p-6 shadow-2xl space-y-5"
       >
-        {/* Editing banner */}
         {editingId && (
           <div className="flex items-center justify-between p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-xs">
             <div className="flex items-center gap-1.5 text-amber-300 font-medium">
@@ -259,12 +263,42 @@ export const QuickEntryView: React.FC = () => {
           </div>
         )}
 
-        {/* Currency Switcher */}
         <div className="flex justify-center">
           <CurrencyToggle selected={currency} onChange={setCurrency} />
         </div>
 
-        {/* Big Numeric Amount Input — symbol hidden for ALL, shown for EUR/USD */}
+        {/* Cash / Card toggle */}
+        <div className="flex justify-center">
+          <div className="inline-flex p-1 rounded-2xl bg-slate-950 border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setPaidWith('Cash')}
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                paidWith === 'Cash'
+                  ? 'bg-emerald-500/20 text-emerald-300'
+                  : 'text-slate-400 hover:text-slate-200'
+              )}
+            >
+              <Banknote className="w-3.5 h-3.5" />
+              Cash
+            </button>
+            <button
+              type="button"
+              onClick={() => setPaidWith('Card')}
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                paidWith === 'Card'
+                  ? 'bg-cyan-500/20 text-cyan-300'
+                  : 'text-slate-400 hover:text-slate-200'
+              )}
+            >
+              <Wallet className="w-3.5 h-3.5" />
+              Card
+            </button>
+          </div>
+        </div>
+
         <div className="text-center py-2">
           <div className="inline-flex items-baseline justify-center gap-2 max-w-full">
             {currency !== 'ALL' && (
@@ -285,14 +319,12 @@ export const QuickEntryView: React.FC = () => {
             />
           </div>
 
-          {/* Realtime Lek Equivalent (if EUR or USD) */}
           {currency !== 'ALL' && parsedAmount > 0 && (
             <p className="text-xs font-mono text-emerald-400 mt-1 font-semibold animate-fade-in">
               ≈ {formatCurrency(normalizedALL, 'ALL')} base Lek
             </p>
           )}
 
-          {/* Quick Increment Chips */}
           <div className="flex items-center justify-center gap-1.5 mt-4 flex-wrap">
             {(currency === 'ALL' ? [50, 100, 200, 500, 1000] : [1, 2, 5, 10, 20]).map((step) => (
               <button
@@ -317,7 +349,6 @@ export const QuickEntryView: React.FC = () => {
           </div>
         </div>
 
-        {/* Category Pills */}
         <div>
           <div className="flex items-center justify-between mb-2 px-1">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
@@ -351,7 +382,6 @@ export const QuickEntryView: React.FC = () => {
           </div>
         </div>
 
-        {/* Date */}
         <div className="flex items-center justify-between gap-3 px-1">
           <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
             <CalendarDays className="w-3.5 h-3.5" />
@@ -385,7 +415,6 @@ export const QuickEntryView: React.FC = () => {
           </div>
         </div>
 
-        {/* Advanced details preview pill */}
         {hasAdvancedData && (
           <div className="p-2.5 rounded-2xl bg-slate-950/70 border border-slate-800 text-xs flex items-center justify-between">
             <div className="flex items-center gap-1.5 truncate text-slate-300 font-medium">
@@ -405,7 +434,6 @@ export const QuickEntryView: React.FC = () => {
           </div>
         )}
 
-        {/* Buttons Row */}
         <div className="space-y-2.5 pt-1">
           <button
             type="submit"
@@ -432,7 +460,6 @@ export const QuickEntryView: React.FC = () => {
           </button>
         </div>
 
-        {/* Feedback Toast */}
         {feedback && (
           <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 w-11/12 max-w-md bg-emerald-950/90 border border-emerald-500/60 text-emerald-200 px-3 py-2 rounded-xl text-xs font-medium text-center shadow-xl backdrop-blur-md animate-fade-in flex items-center justify-center gap-1.5">
             <Zap className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
@@ -460,7 +487,11 @@ export const QuickEntryView: React.FC = () => {
         onClear={handleClearAdvanced}
       />
 
-      <RecentTransactions expenses={expenses} onEdit={handleStartEdit} />
+      <RecentTransactions
+        expenses={expenses}
+        transfers={transfers}
+        onEdit={handleStartEdit}
+      />
     </div>
   );
 };

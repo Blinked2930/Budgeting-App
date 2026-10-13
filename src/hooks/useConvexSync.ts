@@ -7,8 +7,11 @@ import {
     markSyncedIfUnchanged,
     getUnsyncedBudgetCycles,
     markBudgetCyclesSyncedIfUnchanged,
+    getUnsyncedTransfers,
+    markTransfersSyncedIfUnchanged,
     applyRemoteExpenses,
     applyRemoteBudgetCycles,
+    applyRemoteTransfers,
 } from '../db';
 
 export function useConvexSync() {
@@ -17,10 +20,11 @@ export function useConvexSync() {
 
     const upsertExpenseMutation = useMutation(api.expenses.upsertExpense);
     const upsertBudgetCycleMutation = useMutation(api.budgetCycles.upsertBudgetCycle);
+    const upsertTransferMutation = useMutation(api.transfers.upsertTransfer);
 
-    // Live queries — Convex pushes updates whenever the cloud data changes.
     const remoteExpenses = useQuery(api.expenses.getRemoteExpenses);
     const remoteBudgetCycles = useQuery(api.budgetCycles.getRemoteBudgetCycles);
+    const remoteTransfers = useQuery(api.transfers.getRemoteTransfers);
 
     const syncPendingExpenses = useCallback(async () => {
         if (!navigator.onLine || isSyncingRef.current) return;
@@ -45,6 +49,7 @@ export function useConvexSync() {
                     foodType: item.foodType,
                     itemName: item.itemName,
                     estimatedMeals: item.estimatedMeals,
+                    paidWith: item.paidWith,
                     timestamp: item.timestamp,
                     updatedAt,
                     deleted: item.deleted,
@@ -85,6 +90,7 @@ export function useConvexSync() {
                     targetEndDate: cycle.targetEndDate,
                     stipendAmountALL: cycle.stipendAmountALL,
                     startingRaiffeisenBalanceALL: cycle.startingRaiffeisenBalanceALL,
+                    startingCashALL: cycle.startingCashALL,
                     bufferPoolALL: cycle.bufferPoolALL,
                     travelStashALL: cycle.travelStashALL,
                     updatedAt,
@@ -107,12 +113,50 @@ export function useConvexSync() {
         }
     }, [upsertBudgetCycleMutation]);
 
+    const syncPendingTransfers = useCallback(async () => {
+        if (!navigator.onLine || isSyncingRef.current) return;
+
+        try {
+            isSyncingRef.current = true;
+            setIsSyncing(true);
+
+            const unsynced = await getUnsyncedTransfers();
+            const pushed: { id: string; updatedAt: string; convexId?: string }[] = [];
+
+            for (const t of unsynced) {
+                const updatedAt = t.updatedAt ?? t.timestamp;
+
+                const convexId = await upsertTransferMutation({
+                    localId: t.id,
+                    amountALL: t.amountALL,
+                    direction: t.direction,
+                    timestamp: t.timestamp,
+                    updatedAt,
+                    deleted: t.deleted,
+                });
+
+                if (convexId) {
+                    pushed.push({ id: t.id, updatedAt, convexId: String(convexId) });
+                }
+            }
+
+            if (pushed.length > 0) {
+                await markTransfersSyncedIfUnchanged(pushed);
+            }
+        } catch (err) {
+            console.error('Background transfer sync failed:', err);
+        } finally {
+            isSyncingRef.current = false;
+            setIsSyncing(false);
+        }
+    }, [upsertTransferMutation]);
+
     const syncPending = useCallback(async () => {
         await syncPendingExpenses();
         await syncPendingBudgetCycles();
-    }, [syncPendingExpenses, syncPendingBudgetCycles]);
+        await syncPendingTransfers();
+    }, [syncPendingExpenses, syncPendingBudgetCycles, syncPendingTransfers]);
 
-    // Pull remote expenses whenever Convex sends an update.
     useEffect(() => {
         if (!remoteExpenses) return;
         applyRemoteExpenses(remoteExpenses).catch((err) => {
@@ -120,13 +164,19 @@ export function useConvexSync() {
         });
     }, [remoteExpenses]);
 
-    // Pull remote budget cycles whenever Convex sends an update.
     useEffect(() => {
         if (!remoteBudgetCycles) return;
         applyRemoteBudgetCycles(remoteBudgetCycles).catch((err) => {
             console.error('Failed to apply remote cycles:', err);
         });
     }, [remoteBudgetCycles]);
+
+    useEffect(() => {
+        if (!remoteTransfers) return;
+        applyRemoteTransfers(remoteTransfers).catch((err) => {
+            console.error('Failed to apply remote transfers:', err);
+        });
+    }, [remoteTransfers]);
 
     useEffect(() => {
         syncPending();
@@ -145,6 +195,7 @@ export function useConvexSync() {
     return {
         syncPendingExpenses,
         syncPendingBudgetCycles,
+        syncPendingTransfers,
         syncPending,
         isSyncing,
     };

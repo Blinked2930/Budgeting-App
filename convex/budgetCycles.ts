@@ -2,11 +2,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
-/**
- * Insert a new budget cycle, or update an existing one (matched by localId).
- * Last-write-wins: the incoming version replaces the stored one only if
- * its updatedAt is the same or newer.
- */
 export const upsertBudgetCycle = mutation({
     args: {
         localId: v.string(),
@@ -14,6 +9,7 @@ export const upsertBudgetCycle = mutation({
         targetEndDate: v.string(),
         stipendAmountALL: v.number(),
         startingRaiffeisenBalanceALL: v.number(),
+        startingCashALL: v.optional(v.number()),
         bufferPoolALL: v.number(),
         travelStashALL: v.number(),
         updatedAt: v.string(),

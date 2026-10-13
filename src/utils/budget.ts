@@ -1,15 +1,13 @@
 // src/utils/budget.ts
-import type { BudgetCycle, ExpenseRecord } from '../types';
+import type { BudgetCycle, ExpenseRecord, TransferRecord } from '../types';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-/** Parse a YYYY-MM-DD string as a local-time date (midnight). */
 export function parseLocalDate(value: string): Date {
     const [y, m, d] = value.split('-').map(Number);
     return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1);
 }
 
-/** Format a Date as YYYY-MM-DD in local time (for <input type="date">). */
 export function toDateInputValue(date: Date): string {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -25,41 +23,34 @@ export function addDays(date: Date, days: number): Date {
     return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }
 
-/** Whole calendar days from `from` to `to` (negative if `to` is earlier). */
 export function daysBetween(from: Date, to: Date): number {
     return Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / MS_PER_DAY);
 }
 
 export interface BudgetStats {
-    /** Stipend + any extra cash carried in. */
     cycleBudget: number;
-    /** Spending against the cycle budget (excludes Travel). */
     spent: number;
-    /** Spending in the Travel category (paid from the travel stash). */
     travelSpent: number;
-    /** cycleBudget - spent. Negative when overspent. */
     remaining: number;
     percentSpent: number;
     totalDays: number;
-    /** Days until the next payday (minimum 1 for the math). */
     daysLeft: number;
     dayNumber: number;
     isPaydayReached: boolean;
-    /** Today's allowance, fixed at the start of the day. */
     dailyAllowance: number;
     spentToday: number;
     leftToday: number;
-    /** Real savings: days where you logged spending under the base rate. */
     bufferPool: number;
-    /** Stash balance at cycle start minus travel spending since. */
     travelStashBalance: number;
-    /** Leftover that moves into the travel stash at payday if nothing more is spent. */
     projectedSurplus: number;
-    /** Starting balance + stipend - every tracked expense in the cycle. */
+    /** Estimated balance in Raiffeisen (starting + stipend − card spend − transfers out + transfers in). */
     estimatedBankBalance: number;
+    /** Estimated balance in cash (starting cash − cash spend − transfers out + transfers in). */
+    estimatedCashBalance: number;
+    /** Total tracked money across both sources. */
+    estimatedTotalBalance: number;
 }
 
-/** Local-time YYYY-MM-DD key for grouping expenses by day. */
 function dayKey(d: Date): string {
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -70,6 +61,7 @@ function dayKey(d: Date): string {
 export function computeBudgetStats(
     cycle: BudgetCycle,
     expenses: ExpenseRecord[],
+    transfers: TransferRecord[] = [],
     now: Date = new Date()
 ): BudgetStats {
     const start = parseLocalDate(cycle.startDate);
@@ -88,10 +80,9 @@ export function computeBudgetStats(
     let spent = 0;
     let travelSpent = 0;
     let spentToday = 0;
-    let allTracked = 0;
+    let cardSpent = 0;
+    let cashSpent = 0;
 
-    // Sum spending per day, so we can compute the buffer from days that
-    // actually have logs. Unlogged days contribute nothing to the buffer.
     const spentByDay = new Map<string, number>();
 
     for (const e of expenses) {
@@ -100,14 +91,20 @@ export function computeBudgetStats(
         const whenMs = when.getTime();
         if (whenMs < startMs) continue;
 
-        allTracked += e.amountInALL;
-
         if (e.category === 'Travel') {
             travelSpent += e.amountInALL;
             continue;
         }
 
         spent += e.amountInALL;
+
+        // Legacy rows without paidWith are treated as Card.
+        if (e.paidWith === 'Cash') {
+            cashSpent += e.amountInALL;
+        } else {
+            cardSpent += e.amountInALL;
+        }
+
         if (whenMs >= todayMs) {
             spentToday += e.amountInALL;
         } else {
@@ -116,20 +113,41 @@ export function computeBudgetStats(
         }
     }
 
+    let bankToCash = 0;
+    let cashToBank = 0;
+    for (const t of transfers) {
+        if (t.deleted) continue;
+        const whenMs = new Date(t.timestamp).getTime();
+        if (whenMs < startMs) continue;
+
+        if (t.direction === 'BankToCash') {
+            bankToCash += t.amountALL;
+        } else {
+            cashToBank += t.amountALL;
+        }
+    }
+
     const cycleBudget = cycle.stipendAmountALL + cycle.bufferPoolALL;
     const remaining = cycleBudget - spent;
     const dailyAllowance = (remaining + spentToday) / daysLeft;
     const leftToday = dailyAllowance - spentToday;
 
-    // Buffer pool = sum over elapsed-and-logged days of (baseDaily - thatDay'sSpend),
-    // clamped at 0 per day. Unlogged days are skipped so we never credit savings
-    // that we can't verify happened.
     const baseDaily = cycleBudget / totalDays;
     let bufferPool = 0;
     for (const daySpend of spentByDay.values()) {
         const diff = baseDaily - daySpend;
         if (diff > 0) bufferPool += diff;
     }
+
+    const startingCash = cycle.startingCashALL ?? 0;
+    const estimatedBankBalance =
+        cycle.startingRaiffeisenBalanceALL +
+        cycle.stipendAmountALL -
+        cardSpent -
+        bankToCash +
+        cashToBank;
+    const estimatedCashBalance =
+        startingCash - cashSpent - cashToBank + bankToCash;
 
     return {
         cycleBudget,
@@ -147,15 +165,12 @@ export function computeBudgetStats(
         bufferPool,
         travelStashBalance: cycle.travelStashALL - travelSpent,
         projectedSurplus: Math.max(0, remaining),
-        estimatedBankBalance:
-            cycle.startingRaiffeisenBalanceALL + cycle.stipendAmountALL - allTracked,
+        estimatedBankBalance,
+        estimatedCashBalance,
+        estimatedTotalBalance: estimatedBankBalance + estimatedCashBalance,
     };
 }
 
-/**
- * Converts a YYYY-MM-DD string into a full ISO timestamp set to noon UTC.
- * This prevents timezone shifts from accidentally moving the entry to the previous day.
- */
 export function dateToNoonISO(dateString: string): string {
     return `${dateString}T12:00:00Z`;
 }

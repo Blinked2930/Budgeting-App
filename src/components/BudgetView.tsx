@@ -7,9 +7,12 @@ import {
     PiggyBank,
     RefreshCw,
     Wallet,
+    Banknote,
+    ArrowLeftRight,
+    X,
 } from 'lucide-react';
-import type { BudgetCycle } from '../types';
-import { saveBudgetCycle, addExpense } from '../db';
+import type { BudgetCycle, TransferDirection } from '../types';
+import { saveBudgetCycle, addExpense, addTransfer } from '../db';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { addDays, toDateInputValue } from '../utils/budget';
 import { formatCurrency } from '../utils/currency';
@@ -22,6 +25,7 @@ interface FormValues {
     startDate: string;
     endDate: string;
     startingBalance: string;
+    startingCash: string;
     extraCash: string;
     travelStash: string;
 }
@@ -29,7 +33,6 @@ interface FormValues {
 const inputClass =
     'w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70';
 
-// Date inputs get appearance-none so iOS doesn't impose its native min width.
 const dateInputClass =
     'block w-full min-w-0 max-w-full appearance-none bg-slate-950 border border-slate-800 rounded-xl px-2 py-2 text-xs font-mono text-white focus:outline-none focus:border-emerald-500/70 [color-scheme:dark]';
 
@@ -102,6 +105,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
                 targetEndDate: values.endDate,
                 stipendAmountALL: stipend,
                 startingRaiffeisenBalanceALL: parseFloat(values.startingBalance) || 0,
+                startingCashALL: parseFloat(values.startingCash) || 0,
                 bufferPoolALL: parseFloat(values.extraCash) || 0,
                 travelStashALL: parseFloat(values.travelStash) || 0,
             });
@@ -157,20 +161,36 @@ const CycleForm: React.FC<CycleFormProps> = ({
                 </Field>
             </div>
 
-            <Field
-                label="Initial cash (Raiffeisen)"
-                hint="Your bank balance when this cycle starts, before the stipend."
-            >
-                <input
-                    type="number"
-                    inputMode="decimal"
-                    step="any"
-                    value={values.startingBalance}
-                    onChange={update('startingBalance')}
-                    placeholder="0"
-                    className={inputClass}
-                />
-            </Field>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 min-w-0">
+                <Field
+                    label="Bank at start (L)"
+                    hint="Raiffeisen balance when cycle starts."
+                >
+                    <input
+                        type="number"
+                        inputMode="decimal"
+                        step="any"
+                        value={values.startingBalance}
+                        onChange={update('startingBalance')}
+                        placeholder="0"
+                        className={inputClass}
+                    />
+                </Field>
+                <Field
+                    label="Cash at start (L)"
+                    hint="Cash in your pocket when cycle starts."
+                >
+                    <input
+                        type="number"
+                        inputMode="decimal"
+                        step="any"
+                        value={values.startingCash}
+                        onChange={update('startingCash')}
+                        placeholder="0"
+                        className={inputClass}
+                    />
+                </Field>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 min-w-0">
                 <Field label="Budget Additions" hint="Optional initial extra cash block.">
@@ -245,11 +265,134 @@ const StatTile: React.FC<{
     </div>
 );
 
+const TransferModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    bankBalance: number;
+    cashBalance: number;
+    onSaved: () => void;
+}> = ({ isOpen, onClose, bankBalance, cashBalance, onSaved }) => {
+    const [amountStr, setAmountStr] = useState('');
+    const [direction, setDirection] = useState<TransferDirection>('BankToCash');
+    const [isSaving, setIsSaving] = useState(false);
+
+    if (!isOpen) return null;
+
+    const amount = parseFloat(amountStr) || 0;
+    const valid = amount > 0;
+
+    const handleSave = async () => {
+        if (!valid) return;
+        setIsSaving(true);
+        await addTransfer({ amountALL: amount, direction });
+        setIsSaving(false);
+        setAmountStr('');
+        setDirection('BankToCash');
+        onSaved();
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center">
+                            <ArrowLeftRight className="w-4 h-4 text-amber-400" />
+                        </div>
+                        <h3 className="text-base font-bold text-white">Move money</h3>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+
+                <p className="text-[11px] text-slate-500">
+                    Transfers move money between your accounts without counting as spending.
+                </p>
+
+                <div className="grid grid-cols-2 gap-2">
+                    <button
+                        type="button"
+                        onClick={() => setDirection('BankToCash')}
+                        className={cn(
+                            'p-2.5 rounded-2xl border text-xs font-semibold transition-colors cursor-pointer',
+                            direction === 'BankToCash'
+                                ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
+                                : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                        )}
+                    >
+                        Bank → Cash
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setDirection('CashToBank')}
+                        className={cn(
+                            'p-2.5 rounded-2xl border text-xs font-semibold transition-colors cursor-pointer',
+                            direction === 'CashToBank'
+                                ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
+                                : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                        )}
+                    >
+                        Cash → Bank
+                    </button>
+                </div>
+
+                <div>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Amount (L)
+                    </p>
+                    <input
+                        type="number"
+                        inputMode="decimal"
+                        step="any"
+                        value={amountStr}
+                        onChange={(e) => setAmountStr(e.target.value)}
+                        placeholder="0"
+                        className={inputClass}
+                    />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-slate-500">
+                    <div>
+                        Bank: <span className="text-slate-300">{formatCurrency(bankBalance, 'ALL')}</span>
+                    </div>
+                    <div>
+                        Cash: <span className="text-slate-300">{formatCurrency(cashBalance, 'ALL')}</span>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={!valid || isSaving}
+                        className="py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 text-xs font-bold cursor-pointer disabled:opacity-50"
+                    >
+                        {isSaving ? 'Saving…' : 'Move it'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 export const BudgetView: React.FC = () => {
     const { cycle, stats, isLoading } = useBudgetCycle();
     const [formMode, setFormMode] = useState<FormMode | null>(null);
     const [adjAmount, setAdjAmount] = useState('');
     const [isAdjusting, setIsAdjusting] = useState(false);
+    const [isTransferOpen, setIsTransferOpen] = useState(false);
 
     if (isLoading) {
         return <div className="w-full max-w-md mx-auto px-4 py-10 text-center text-xs text-slate-500">Loading…</div>;
@@ -284,12 +427,13 @@ export const BudgetView: React.FC = () => {
                     key="first"
                     title="Set up your first cycle"
                     submitLabel="Start tracking"
-                    notice="A cycle runs from one stipend to the next. LekFlow splits your budget across the days until payday."
+                    notice="A cycle runs from one stipend to the next. Track bank and cash balances separately."
                     initial={{
                         stipend: '',
                         startDate: toDateInputValue(today),
                         endDate: toDateInputValue(addDays(today, 30)),
                         startingBalance: '',
+                        startingCash: '',
                         extraCash: '0',
                         travelStash: '0',
                     }}
@@ -311,6 +455,7 @@ export const BudgetView: React.FC = () => {
                         startDate: cycle.startDate,
                         endDate: cycle.targetEndDate,
                         startingBalance: String(cycle.startingRaiffeisenBalanceALL),
+                        startingCash: String(cycle.startingCashALL ?? 0),
                         extraCash: String(cycle.bufferPoolALL),
                         travelStash: String(cycle.travelStashALL),
                     }}
@@ -340,6 +485,7 @@ export const BudgetView: React.FC = () => {
                         startDate: toDateInputValue(today),
                         endDate: toDateInputValue(addDays(today, 30)),
                         startingBalance: String(Math.round(stats.estimatedBankBalance)),
+                        startingCash: String(Math.round(stats.estimatedCashBalance)),
                         extraCash: '0',
                         travelStash: String(newStash),
                     }}
@@ -405,6 +551,23 @@ export const BudgetView: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-2.5">
                 <StatTile
+                    icon={<Landmark className="w-3.5 h-3.5 text-cyan-400" />}
+                    label="Bank"
+                    value={formatCurrency(stats.estimatedBankBalance, 'ALL')}
+                    sub="Raiffeisen estimate"
+                    negative={stats.estimatedBankBalance < 0}
+                />
+                <StatTile
+                    icon={<Banknote className="w-3.5 h-3.5 text-emerald-400" />}
+                    label="Cash"
+                    value={formatCurrency(stats.estimatedCashBalance, 'ALL')}
+                    sub="pocket estimate"
+                    negative={stats.estimatedCashBalance < 0}
+                />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+                <StatTile
                     icon={<Wallet className="w-3.5 h-3.5 text-emerald-400" />}
                     label="Remaining"
                     value={formatCurrency(stats.remaining, 'ALL')}
@@ -425,7 +588,7 @@ export const BudgetView: React.FC = () => {
                     icon={<RefreshCw className="w-3.5 h-3.5 text-amber-400" />}
                     label="Buffer pool"
                     value={formatCurrency(stats.bufferPool, 'ALL')}
-                    sub="unspent from earlier days"
+                    sub="unspent from logged days"
                 />
                 <StatTile
                     icon={<PiggyBank className="w-3.5 h-3.5 text-rose-400" />}
@@ -438,26 +601,6 @@ export const BudgetView: React.FC = () => {
                     }
                     negative={stats.travelStashBalance < 0}
                 />
-            </div>
-
-            <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <div className="flex items-center gap-2.5 min-w-0">
-                    <Landmark className="w-4 h-4 text-slate-400 shrink-0" />
-                    <div className="min-w-0">
-                        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-                            Estimated Raiffeisen balance
-                        </p>
-                        <p className="text-[10px] text-slate-600">start + stipend − tracked expenses</p>
-                    </div>
-                </div>
-                <p
-                    className={cn(
-                        'text-base font-mono font-bold shrink-0 sm:text-right',
-                        stats.estimatedBankBalance < 0 ? 'text-rose-400' : 'text-white'
-                    )}
-                >
-                    {formatCurrency(stats.estimatedBankBalance, 'ALL')}
-                </p>
             </div>
 
             {stats.travelSpent > 0 && (
@@ -486,13 +629,22 @@ export const BudgetView: React.FC = () => {
                 </button>
             </div>
 
+            <button
+                type="button"
+                onClick={() => setIsTransferOpen(true)}
+                className="w-full py-3 rounded-2xl bg-slate-950 hover:bg-slate-800/70 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
+            >
+                <ArrowLeftRight className="w-3.5 h-3.5 text-amber-400" />
+                Move money between Bank and Cash
+            </button>
+
             <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800/80 space-y-3">
                 <div>
                     <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                         Ledger Adjustment
                     </p>
                     <p className="text-[10px] text-slate-500 mt-1">
-                        Log additions (like refunds) or subtractions line-by-line without needing to edit your full cycle stats.
+                        Log additions (like refunds) or subtractions without editing your full cycle stats.
                     </p>
                 </div>
                 <div className="flex gap-2">
@@ -521,6 +673,14 @@ export const BudgetView: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            <TransferModal
+                isOpen={isTransferOpen}
+                onClose={() => setIsTransferOpen(false)}
+                bankBalance={stats.estimatedBankBalance}
+                cashBalance={stats.estimatedCashBalance}
+                onSaved={() => setIsTransferOpen(false)}
+            />
         </div>
     );
 };

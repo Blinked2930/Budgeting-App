@@ -25,6 +25,12 @@ export type FoodType =
   | 'Snack'
   | 'Beverage';
 
+/** Where money physically is when spent or held. */
+export type PaymentSource = 'Cash' | 'Card';
+
+/** Direction of a transfer between the two money sources. */
+export type TransferDirection = 'BankToCash' | 'CashToBank';
+
 export interface ExpenseRecord {
   id: string; // UUID / Dexie string id
   convexId?: string; // Convex document ID once synced
@@ -38,23 +44,42 @@ export interface ExpenseRecord {
   itemName?: string;
   estimatedMeals?: number;
   timestamp: string; // ISO 8601 string: YYYY-MM-DDTHH:mm:ssZ
+  paidWith?: PaymentSource; // Missing = 'Card' (legacy default)
   isSynced: boolean; // Sync flag for offline engine
   updatedAt?: string; // ISO 8601 string for conflict resolution
   deleted?: boolean; // Soft-delete tombstone so deletions sync across devices
 }
 
+/**
+ * A transfer moves money between Bank and Cash without being spending.
+ * Amounts are always positive; direction determines which way the money flows.
+ *   BankToCash: bank goes down, cash goes up.
+ *   CashToBank: cash goes down, bank goes up.
+ */
+export interface TransferRecord {
+  id: string;
+  convexId?: string;
+  amountALL: number; // Always positive
+  direction: TransferDirection;
+  timestamp: string;
+  isSynced: boolean;
+  updatedAt?: string;
+  deleted?: boolean;
+}
+
 export interface BudgetCycle {
   id: string;
-  convexId?: string; // Convex document ID once synced
+  convexId?: string;
   startDate: string;
   targetEndDate: string;
   stipendAmountALL: number;
   startingRaiffeisenBalanceALL: number;
+  startingCashALL?: number; // Missing = 0
   bufferPoolALL: number;
   travelStashALL: number;
-  isSynced?: boolean; // Sync flag — set by saveBudgetCycle, not the caller
-  updatedAt?: string; // ISO 8601 string for conflict resolution
-  deleted?: boolean; // Soft-delete tombstone
+  isSynced?: boolean;
+  updatedAt?: string;
+  deleted?: boolean;
 }
 
 export interface ExchangeRates {

@@ -8,8 +8,9 @@ import {
     CircleCheck,
     Utensils,
     Check,
+    Banknote,
 } from 'lucide-react';
-import { FOOD_TYPES, VENDORS, type Currency } from '../types';
+import { FOOD_TYPES, VENDORS, type Currency, type PaymentSource } from '../types';
 import { useExpenses } from '../hooks/useExpenses';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { addExpense } from '../db';
@@ -86,28 +87,22 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
     </div>
 );
 
-const BankCheck: React.FC = () => {
-    const { stats } = useBudgetCycle();
+const ReconcileRow: React.FC<{
+    icon: React.ReactNode;
+    label: string;
+    estimated: number;
+    paidWith: PaymentSource;
+}> = ({ icon, label, estimated, paidWith }) => {
     const [actualStr, setActualStr] = useState('');
     const [isReconciling, setIsReconciling] = useState(false);
     const [showDialog, setShowDialog] = useState(false);
     const dismissedValueRef = useRef<string | null>(null);
 
-    if (!stats) {
-        return (
-            <Card>
-                <p className="text-xs text-slate-400">
-                    Set up a budget cycle in the Budget tab to get an estimated bank balance.
-                </p>
-            </Card>
-        );
-    }
-
     const actual = parseFloat(actualStr);
     const hasActual = actualStr.trim() !== '' && !Number.isNaN(actual);
-    const variance = hasActual ? actual - stats.estimatedBankBalance : 0;
+    const variance = hasActual ? actual - estimated : 0;
     const matches = hasActual && Math.abs(variance) < 1;
-    const amountToLog = hasActual ? stats.estimatedBankBalance - actual : 0;
+    const amountToLog = hasActual ? estimated - actual : 0;
     const hasDiscrepancy = hasActual && !matches && Math.abs(amountToLog) >= 1;
 
     const handleReconcile = async () => {
@@ -117,6 +112,7 @@ const BankCheck: React.FC = () => {
             amount: amountToLog,
             currency: 'ALL',
             category: 'Other',
+            paidWith,
             itemName: 'Balance Reconciliation',
         });
         setActualStr('');
@@ -131,67 +127,59 @@ const BankCheck: React.FC = () => {
         setShowDialog(true);
     };
 
-    const handleDismissDialog = () => {
-        dismissedValueRef.current = actualStr;
-        setShowDialog(false);
-    };
-
     return (
-        <>
-            <Card className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                    <div>
-                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                            LekFlow expects
-                        </p>
-                        <p className="text-xl font-mono font-bold text-white">
-                            {formatCurrency(stats.estimatedBankBalance, 'ALL')}
-                        </p>
-                    </div>
-                    <div className="w-36">
-                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                            Actual balance (L)
-                        </p>
-                        <input
-                            type="number"
-                            inputMode="decimal"
-                            step="any"
-                            value={actualStr}
-                            onChange={(e) => setActualStr(e.target.value)}
-                            onBlur={handleBlur}
-                            placeholder="Check your app"
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
-                        />
-                    </div>
+        <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                    {icon}
+                    <span>{label}</span>
                 </div>
+            </div>
+            <div>
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                    LekFlow expects
+                </p>
+                <p className="text-base font-mono font-bold text-white">
+                    {formatCurrency(estimated, 'ALL')}
+                </p>
+            </div>
+            <input
+                type="number"
+                inputMode="decimal"
+                step="any"
+                value={actualStr}
+                onChange={(e) => setActualStr(e.target.value)}
+                onBlur={handleBlur}
+                placeholder="Actual"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+            />
 
-                {hasActual && matches && (
-                    <div className="flex items-center gap-2 text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2">
-                        <CircleCheck className="w-4 h-4 shrink-0" />
-                        <span>Your bank balance matches your tracked expenses.</span>
-                    </div>
-                )}
+            {hasActual && matches && (
+                <div className="flex items-center gap-1.5 text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-2.5 py-1.5">
+                    <CircleCheck className="w-3.5 h-3.5 shrink-0" />
+                    <span>Matches</span>
+                </div>
+            )}
 
-                {hasActual && !matches && (
-                    <div className="flex flex-col gap-2 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/40 rounded-xl px-3 py-2">
-                        <div className="flex items-start gap-2">
-                            <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" />
-                            <span>
-                                {variance < 0
-                                    ? `Your bank has ${formatCurrency(Math.abs(variance), 'ALL')} less than expected. Some spending may not be logged.`
-                                    : `Your bank has ${formatCurrency(variance, 'ALL')} more than expected. This could be unlogged income, a refund, or an expense logged twice.`}
-                            </span>
-                        </div>
-                        <button
-                            type="button"
-                            onClick={() => setShowDialog(true)}
-                            className="mt-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 py-1.5 px-3 rounded-lg font-bold transition-colors w-full text-center cursor-pointer"
-                        >
-                            Log {formatCurrency(Math.abs(amountToLog), 'ALL')} {amountToLog > 0 ? 'expense' : 'addition'}
-                        </button>
+            {hasActual && !matches && (
+                <div className="flex flex-col gap-1.5 text-[11px] text-amber-200 bg-amber-500/10 border border-amber-500/40 rounded-xl px-2.5 py-1.5">
+                    <div className="flex items-start gap-1.5">
+                        <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <span>
+                            {variance < 0
+                                ? `${formatCurrency(Math.abs(variance), 'ALL')} less than expected.`
+                                : `${formatCurrency(variance, 'ALL')} more than expected.`}
+                        </span>
                     </div>
-                )}
-            </Card>
+                    <button
+                        type="button"
+                        onClick={() => setShowDialog(true)}
+                        className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 py-1 px-2 rounded-lg font-bold transition-colors text-center cursor-pointer text-[10px]"
+                    >
+                        Log {formatCurrency(Math.abs(amountToLog), 'ALL')}
+                    </button>
+                </div>
+            )}
 
             {showDialog && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
@@ -201,16 +189,18 @@ const BankCheck: React.FC = () => {
                                 <TriangleAlert className="w-5 h-5 text-amber-400" />
                             </div>
                             <div className="min-w-0">
-                                <h3 className="text-base font-bold text-white">Log a discrepancy update?</h3>
+                                <h3 className="text-base font-bold text-white">
+                                    Log a {label} discrepancy?
+                                </h3>
                                 <p className="text-xs text-slate-400 mt-1">
-                                    LekFlow expects {formatCurrency(stats.estimatedBankBalance, 'ALL')}, but you entered {formatCurrency(actual, 'ALL')}.
+                                    LekFlow expects {formatCurrency(estimated, 'ALL')} in {label.toLowerCase()}, but you entered {formatCurrency(actual, 'ALL')}.
                                 </p>
                             </div>
                         </div>
 
                         <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800">
                             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                                Adjustment to log
+                                Adjustment
                             </p>
                             <p
                                 className={cn(
@@ -222,16 +212,17 @@ const BankCheck: React.FC = () => {
                                 {formatCurrency(Math.abs(amountToLog), 'ALL')}
                             </p>
                             <p className="text-[10px] text-slate-500 mt-1">
-                                {amountToLog > 0
-                                    ? 'Logs as an expense, bringing the estimate down to match.'
-                                    : 'Logs as an addition, bringing the estimate up to match.'}
+                                Logs as a {paidWith.toLowerCase()} entry.
                             </p>
                         </div>
 
                         <div className="grid grid-cols-2 gap-2">
                             <button
                                 type="button"
-                                onClick={handleDismissDialog}
+                                onClick={() => {
+                                    dismissedValueRef.current = actualStr;
+                                    setShowDialog(false);
+                                }}
                                 className="py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
                             >
                                 Not now
@@ -249,7 +240,40 @@ const BankCheck: React.FC = () => {
                     </div>
                 </div>
             )}
-        </>
+        </div>
+    );
+};
+
+const BankCheck: React.FC = () => {
+    const { stats } = useBudgetCycle();
+
+    if (!stats) {
+        return (
+            <Card>
+                <p className="text-xs text-slate-400">
+                    Set up a budget cycle in the Budget tab to see your estimated balances.
+                </p>
+            </Card>
+        );
+    }
+
+    return (
+        <Card className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+                <ReconcileRow
+                    icon={<Landmark className="w-3 h-3" />}
+                    label="Bank"
+                    estimated={stats.estimatedBankBalance}
+                    paidWith="Card"
+                />
+                <ReconcileRow
+                    icon={<Banknote className="w-3 h-3" />}
+                    label="Cash"
+                    estimated={stats.estimatedCashBalance}
+                    paidWith="Cash"
+                />
+            </div>
+        </Card>
     );
 };
 
@@ -290,7 +314,7 @@ export const InsightsView: React.FC = () => {
         <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
             <section>
                 <SectionTitle icon={<Landmark className="w-3.5 h-3.5 text-slate-400" />}>
-                    Raiffeisen check
+                    Reconcile bank & cash
                 </SectionTitle>
                 <BankCheck />
             </section>

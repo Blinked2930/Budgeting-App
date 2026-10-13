@@ -6,6 +6,9 @@ import type {
   Currency,
   ExpenseRecord,
   FoodType,
+  PaymentSource,
+  TransferDirection,
+  TransferRecord,
   VendorType,
 } from '../types';
 import { convertToALL } from '../utils/currency';
@@ -14,6 +17,7 @@ import { exportToCSV as generateCSV, exportToJSON as generateJSON } from '../uti
 export class LekFlowDatabase extends Dexie {
   expenses!: Table<ExpenseRecord, string>;
   budgetCycles!: Table<BudgetCycle, string>;
+  transfers!: Table<TransferRecord, string>;
 
   constructor() {
     super('LekFlowDB');
@@ -21,11 +25,15 @@ export class LekFlowDatabase extends Dexie {
       expenses: 'id, timestamp, category, vendorType, isSynced, amountInALL',
       budgetCycles: 'id, startDate, targetEndDate',
     });
-    // v2 adds sync fields (isSynced, updatedAt, deleted) to budgetCycles.
-    // Existing rows are preserved; new optional fields default to undefined.
     this.version(2).stores({
       expenses: 'id, timestamp, category, vendorType, isSynced, amountInALL',
       budgetCycles: 'id, startDate, targetEndDate, isSynced, updatedAt',
+    });
+    // v3 adds the transfers table and paidWith on expenses (no index change needed).
+    this.version(3).stores({
+      expenses: 'id, timestamp, category, vendorType, isSynced, amountInALL',
+      budgetCycles: 'id, startDate, targetEndDate, isSynced, updatedAt',
+      transfers: 'id, timestamp, isSynced, updatedAt',
     });
   }
 }
@@ -44,6 +52,7 @@ export interface RemoteExpense {
   foodType?: string;
   itemName?: string;
   estimatedMeals?: number;
+  paidWith?: string;
   timestamp: string;
   updatedAt?: string;
   deleted?: boolean;
@@ -56,8 +65,19 @@ export interface RemoteBudgetCycle {
   targetEndDate: string;
   stipendAmountALL: number;
   startingRaiffeisenBalanceALL: number;
+  startingCashALL?: number;
   bufferPoolALL: number;
   travelStashALL: number;
+  updatedAt?: string;
+  deleted?: boolean;
+}
+
+export interface RemoteTransfer {
+  _id?: string;
+  localId: string;
+  amountALL: number;
+  direction: string;
+  timestamp: string;
   updatedAt?: string;
   deleted?: boolean;
 }
@@ -192,6 +212,7 @@ export async function applyRemoteExpenses(remote: RemoteExpense[]): Promise<void
         foodType: r.foodType as FoodType | undefined,
         itemName: r.itemName,
         estimatedMeals: r.estimatedMeals,
+        paidWith: r.paidWith as PaymentSource | undefined,
         timestamp: r.timestamp,
         updatedAt: remoteUpdatedAt,
         deleted: r.deleted,
@@ -213,6 +234,92 @@ export async function getHistoricalItemNames(): Promise<string[]> {
     }
   }
   return Array.from(namesSet);
+}
+
+// ---------- Transfer helpers ----------
+
+export async function addTransfer(data: {
+  amountALL: number;
+  direction: TransferDirection;
+  timestamp?: string;
+}): Promise<TransferRecord> {
+  const now = new Date().toISOString();
+  const record: TransferRecord = {
+    id: crypto.randomUUID(),
+    amountALL: data.amountALL,
+    direction: data.direction,
+    timestamp: data.timestamp || now,
+    isSynced: false,
+    updatedAt: now,
+  };
+  await db.transfers.add(record);
+  return record;
+}
+
+export async function getTransfers(): Promise<TransferRecord[]> {
+  return db.transfers
+    .orderBy('timestamp')
+    .reverse()
+    .filter((t) => !t.deleted)
+    .toArray();
+}
+
+export async function deleteTransfer(id: string): Promise<void> {
+  await db.transfers.update(id, {
+    deleted: true,
+    isSynced: false,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function getUnsyncedTransfers(): Promise<TransferRecord[]> {
+  return db.transfers.filter((t) => !t.isSynced).toArray();
+}
+
+export async function markTransfersSyncedIfUnchanged(
+  entries: { id: string; updatedAt: string; convexId?: string }[]
+): Promise<void> {
+  await db.transaction('rw', db.transfers, async () => {
+    for (const entry of entries) {
+      const current = await db.transfers.get(entry.id);
+      if (!current) continue;
+
+      const currentUpdatedAt = current.updatedAt ?? current.timestamp;
+      if (currentUpdatedAt === entry.updatedAt) {
+        await db.transfers.update(entry.id, {
+          isSynced: true,
+          convexId: entry.convexId,
+        });
+      }
+    }
+  });
+}
+
+export async function applyRemoteTransfers(remote: RemoteTransfer[]): Promise<void> {
+  await db.transaction('rw', db.transfers, async () => {
+    for (const r of remote) {
+      const local = await db.transfers.get(r.localId);
+      const remoteUpdatedAt = r.updatedAt ?? r.timestamp;
+
+      if (local) {
+        const localUpdatedAt = local.updatedAt ?? local.timestamp;
+        if (remoteUpdatedAt <= localUpdatedAt) continue;
+      } else if (r.deleted) {
+        continue;
+      }
+
+      await db.transfers.put({
+        id: r.localId,
+        convexId: r._id ?? local?.convexId,
+        amountALL: r.amountALL,
+        direction: r.direction as TransferDirection,
+        timestamp: r.timestamp,
+        updatedAt: remoteUpdatedAt,
+        deleted: r.deleted,
+        isSynced: true,
+      });
+    }
+  });
 }
 
 // ---------- Budget cycle helpers ----------
@@ -277,6 +384,7 @@ export async function applyRemoteBudgetCycles(remote: RemoteBudgetCycle[]): Prom
         targetEndDate: r.targetEndDate,
         stipendAmountALL: r.stipendAmountALL,
         startingRaiffeisenBalanceALL: r.startingRaiffeisenBalanceALL,
+        startingCashALL: r.startingCashALL,
         bufferPoolALL: r.bufferPoolALL,
         travelStashALL: r.travelStashALL,
         updatedAt: remoteUpdatedAt,

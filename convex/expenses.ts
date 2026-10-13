@@ -1,11 +1,7 @@
+// convex/expenses.ts
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
-/**
- * Insert a new expense, or update an existing one (matched by localId).
- * Last-write-wins: the incoming version replaces the stored one only if
- * its updatedAt is the same or newer.
- */
 export const upsertExpense = mutation({
     args: {
         localId: v.string(),
@@ -17,6 +13,7 @@ export const upsertExpense = mutation({
         foodType: v.optional(v.string()),
         itemName: v.optional(v.string()),
         estimatedMeals: v.optional(v.number()),
+        paidWith: v.optional(v.string()),
         timestamp: v.string(),
         updatedAt: v.string(),
         deleted: v.optional(v.boolean()),
