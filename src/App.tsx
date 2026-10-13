@@ -1,3 +1,4 @@
+// src/App.tsx
 import { useState } from 'react';
 import { Header } from './components/Header';
 import { QuickEntryView } from './components/QuickEntryView';
@@ -11,12 +12,14 @@ export function App() {
   const [tab, setTab] = useState<Tab>('log');
 
   return (
-    <div className="min-h-dvh bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
+    <div className="h-dvh bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200 overflow-hidden">
       {/* App Header */}
       <Header unsyncedCount={unsyncedCount} />
 
-      {/* Main Content Area. All tabs stay mounted so form state survives switching. */}
-      <main className="flex-1 flex flex-col items-center justify-start pb-28">
+      {/* Main Content Area. All tabs stay mounted so form state survives switching.
+          flex-1 + overflow-y-auto makes this the scroll container, so the nav
+          below always sits flush at the bottom of the visible viewport. */}
+      <main className="flex-1 overflow-y-auto">
         <div className={tab === 'log' ? 'w-full' : 'hidden'}>
           <QuickEntryView />
         </div>
