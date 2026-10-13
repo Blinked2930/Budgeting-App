@@ -1,3 +1,4 @@
+// src/components/QuickEntryView.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import {
   SlidersHorizontal,
@@ -42,16 +43,13 @@ const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
 export const QuickEntryView: React.FC = () => {
   const { expenses, totalSpentALL } = useExpenses();
 
-  // Core Quick Entry state
   const [amountStr, setAmountStr] = useState<string>('');
   const [currency, setCurrency] = useState<Currency>('ALL');
   const [category, setCategory] = useState<Category>('Food');
 
-  // null = "now". Set it to back-date entries (e.g. catching up on a past week).
   const [dateOverride, setDateOverride] = useState<string | null>(null);
   const todayStr = toDateInputValue(new Date());
 
-  // Advanced Drawer state
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [itemName, setItemName] = useState<string>('');
   const [subcategory, setSubcategory] = useState<string | undefined>(undefined);
@@ -59,13 +57,11 @@ export const QuickEntryView: React.FC = () => {
   const [foodType, setFoodType] = useState<FoodType | undefined>(undefined);
   const [estimatedMeals, setEstimatedMeals] = useState<number | undefined>(undefined);
 
-  // Success Feedback
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-focus numeric input on mount
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
@@ -73,12 +69,10 @@ export const QuickEntryView: React.FC = () => {
   const parsedAmount = parseFloat(amountStr) || 0;
   const normalizedALL = convertToALL(parsedAmount, currency);
 
-  // Has custom advanced data
   const hasAdvancedData = Boolean(
     itemName.trim() || subcategory || vendorType || foodType || estimatedMeals
   );
 
-  /** Switching category clears any detail that no longer applies to it. */
   const handleCategoryChange = (next: Category) => {
     setCategory(next);
     setSubcategory(undefined);
@@ -94,7 +88,6 @@ export const QuickEntryView: React.FC = () => {
     }
   };
 
-  /** Switching sub-type clears a vendor that doesn't fit the new one. */
   const handleSubcategoryChange = (next: string | undefined) => {
     setSubcategory(next);
 
@@ -158,7 +151,6 @@ export const QuickEntryView: React.FC = () => {
       );
       setTimeout(() => setFeedback(null), 2500);
 
-      // Reset form (the date stays so you can log several entries for the same day)
       handleResetForm();
     } catch (err) {
       console.error('Failed to log expense locally:', err);
@@ -195,12 +187,14 @@ export const QuickEntryView: React.FC = () => {
           <CurrencyToggle selected={currency} onChange={setCurrency} />
         </div>
 
-        {/* Big Numeric Amount Input */}
+        {/* Big Numeric Amount Input — symbol hidden for ALL, shown for EUR/USD */}
         <div className="text-center py-2">
           <div className="inline-flex items-baseline justify-center gap-2 max-w-full">
-            <span className="text-2xl font-mono font-medium text-slate-500 select-none">
-              {currency === 'ALL' ? 'L' : currency === 'EUR' ? '€' : '$'}
-            </span>
+            {currency !== 'ALL' && (
+              <span className="text-2xl font-mono font-medium text-slate-500 select-none">
+                {currency === 'EUR' ? '€' : '$'}
+              </span>
+            )}
             <input
               ref={inputRef}
               type="number"
@@ -221,7 +215,7 @@ export const QuickEntryView: React.FC = () => {
             </p>
           )}
 
-          {/* Quick Increment Chips for Fast Offline Logging */}
+          {/* Quick Increment Chips */}
           <div className="flex items-center justify-center gap-1.5 mt-4 flex-wrap">
             {(currency === 'ALL' ? [50, 100, 200, 500, 1000] : [1, 2, 5, 10, 20]).map((step) => (
               <button
@@ -246,7 +240,7 @@ export const QuickEntryView: React.FC = () => {
           </div>
         </div>
 
-        {/* Category Pills (Quick selection right on main screen) */}
+        {/* Category Pills */}
         <div>
           <div className="flex items-center justify-between mb-2 px-1">
             <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
@@ -280,7 +274,7 @@ export const QuickEntryView: React.FC = () => {
           </div>
         </div>
 
-        {/* Date (change it to catch up on past expenses) */}
+        {/* Date */}
         <div className="flex items-center justify-between gap-3 px-1">
           <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
             <CalendarDays className="w-3.5 h-3.5" />
@@ -314,7 +308,7 @@ export const QuickEntryView: React.FC = () => {
           </div>
         </div>
 
-        {/* Advanced details preview pill (if user added details in drawer) */}
+        {/* Advanced details preview pill */}
         {hasAdvancedData && (
           <div className="p-2.5 rounded-2xl bg-slate-950/70 border border-slate-800 text-xs flex items-center justify-between">
             <div className="flex items-center gap-1.5 truncate text-slate-300 font-medium">
@@ -336,7 +330,6 @@ export const QuickEntryView: React.FC = () => {
 
         {/* Buttons Row */}
         <div className="space-y-2.5 pt-1">
-          {/* Primary Action: Save Expense */}
           <button
             type="submit"
             disabled={!parsedAmount || parsedAmount <= 0 || isSaving}
@@ -352,7 +345,6 @@ export const QuickEntryView: React.FC = () => {
             <ArrowRight className="w-4 h-4 ml-1" />
           </button>
 
-          {/* Secondary Action: Advanced Entry Toggle */}
           <button
             type="button"
             onClick={() => setIsDrawerOpen(true)}
@@ -363,7 +355,7 @@ export const QuickEntryView: React.FC = () => {
           </button>
         </div>
 
-        {/* Instant Feedback Toast — anchored to viewport, above nav */}
+        {/* Feedback Toast */}
         {feedback && (
           <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 w-11/12 max-w-md bg-emerald-950/90 border border-emerald-500/60 text-emerald-200 px-3 py-2 rounded-xl text-xs font-medium text-center shadow-xl backdrop-blur-md animate-fade-in flex items-center justify-center gap-1.5">
             <Zap className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
@@ -372,7 +364,6 @@ export const QuickEntryView: React.FC = () => {
         )}
       </form>
 
-      {/* Advanced Entry Slide-up Drawer */}
       <AdvancedDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
@@ -392,7 +383,6 @@ export const QuickEntryView: React.FC = () => {
         onClear={handleClearAdvanced}
       />
 
-      {/* Recent Transactions List from Dexie */}
       <RecentTransactions expenses={expenses} />
     </div>
   );
