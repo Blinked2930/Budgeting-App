@@ -1,8 +1,8 @@
 import React from 'react';
-import { Wallet, Zap } from 'lucide-react';
+import { ChartColumn, Wallet, Zap } from 'lucide-react';
 import { cn } from '../utils/cn';
 
-export type Tab = 'log' | 'budget';
+export type Tab = 'log' | 'budget' | 'insights';
 
 interface BottomNavProps {
     active: Tab;
@@ -12,6 +12,7 @@ interface BottomNavProps {
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'log', label: 'Log', icon: <Zap className="w-5 h-5" /> },
     { id: 'budget', label: 'Budget', icon: <Wallet className="w-5 h-5" /> },
+    { id: 'insights', label: 'Insights', icon: <ChartColumn className="w-5 h-5" /> },
 ];
 
 export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => {
@@ -20,7 +21,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => {
             className="fixed bottom-0 inset-x-0 z-20 border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-md"
             style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
         >
-            <div className="max-w-md mx-auto grid grid-cols-2 px-4 py-2 gap-2">
+            <div className="max-w-md mx-auto grid grid-cols-3 px-4 py-2 gap-2">
                 {TABS.map((tab) => {
                     const isActive = tab.id === active;
                     return (

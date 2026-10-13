@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Header } from './components/Header';
 import { QuickEntryView } from './components/QuickEntryView';
 import { BudgetView } from './components/BudgetView';
+import { InsightsView } from './components/InsightsView';
 import { BottomNav, type Tab } from './components/BottomNav';
 import { useExpenses } from './hooks/useExpenses';
 
@@ -14,13 +15,16 @@ export function App() {
       {/* App Header */}
       <Header unsyncedCount={unsyncedCount} />
 
-      {/* Main Content Area. Both tabs stay mounted so form state survives switching. */}
+      {/* Main Content Area. All tabs stay mounted so form state survives switching. */}
       <main className="flex-1 flex flex-col items-center justify-start pb-28">
         <div className={tab === 'log' ? 'w-full' : 'hidden'}>
           <QuickEntryView />
         </div>
         <div className={tab === 'budget' ? 'w-full' : 'hidden'}>
           <BudgetView />
+        </div>
+        <div className={tab === 'insights' ? 'w-full' : 'hidden'}>
+          <InsightsView />
         </div>
       </main>
 
