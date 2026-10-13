@@ -17,6 +17,7 @@ import {
   X,
   Wallet,
   Banknote,
+  ArrowLeftRight,
 } from 'lucide-react';
 import {
   type Currency,
@@ -30,7 +31,7 @@ import {
 import { CurrencyToggle } from './CurrencyToggle';
 import { AdvancedDrawer } from './AdvancedDrawer';
 import { RecentTransactions } from './RecentTransactions';
-import { addExpense, updateExpense } from '../db';
+import { addExpense, updateExpense, addTransfer } from '../db';
 import { useExpenses } from '../hooks/useExpenses';
 import { useTransfers } from '../hooks/useTransfers';
 import { convertToALL, formatCurrency } from '../utils/currency';
@@ -47,6 +48,102 @@ const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
   Other: <MoreHorizontal className="w-4 h-4 text-slate-400" />,
 };
 
+const QuickWithdrawModal: React.FC<{
+  isOpen: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}> = ({ isOpen, onClose, onSaved }) => {
+  const [amountStr, setAmountStr] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  if (!isOpen) return null;
+
+  const amount = parseFloat(amountStr) || 0;
+  const valid = amount > 0;
+
+  const handleSave = async () => {
+    if (!valid) return;
+    setIsSaving(true);
+    await addTransfer({ amountALL: amount, direction: 'BankToCash' });
+    setIsSaving(false);
+    setAmountStr('');
+    onSaved();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center">
+              <ArrowLeftRight className="w-4 h-4 text-amber-400" />
+            </div>
+            <h3 className="text-base font-bold text-white">Withdraw cash</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <p className="text-[11px] text-slate-500">
+          Moves money from Raiffeisen to your pocket. Doesn't count as spending.
+        </p>
+
+        <div>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+            Amount (L)
+          </p>
+          <input
+            type="number"
+            inputMode="decimal"
+            step="any"
+            value={amountStr}
+            onChange={(e) => setAmountStr(e.target.value)}
+            placeholder="0"
+            autoFocus
+            className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+          />
+        </div>
+
+        <div className="grid grid-cols-4 gap-2">
+          {[500, 1000, 2000, 4000].map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              onClick={() => setAmountStr(String(preset))}
+              className="py-1.5 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-[11px] font-mono font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
+            >
+              {preset}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!valid || isSaving}
+            className="py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 text-xs font-bold cursor-pointer disabled:opacity-50"
+          >
+            {isSaving ? 'Saving…' : 'Withdraw'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const QuickEntryView: React.FC = () => {
   const { expenses, totalSpentALL } = useExpenses();
   const { transfers } = useTransfers();
@@ -60,6 +157,7 @@ export const QuickEntryView: React.FC = () => {
   const todayStr = toDateInputValue(new Date());
 
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
+  const [isWithdrawOpen, setIsWithdrawOpen] = useState<boolean>(false);
   const [itemName, setItemName] = useState<string>('');
   const [subcategory, setSubcategory] = useState<string | undefined>(undefined);
   const [vendorType, setVendorType] = useState<VendorType | undefined>(undefined);
@@ -267,8 +365,8 @@ export const QuickEntryView: React.FC = () => {
           <CurrencyToggle selected={currency} onChange={setCurrency} />
         </div>
 
-        {/* Cash / Card toggle */}
-        <div className="flex justify-center">
+        {/* Cash / Card toggle + Withdraw shortcut */}
+        <div className="flex items-center justify-center gap-2 flex-wrap">
           <div className="inline-flex p-1 rounded-2xl bg-slate-950 border border-slate-800">
             <button
               type="button"
@@ -297,6 +395,16 @@ export const QuickEntryView: React.FC = () => {
               Card
             </button>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIsWithdrawOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-[11px] font-semibold text-amber-300 transition-colors cursor-pointer"
+            title="Move money from bank to cash"
+          >
+            <ArrowLeftRight className="w-3.5 h-3.5" />
+            Withdraw
+          </button>
         </div>
 
         <div className="text-center py-2">
@@ -485,6 +593,12 @@ export const QuickEntryView: React.FC = () => {
         setEstimatedMeals={setEstimatedMeals}
         onApplyAndClose={() => setIsDrawerOpen(false)}
         onClear={handleClearAdvanced}
+      />
+
+      <QuickWithdrawModal
+        isOpen={isWithdrawOpen}
+        onClose={() => setIsWithdrawOpen(false)}
+        onSaved={() => setIsWithdrawOpen(false)}
       />
 
       <RecentTransactions
