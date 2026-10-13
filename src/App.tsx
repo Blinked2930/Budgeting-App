@@ -11,7 +11,7 @@ export function App() {
   const [tab, setTab] = useState<Tab>('log');
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
+    <div className="min-h-dvh bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
       {/* App Header */}
       <Header unsyncedCount={unsyncedCount} />
 

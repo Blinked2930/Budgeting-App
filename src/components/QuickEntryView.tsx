@@ -363,9 +363,9 @@ export const QuickEntryView: React.FC = () => {
           </button>
         </div>
 
-        {/* Instant Feedback Toast */}
+        {/* Instant Feedback Toast — anchored to viewport, above nav */}
         {feedback && (
-          <div className="absolute -bottom-12 left-1/2 -translate-x-1/2 w-11/12 bg-emerald-950/90 border border-emerald-500/60 text-emerald-200 px-3 py-2 rounded-xl text-xs font-medium text-center shadow-xl backdrop-blur-md animate-fade-in flex items-center justify-center gap-1.5">
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 w-11/12 max-w-md bg-emerald-950/90 border border-emerald-500/60 text-emerald-200 px-3 py-2 rounded-xl text-xs font-medium text-center shadow-xl backdrop-blur-md animate-fade-in flex items-center justify-center gap-1.5">
             <Zap className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
             <span>{feedback}</span>
           </div>
