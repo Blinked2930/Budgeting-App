@@ -11,18 +11,18 @@ interface BottomNavProps {
 }
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-    { id: 'log', label: 'Log', icon: <Zap className="w-5 h-5" /> },
-    { id: 'budget', label: 'Budget', icon: <Wallet className="w-5 h-5" /> },
-    { id: 'insights', label: 'Insights', icon: <ChartColumn className="w-5 h-5" /> },
+    { id: 'log', label: 'Log', icon: <Zap className="w-6 h-6" /> },
+    { id: 'budget', label: 'Budget', icon: <Wallet className="w-6 h-6" /> },
+    { id: 'insights', label: 'Insights', icon: <ChartColumn className="w-6 h-6" /> },
 ];
 
 export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => {
     return (
         <nav
             className="shrink-0 w-full border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-md"
-            style={{ paddingBottom: 'max(0.125rem, calc(env(safe-area-inset-bottom) - 14px))' }}
+            style={{ paddingBottom: 'max(0, calc(env(safe-area-inset-bottom) - 18px))' }}
         >
-            <div className="max-w-md mx-auto grid grid-cols-3 px-4 pt-1.5 gap-1">
+            <div className="max-w-md mx-auto grid grid-cols-3 px-4 pt-1 gap-1">
                 {TABS.map((tab) => {
                     const isActive = tab.id === active;
                     return (
@@ -31,7 +31,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => {
                             type="button"
                             onClick={() => onChange(tab.id)}
                             className={cn(
-                                'flex flex-col items-center gap-0 pt-1.5 pb-0.5 rounded-2xl text-[10px] font-semibold leading-tight transition-colors cursor-pointer',
+                                'flex flex-col items-center gap-0.5 py-1.5 rounded-2xl text-[11px] font-semibold leading-tight transition-colors cursor-pointer',
                                 isActive
                                     ? 'bg-emerald-500/15 text-emerald-300'
                                     : 'text-slate-500 hover:text-slate-300'
@@ -39,7 +39,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ active, onChange }) => {
                             aria-current={isActive ? 'page' : undefined}
                         >
                             {tab.icon}
-                            <span className="mt-0">{tab.label}</span>
+                            <span>{tab.label}</span>
                         </button>
                     );
                 })}

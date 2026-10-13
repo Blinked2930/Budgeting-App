@@ -29,6 +29,10 @@ interface FormValues {
 const inputClass =
     'w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70';
 
+// Date inputs get appearance-none so iOS doesn't impose its native min width.
+const dateInputClass =
+    'block w-full min-w-0 max-w-full appearance-none bg-slate-950 border border-slate-800 rounded-xl px-2 py-2 text-xs font-mono text-white focus:outline-none focus:border-emerald-500/70 [color-scheme:dark]';
+
 const Field: React.FC<{
     label: string;
     hint?: string;
@@ -112,7 +116,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
     return (
         <form
             onSubmit={handleSubmit}
-            className="bg-slate-900/90 border border-slate-800/90 rounded-3xl p-4 sm:p-5 shadow-2xl space-y-4"
+            className="bg-slate-900/90 border border-slate-800/90 rounded-3xl p-4 sm:p-5 shadow-2xl space-y-4 overflow-hidden"
         >
             <h2 className="text-base font-bold text-white">{title}</h2>
 
@@ -134,13 +138,13 @@ const CycleForm: React.FC<CycleFormProps> = ({
                 />
             </Field>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 min-w-0">
                 <Field label="Cycle start">
                     <input
                         type="date"
                         value={values.startDate}
                         onChange={update('startDate')}
-                        className={inputClass}
+                        className={dateInputClass}
                     />
                 </Field>
                 <Field label="Next payday">
@@ -148,7 +152,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
                         type="date"
                         value={values.endDate}
                         onChange={update('endDate')}
-                        className={inputClass}
+                        className={dateInputClass}
                     />
                 </Field>
             </div>
@@ -168,7 +172,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
                 />
             </Field>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 min-w-0">
                 <Field label="Budget Additions" hint="Optional initial extra cash block.">
                     <input
                         type="number"
