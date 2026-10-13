@@ -10,6 +10,7 @@ import {
 import { FOOD_TYPES, VENDORS, type Currency } from '../types';
 import { useExpenses } from '../hooks/useExpenses';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
+import { addExpense } from '../db';
 import {
     DEFAULT_FILTERS,
     aggregate,
@@ -86,6 +87,7 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
 const BankCheck: React.FC = () => {
     const { stats } = useBudgetCycle();
     const [actualStr, setActualStr] = useState('');
+    const [isReconciling, setIsReconciling] = useState(false);
 
     if (!stats) {
         return (
@@ -101,6 +103,20 @@ const BankCheck: React.FC = () => {
     const hasActual = !Number.isNaN(actual);
     const variance = hasActual ? actual - stats.estimatedBankBalance : 0;
     const matches = hasActual && Math.abs(variance) < 1;
+    const amountToLog = stats.estimatedBankBalance - actual;
+
+    const handleReconcile = async () => {
+        if (!hasActual || Math.abs(amountToLog) < 1) return;
+        setIsReconciling(true);
+        await addExpense({
+            amount: amountToLog,
+            currency: 'ALL',
+            category: 'Other',
+            itemName: 'Balance Reconciliation',
+        });
+        setActualStr('');
+        setIsReconciling(false);
+    };
 
     return (
         <Card className="space-y-3">
@@ -137,13 +153,22 @@ const BankCheck: React.FC = () => {
             )}
 
             {hasActual && !matches && (
-                <div className="flex items-start gap-2 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/40 rounded-xl px-3 py-2">
-                    <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>
-                        {variance < 0
-                            ? `Your bank has ${formatCurrency(Math.abs(variance), 'ALL')} less than expected. Some spending may not be logged.`
-                            : `Your bank has ${formatCurrency(variance, 'ALL')} more than expected. This could be unlogged income, a refund, or an expense logged twice.`}
-                    </span>
+                <div className="flex flex-col gap-2 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/40 rounded-xl px-3 py-2">
+                    <div className="flex items-start gap-2">
+                        <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span>
+                            {variance < 0
+                                ? `Your bank has ${formatCurrency(Math.abs(variance), 'ALL')} less than expected. Some spending may not be logged.`
+                                : `Your bank has ${formatCurrency(variance, 'ALL')} more than expected. This could be unlogged income, a refund, or an expense logged twice.`}
+                        </span>
+                    </div>
+                    <button
+                        onClick={handleReconcile}
+                        disabled={isReconciling}
+                        className="mt-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 py-1.5 px-3 rounded-lg font-bold transition-colors w-full text-center disabled:opacity-50 cursor-pointer"
+                    >
+                        Auto-fix: Log {formatCurrency(Math.abs(amountToLog), 'ALL')} {amountToLog > 0 ? 'expense' : 'addition'}
+                    </button>
                 </div>
             )}
         </Card>
@@ -185,7 +210,6 @@ export const InsightsView: React.FC = () => {
 
     return (
         <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
-            {/* Bank check */}
             <section>
                 <SectionTitle icon={<Landmark className="w-3.5 h-3.5 text-slate-400" />}>
                     Raiffeisen check
@@ -193,7 +217,6 @@ export const InsightsView: React.FC = () => {
                 <BankCheck />
             </section>
 
-            {/* Pazar vs Store */}
             <section>
                 <SectionTitle icon={<Store className="w-3.5 h-3.5 text-slate-400" />}>
                     Pazar vs. supermarket
@@ -238,7 +261,6 @@ export const InsightsView: React.FC = () => {
                 </Card>
             </section>
 
-            {/* Cost per meal */}
             <section>
                 <SectionTitle icon={<Utensils className="w-3.5 h-3.5 text-slate-400" />}>
                     Cost per meal
@@ -267,7 +289,6 @@ export const InsightsView: React.FC = () => {
                 </Card>
             </section>
 
-            {/* Explorer */}
             <section>
                 <SectionTitle icon={<ListFilter className="w-3.5 h-3.5 text-slate-400" />}>
                     Explore your data

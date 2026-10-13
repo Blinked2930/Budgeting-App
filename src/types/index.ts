@@ -31,6 +31,7 @@ export interface ExpenseRecord {
   currency: Currency;
   amountInALL: number; // Normalized base amount for analytics
   category: Category;
+  subcategory?: string; // ADDED THIS
   vendorType?: VendorType;
   foodType?: FoodType;
   itemName?: string;

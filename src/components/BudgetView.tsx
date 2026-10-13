@@ -8,7 +8,7 @@ import {
     Wallet,
 } from 'lucide-react';
 import type { BudgetCycle } from '../types';
-import { saveBudgetCycle } from '../db';
+import { saveBudgetCycle, addExpense } from '../db';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { addDays, toDateInputValue } from '../utils/budget';
 import { formatCurrency } from '../utils/currency';
@@ -47,7 +47,6 @@ interface CycleFormProps {
     submitLabel: string;
     notice?: string;
     initial: FormValues;
-    /** For a new cycle, the start date must be after this date. */
     mustStartAfter?: string;
     onSubmit: (values: Omit<BudgetCycle, 'id'>) => Promise<void>;
     onCancel?: () => void;
@@ -154,7 +153,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
             </div>
 
             <Field
-                label="Raiffeisen balance at start (L)"
+                label="Initial cash (Raiffeisen)"
                 hint="Your bank balance when this cycle starts, before the stipend."
             >
                 <input
@@ -169,7 +168,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
             </Field>
 
             <div className="grid grid-cols-2 gap-3">
-                <Field label="Extra cash (L)" hint="Optional. Added to this cycle's budget.">
+                <Field label="Budget Additions" hint="Optional initial extra cash block.">
                     <input
                         type="number"
                         inputMode="decimal"
@@ -244,6 +243,8 @@ const StatTile: React.FC<{
 export const BudgetView: React.FC = () => {
     const { cycle, stats, isLoading } = useBudgetCycle();
     const [formMode, setFormMode] = useState<FormMode | null>(null);
+    const [adjAmount, setAdjAmount] = useState('');
+    const [isAdjusting, setIsAdjusting] = useState(false);
 
     if (isLoading) {
         return <div className="w-full max-w-md mx-auto px-4 py-10 text-center text-xs text-slate-500">Loading…</div>;
@@ -257,7 +258,20 @@ export const BudgetView: React.FC = () => {
         setFormMode(null);
     };
 
-    // No cycle yet: first-time setup
+    const handleQuickAdjustment = async (type: 'add' | 'sub') => {
+        const val = parseFloat(adjAmount);
+        if (!val || val <= 0) return;
+        setIsAdjusting(true);
+        await addExpense({
+            amount: type === 'add' ? -val : val,
+            currency: 'ALL',
+            category: 'Other',
+            itemName: type === 'add' ? 'Budget Addition' : 'Budget Subtraction',
+        });
+        setAdjAmount('');
+        setIsAdjusting(false);
+    };
+
     if (!cycle || !stats) {
         return (
             <div className="w-full max-w-md mx-auto px-4 py-4">
@@ -340,7 +354,6 @@ export const BudgetView: React.FC = () => {
 
     return (
         <div className="w-full max-w-md mx-auto px-4 py-4 space-y-4">
-            {/* Payday banner */}
             {stats.isPaydayReached && (
                 <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-3">
                     <span className="font-medium">Payday date reached. Ready for the next cycle?</span>
@@ -354,7 +367,6 @@ export const BudgetView: React.FC = () => {
                 </div>
             )}
 
-            {/* Today's allowance */}
             <div className="p-5 rounded-3xl bg-gradient-to-br from-slate-900 to-slate-900/80 border border-slate-800 shadow-xl">
                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                     Left to spend today
@@ -386,7 +398,6 @@ export const BudgetView: React.FC = () => {
                 </div>
             </div>
 
-            {/* Stat tiles */}
             <div className="grid grid-cols-2 gap-3">
                 <StatTile
                     icon={<Wallet className="w-3.5 h-3.5 text-emerald-400" />}
@@ -424,7 +435,6 @@ export const BudgetView: React.FC = () => {
                 />
             </div>
 
-            {/* Raiffeisen estimate */}
             <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800/80 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5 min-w-0">
                     <Landmark className="w-4 h-4 text-slate-400 shrink-0" />
@@ -452,7 +462,6 @@ export const BudgetView: React.FC = () => {
                 </p>
             )}
 
-            {/* Actions */}
             <div className="grid grid-cols-2 gap-3">
                 <button
                     type="button"
@@ -470,6 +479,41 @@ export const BudgetView: React.FC = () => {
                     <RefreshCw className="w-3.5 h-3.5" />
                     Next cycle
                 </button>
+            </div>
+
+            {/* Quick Ledger Adjustments Tool */}
+            <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800/80 space-y-3 mt-4">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Ledger Adjustment
+                </p>
+                <p className="text-[10px] text-slate-500">
+                    Log additions (like refunds) or subtractions line-by-line without needing to edit your full cycle stats.
+                </p>
+                <div className="flex gap-2">
+                    <input
+                        type="number"
+                        inputMode="decimal"
+                        step="any"
+                        value={adjAmount}
+                        onChange={(e) => setAdjAmount(e.target.value)}
+                        placeholder="Amount (Lek)"
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+                    />
+                    <button
+                        disabled={isAdjusting || !adjAmount}
+                        onClick={() => handleQuickAdjustment('add')}
+                        className="px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-xs disabled:opacity-50 transition-colors cursor-pointer"
+                    >
+                        + Add
+                    </button>
+                    <button
+                        disabled={isAdjusting || !adjAmount}
+                        onClick={() => handleQuickAdjustment('sub')}
+                        className="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs disabled:opacity-50 transition-colors cursor-pointer"
+                    >
+                        - Sub
+                    </button>
+                </div>
             </div>
         </div>
     );

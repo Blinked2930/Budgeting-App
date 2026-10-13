@@ -130,3 +130,11 @@ export function computeBudgetStats(
             cycle.startingRaiffeisenBalanceALL + cycle.stipendAmountALL - allTracked,
     };
 }
+
+/**
+ * Converts a YYYY-MM-DD string into a full ISO timestamp set to noon UTC.
+ * This prevents timezone shifts from accidentally moving the entry to the previous day.
+ */
+export function dateToNoonISO(dateString: string): string {
+    return `${dateString}T12:00:00Z`;
+}
