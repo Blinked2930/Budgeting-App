@@ -282,10 +282,7 @@ export const QuickEntryView: React.FC = () => {
             className="w-full py-3 px-4 rounded-2xl bg-slate-950 hover:bg-slate-800/70 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
-            <span>Advanced Entry (Vendor, Item, Food)</span>
-            {hasAdvancedData && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            )}
+            <span>Advanced Entry</span>
           </button>
         </div>
 
