@@ -1,35 +1,35 @@
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../db';
-import type { ExpenseRecord } from '../types';
+import { mutation, query } from "./_generated/server";
+import { v } from "convex/values";
 
-export function useExpenses(limit?: number) {
-  const expenses = useLiveQuery(
-    async () => {
-      const query = db.expenses.orderBy('timestamp').reverse();
-      if (limit) {
-        return query.limit(limit).toArray();
-      }
-      return query.toArray();
-    },
-    [limit],
-    [] as ExpenseRecord[]
-  );
+export const syncExpense = mutation({
+  args: {
+    localId: v.string(),
+    amount: v.number(),
+    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    amountInALL: v.number(),
+    category: v.string(),
+    vendorType: v.optional(v.string()),
+    foodType: v.optional(v.string()),
+    itemName: v.optional(v.string()),
+    estimatedMeals: v.optional(v.number()),
+    timestamp: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("expenses")
+      .withIndex("by_localId", (q) => q.eq("localId", args.localId))
+      .first();
 
-  const unsyncedCount = useLiveQuery(
-    () => db.expenses.filter((e) => !e.isSynced).count(),
-    [],
-    0
-  );
+    if (existing) {
+      return existing._id;
+    }
 
-  const totalSpentALL = (expenses || []).reduce(
-    (sum, exp) => sum + (exp.amountInALL || 0),
-    0
-  );
+    return await ctx.db.insert("expenses", args);
+  },
+});
 
-  return {
-    expenses: expenses || [],
-    unsyncedCount: unsyncedCount || 0,
-    totalSpentALL,
-    isLoading: expenses === undefined,
-  };
-}
+export const getRemoteExpenses = query({
+  handler: async (ctx) => {
+    return await ctx.db.query("expenses").collect();
+  },
+});
