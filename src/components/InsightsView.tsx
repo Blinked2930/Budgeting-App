@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+// src/components/InsightsView.tsx
+import React, { useMemo, useRef, useState } from 'react';
 import {
     Landmark,
     ListFilter,
@@ -6,6 +7,7 @@ import {
     TriangleAlert,
     CircleCheck,
     Utensils,
+    Check,
 } from 'lucide-react';
 import { FOOD_TYPES, VENDORS, type Currency } from '../types';
 import { useExpenses } from '../hooks/useExpenses';
@@ -88,6 +90,8 @@ const BankCheck: React.FC = () => {
     const { stats } = useBudgetCycle();
     const [actualStr, setActualStr] = useState('');
     const [isReconciling, setIsReconciling] = useState(false);
+    const [showDialog, setShowDialog] = useState(false);
+    const dismissedValueRef = useRef<string | null>(null);
 
     if (!stats) {
         return (
@@ -100,13 +104,14 @@ const BankCheck: React.FC = () => {
     }
 
     const actual = parseFloat(actualStr);
-    const hasActual = !Number.isNaN(actual);
+    const hasActual = actualStr.trim() !== '' && !Number.isNaN(actual);
     const variance = hasActual ? actual - stats.estimatedBankBalance : 0;
     const matches = hasActual && Math.abs(variance) < 1;
-    const amountToLog = stats.estimatedBankBalance - actual;
+    const amountToLog = hasActual ? stats.estimatedBankBalance - actual : 0;
+    const hasDiscrepancy = hasActual && !matches && Math.abs(amountToLog) >= 1;
 
     const handleReconcile = async () => {
-        if (!hasActual || Math.abs(amountToLog) < 1) return;
+        if (!hasDiscrepancy) return;
         setIsReconciling(true);
         await addExpense({
             amount: amountToLog,
@@ -115,63 +120,136 @@ const BankCheck: React.FC = () => {
             itemName: 'Balance Reconciliation',
         });
         setActualStr('');
+        setShowDialog(false);
+        dismissedValueRef.current = null;
         setIsReconciling(false);
     };
 
+    const handleBlur = () => {
+        if (!hasDiscrepancy) return;
+        if (dismissedValueRef.current === actualStr) return;
+        setShowDialog(true);
+    };
+
+    const handleDismissDialog = () => {
+        dismissedValueRef.current = actualStr;
+        setShowDialog(false);
+    };
+
     return (
-        <Card className="space-y-3">
-            <div className="flex items-center justify-between gap-3">
-                <div>
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                        LekFlow expects
-                    </p>
-                    <p className="text-xl font-mono font-bold text-white">
-                        {formatCurrency(stats.estimatedBankBalance, 'ALL')}
-                    </p>
-                </div>
-                <div className="w-36">
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                        Actual balance (L)
-                    </p>
-                    <input
-                        type="number"
-                        inputMode="decimal"
-                        step="any"
-                        value={actualStr}
-                        onChange={(e) => setActualStr(e.target.value)}
-                        placeholder="Check your app"
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
-                    />
-                </div>
-            </div>
-
-            {hasActual && matches && (
-                <div className="flex items-center gap-2 text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2">
-                    <CircleCheck className="w-4 h-4 shrink-0" />
-                    <span>Your bank balance matches your tracked expenses.</span>
-                </div>
-            )}
-
-            {hasActual && !matches && (
-                <div className="flex flex-col gap-2 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/40 rounded-xl px-3 py-2">
-                    <div className="flex items-start gap-2">
-                        <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" />
-                        <span>
-                            {variance < 0
-                                ? `Your bank has ${formatCurrency(Math.abs(variance), 'ALL')} less than expected. Some spending may not be logged.`
-                                : `Your bank has ${formatCurrency(variance, 'ALL')} more than expected. This could be unlogged income, a refund, or an expense logged twice.`}
-                        </span>
+        <>
+            <Card className="space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                            LekFlow expects
+                        </p>
+                        <p className="text-xl font-mono font-bold text-white">
+                            {formatCurrency(stats.estimatedBankBalance, 'ALL')}
+                        </p>
                     </div>
-                    <button
-                        onClick={handleReconcile}
-                        disabled={isReconciling}
-                        className="mt-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 py-1.5 px-3 rounded-lg font-bold transition-colors w-full text-center disabled:opacity-50 cursor-pointer"
-                    >
-                        Auto-fix: Log {formatCurrency(Math.abs(amountToLog), 'ALL')} {amountToLog > 0 ? 'expense' : 'addition'}
-                    </button>
+                    <div className="w-36">
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                            Actual balance (L)
+                        </p>
+                        <input
+                            type="number"
+                            inputMode="decimal"
+                            step="any"
+                            value={actualStr}
+                            onChange={(e) => setActualStr(e.target.value)}
+                            onBlur={handleBlur}
+                            placeholder="Check your app"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+                        />
+                    </div>
+                </div>
+
+                {hasActual && matches && (
+                    <div className="flex items-center gap-2 text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2">
+                        <CircleCheck className="w-4 h-4 shrink-0" />
+                        <span>Your bank balance matches your tracked expenses.</span>
+                    </div>
+                )}
+
+                {hasActual && !matches && (
+                    <div className="flex flex-col gap-2 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/40 rounded-xl px-3 py-2">
+                        <div className="flex items-start gap-2">
+                            <TriangleAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                            <span>
+                                {variance < 0
+                                    ? `Your bank has ${formatCurrency(Math.abs(variance), 'ALL')} less than expected. Some spending may not be logged.`
+                                    : `Your bank has ${formatCurrency(variance, 'ALL')} more than expected. This could be unlogged income, a refund, or an expense logged twice.`}
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setShowDialog(true)}
+                            className="mt-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 py-1.5 px-3 rounded-lg font-bold transition-colors w-full text-center cursor-pointer"
+                        >
+                            Log {formatCurrency(Math.abs(amountToLog), 'ALL')} {amountToLog > 0 ? 'expense' : 'addition'}
+                        </button>
+                    </div>
+                )}
+            </Card>
+
+            {showDialog && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4">
+                        <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
+                                <TriangleAlert className="w-5 h-5 text-amber-400" />
+                            </div>
+                            <div className="min-w-0">
+                                <h3 className="text-base font-bold text-white">Log a discrepancy update?</h3>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    LekFlow expects {formatCurrency(stats.estimatedBankBalance, 'ALL')}, but you entered {formatCurrency(actual, 'ALL')}.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800">
+                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                Adjustment to log
+                            </p>
+                            <p
+                                className={cn(
+                                    'text-lg font-mono font-bold mt-0.5',
+                                    amountToLog > 0 ? 'text-rose-400' : 'text-emerald-400'
+                                )}
+                            >
+                                {amountToLog > 0 ? '−' : '+'}
+                                {formatCurrency(Math.abs(amountToLog), 'ALL')}
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-1">
+                                {amountToLog > 0
+                                    ? 'Logs as an expense, bringing the estimate down to match.'
+                                    : 'Logs as an addition, bringing the estimate up to match.'}
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                onClick={handleDismissDialog}
+                                className="py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+                            >
+                                Not now
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleReconcile}
+                                disabled={isReconciling}
+                                className="py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 text-xs font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                            >
+                                <Check className="w-3.5 h-3.5" />
+                                {isReconciling ? 'Logging…' : 'Log it'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
-        </Card>
+        </>
     );
 };
 
