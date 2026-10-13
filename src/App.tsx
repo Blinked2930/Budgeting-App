@@ -15,18 +15,6 @@ export function App() {
       <main className="flex-1 flex flex-col items-center justify-start pb-12">
         <QuickEntryView />
       </main>
-
-      {/* Bottom Offline-First Footer */}
-      <footer className="w-full max-w-md mx-auto px-4 py-3 border-t border-slate-850 flex items-center justify-between text-[11px] text-slate-500">
-        <div className="flex items-center gap-1.5">
-          <Database className="w-3.5 h-3.5 text-emerald-500/80" />
-          <span>Dexie IndexedDB (Offline-First)</span>
-        </div>
-        <div className="flex items-center gap-1 text-slate-400">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Zero network latency</span>
-        </div>
-      </footer>
     </div>
   );
 }
