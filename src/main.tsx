@@ -1,11 +1,16 @@
+// src/main.tsx
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ConvexProvider, ConvexReactClient } from 'convex/react'
+import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.tsx'
 import { SyncManager } from './components/SyncManager'
 import { LockScreen } from './components/LockScreen'
+import InstallPrompt from './components/InstallPrompt'
 import { useLock } from './hooks/useLock'
+
+registerSW({ immediate: true });
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
 const convex = convexUrl ? new ConvexReactClient(convexUrl) : null;
@@ -28,7 +33,12 @@ const UnlockedApp = () => {
 
 const Root = () => {
   const { isUnlocked, unlock } = useLock();
-  return isUnlocked ? <UnlockedApp /> : <LockScreen onUnlock={unlock} />;
+  return (
+    <>
+      <InstallPrompt onBypass={() => { }} />
+      {isUnlocked ? <UnlockedApp /> : <LockScreen onUnlock={unlock} />}
+    </>
+  );
 };
 
 createRoot(document.getElementById('root')!).render(
