@@ -12,7 +12,7 @@ interface LockScreenProps {
 //     .then(b => console.log([...new Uint8Array(b)].map(x => x.toString(16).padStart(2,'0')).join('')))
 // Paste the output below, replacing PIN_HASH.
 const PIN_HASH = '9af15b336e6a9619928537df30b2e6a2376569fcf9d7e773eccede65606529a0';
-const PIN_LENGTH = 4;
+const PIN_LENGTH = 6;
 
 export const LockScreen = ({ onUnlock }: LockScreenProps) => {
     const [entered, setEntered] = useState<string>('');
