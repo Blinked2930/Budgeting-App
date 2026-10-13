@@ -1,3 +1,4 @@
+// src/components/AdvancedDrawer.tsx
 import React, { useMemo, useState } from 'react';
 import {
   Bus,
@@ -165,26 +166,16 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
     setEstimatedMeals(next > 0 ? next : undefined);
   };
 
+  if (!isOpen) return null;
+
   return (
-    <div
-      className={cn('fixed inset-0 z-50', !isOpen && 'pointer-events-none')}
-      aria-hidden={!isOpen}
-    >
-      <div
-        onClick={onClose}
-        className={cn(
-          'absolute inset-0 bg-black/60 transition-opacity duration-300',
-          isOpen ? 'opacity-100' : 'opacity-0'
-        )}
-      />
+    <div className="fixed inset-0 z-50">
+      <div onClick={onClose} className="absolute inset-0 bg-black/60" />
 
       <div
         role="dialog"
         aria-label="Advanced entry"
-        className={cn(
-          'absolute bottom-0 inset-x-0 mx-auto max-w-md flex flex-col max-h-[88vh] bg-slate-900 border-t border-x border-slate-800 rounded-t-3xl shadow-2xl transition-transform duration-300',
-          isOpen ? 'translate-y-0' : 'translate-y-full'
-        )}
+        className="absolute bottom-0 inset-x-0 mx-auto max-w-md flex flex-col max-h-[88vh] bg-slate-900 border-t border-x border-slate-800 rounded-t-3xl shadow-2xl"
       >
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-800/80">
           <h2 className="text-base font-bold text-white">Advanced entry</h2>
