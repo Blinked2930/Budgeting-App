@@ -1,5 +1,12 @@
 import Dexie, { type Table } from 'dexie';
-import type { BudgetCycle, ExpenseRecord } from '../types';
+import type {
+  BudgetCycle,
+  Category,
+  Currency,
+  ExpenseRecord,
+  FoodType,
+  VendorType,
+} from '../types';
 import { convertToALL } from '../utils/currency';
 import { exportToCSV as generateCSV, exportToJSON as generateJSON } from '../utils/export';
 
@@ -17,6 +24,25 @@ export class LekFlowDatabase extends Dexie {
 }
 
 export const db = new LekFlowDatabase();
+
+/**
+ * Shape of an expense document coming back from Convex.
+ */
+export interface RemoteExpense {
+  _id?: string;
+  localId: string;
+  amount: number;
+  currency: Currency;
+  amountInALL: number;
+  category: string;
+  vendorType?: string;
+  foodType?: string;
+  itemName?: string;
+  estimatedMeals?: number;
+  timestamp: string;
+  updatedAt?: string;
+  deleted?: boolean;
+}
 
 /**
  * Add a new expense record locally to Dexie.
@@ -51,10 +77,13 @@ export async function addExpense(
 }
 
 /**
- * Retrieve all expenses, ordered by latest first.
+ * Retrieve all non-deleted expenses, ordered by latest first.
  */
 export async function getExpenses(limit?: number): Promise<ExpenseRecord[]> {
-  const query = db.expenses.orderBy('timestamp').reverse();
+  const query = db.expenses
+    .orderBy('timestamp')
+    .reverse()
+    .filter((e) => !e.deleted);
   if (limit) {
     return query.limit(limit).toArray();
   }
@@ -63,9 +92,15 @@ export async function getExpenses(limit?: number): Promise<ExpenseRecord[]> {
 
 /**
  * Delete an expense by ID.
+ * This is a soft delete: the row stays as a tombstone so the deletion can
+ * sync to other devices. It is hidden from every list and export.
  */
 export async function deleteExpense(id: string): Promise<void> {
-  await db.expenses.delete(id);
+  await db.expenses.update(id, {
+    deleted: true,
+    isSynced: false,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 /**
@@ -76,7 +111,7 @@ export async function updateExpense(
   updates: Partial<Omit<ExpenseRecord, 'id'>>
 ): Promise<void> {
   const existing = await db.expenses.get(id);
-  if (!existing) return;
+  if (!existing || existing.deleted) return;
 
   const amount = updates.amount ?? existing.amount;
   const currency = updates.currency ?? existing.currency;
@@ -95,7 +130,7 @@ export async function updateExpense(
 }
 
 /**
- * Get all un-synced expenses for remote synchronization.
+ * Get all un-synced expenses (including delete tombstones) for remote synchronization.
  */
 export async function getUnsyncedExpenses(): Promise<ExpenseRecord[]> {
   return db.expenses.filter((e) => !e.isSynced).toArray();
@@ -113,11 +148,73 @@ export async function markExpensesAsSynced(ids: string[]): Promise<void> {
 }
 
 /**
+ * Mark expenses as synced only if they have not been edited since they were
+ * pushed. This stops an edit made during a sync from being flagged as synced.
+ */
+export async function markSyncedIfUnchanged(
+  entries: { id: string; updatedAt: string; convexId?: string }[]
+): Promise<void> {
+  await db.transaction('rw', db.expenses, async () => {
+    for (const entry of entries) {
+      const current = await db.expenses.get(entry.id);
+      if (!current) continue;
+
+      const currentUpdatedAt = current.updatedAt ?? current.timestamp;
+      if (currentUpdatedAt === entry.updatedAt) {
+        await db.expenses.update(entry.id, {
+          isSynced: true,
+          convexId: entry.convexId,
+        });
+      }
+    }
+  });
+}
+
+/**
+ * Merge expenses from Convex into local Dexie (last-write-wins by updatedAt).
+ * Adds missing rows, applies newer edits, and applies newer deletions.
+ */
+export async function applyRemoteExpenses(remote: RemoteExpense[]): Promise<void> {
+  await db.transaction('rw', db.expenses, async () => {
+    for (const r of remote) {
+      const local = await db.expenses.get(r.localId);
+      const remoteUpdatedAt = r.updatedAt ?? r.timestamp;
+
+      if (local) {
+        const localUpdatedAt = local.updatedAt ?? local.timestamp;
+        // Local copy is the same or newer: keep it (push will handle it).
+        if (remoteUpdatedAt <= localUpdatedAt) continue;
+      } else if (r.deleted) {
+        // Deleted elsewhere and never seen here: nothing to store.
+        continue;
+      }
+
+      await db.expenses.put({
+        id: r.localId,
+        convexId: r._id ?? local?.convexId,
+        amount: r.amount,
+        currency: r.currency,
+        amountInALL: r.amountInALL,
+        category: r.category as Category,
+        vendorType: r.vendorType as VendorType | undefined,
+        foodType: r.foodType as FoodType | undefined,
+        itemName: r.itemName,
+        estimatedMeals: r.estimatedMeals,
+        timestamp: r.timestamp,
+        updatedAt: remoteUpdatedAt,
+        deleted: r.deleted,
+        isSynced: true,
+      });
+    }
+  });
+}
+
+/**
  * Get distinct historical item names for interactive auto-suggestions.
  */
 export async function getHistoricalItemNames(): Promise<string[]> {
   const items = await db.expenses
-    .filter((e) => Boolean(e.itemName && e.itemName.trim().length > 0))
+    .filter((e) => !e.deleted && Boolean(e.itemName && e.itemName.trim().length > 0))
     .toArray();
 
   const namesSet = new Set<string>();

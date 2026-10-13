@@ -2,26 +2,26 @@
 
 export type Currency = 'ALL' | 'EUR' | 'USD';
 
-export type Category = 
-  | 'Food' 
-  | 'Utilities' 
-  | 'Transport' 
-  | 'Social' 
-  | 'Travel' 
+export type Category =
+  | 'Food'
+  | 'Utilities'
+  | 'Transport'
+  | 'Social'
+  | 'Travel'
   | 'Other';
 
-export type VendorType = 
-  | 'Pazar' 
-  | 'Supermarket' 
-  | 'Café' 
-  | 'Bakery' 
-  | 'Restaurant' 
+export type VendorType =
+  | 'Pazar'
+  | 'Supermarket'
+  | 'Café'
+  | 'Bakery'
+  | 'Restaurant'
   | 'Other';
 
-export type FoodType = 
-  | 'Grocery' 
-  | 'Ready Meal' 
-  | 'Snack' 
+export type FoodType =
+  | 'Grocery'
+  | 'Ready Meal'
+  | 'Snack'
   | 'Beverage';
 
 export interface ExpenseRecord {
@@ -38,6 +38,7 @@ export interface ExpenseRecord {
   timestamp: string; // ISO 8601 string: YYYY-MM-DDTHH:mm:ssZ
   isSynced: boolean; // Sync flag for offline engine
   updatedAt?: string; // ISO 8601 string for conflict resolution
+  deleted?: boolean; // Soft-delete tombstone so deletions sync across devices
 }
 
 export interface BudgetCycle {

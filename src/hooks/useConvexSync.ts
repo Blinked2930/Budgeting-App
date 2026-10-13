@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation } from 'convex/react';
 import { api } from '../../convex/_generated/api';
-import { getUnsyncedExpenses, markExpensesAsSynced } from '../db';
+import { getUnsyncedExpenses, markSyncedIfUnchanged } from '../db';
 
 export function useConvexSync() {
     const [isSyncing, setIsSyncing] = useState(false);
     const isSyncingRef = useRef(false);
-    const syncExpenseMutation = useMutation(api.expenses.syncExpense);
+    const upsertExpenseMutation = useMutation(api.expenses.upsertExpense);
 
     const syncPendingExpenses = useCallback(async () => {
         if (!navigator.onLine || isSyncingRef.current) return;
@@ -16,10 +16,12 @@ export function useConvexSync() {
             setIsSyncing(true);
 
             const unsynced = await getUnsyncedExpenses();
-            const syncedIds: string[] = [];
+            const pushed: { id: string; updatedAt: string; convexId?: string }[] = [];
 
             for (const item of unsynced) {
-                const convexId = await syncExpenseMutation({
+                const updatedAt = item.updatedAt ?? item.timestamp;
+
+                const convexId = await upsertExpenseMutation({
                     localId: item.id,
                     amount: item.amount,
                     currency: item.currency,
@@ -30,15 +32,17 @@ export function useConvexSync() {
                     itemName: item.itemName,
                     estimatedMeals: item.estimatedMeals,
                     timestamp: item.timestamp,
+                    updatedAt,
+                    deleted: item.deleted,
                 });
 
                 if (convexId) {
-                    syncedIds.push(item.id);
+                    pushed.push({ id: item.id, updatedAt, convexId: String(convexId) });
                 }
             }
 
-            if (syncedIds.length > 0) {
-                await markExpensesAsSynced(syncedIds);
+            if (pushed.length > 0) {
+                await markSyncedIfUnchanged(pushed);
             }
         } catch (err) {
             console.error('Background sync failed:', err);
@@ -46,7 +50,7 @@ export function useConvexSync() {
             isSyncingRef.current = false;
             setIsSyncing(false);
         }
-    }, [syncExpenseMutation]);
+    }, [upsertExpenseMutation]);
 
     useEffect(() => {
         syncPendingExpenses();

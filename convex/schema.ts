@@ -13,5 +13,10 @@ export default defineSchema({
         itemName: v.optional(v.string()),
         estimatedMeals: v.optional(v.number()),
         timestamp: v.string(),
+        // Optional so rows created before this change still validate.
+        // When missing, `timestamp` is used as the last-modified time.
+        updatedAt: v.optional(v.string()),
+        // Soft delete flag so deletions can sync to other devices.
+        deleted: v.optional(v.boolean()),
     }).index("by_localId", ["localId"]),
 });
