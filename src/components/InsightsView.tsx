@@ -1,5 +1,5 @@
 // src/components/InsightsView.tsx
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     Landmark,
     ListFilter,
@@ -305,17 +305,30 @@ const BankCheck: React.FC = () => {
 
 const DebtRowActions: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
     const [busy, setBusy] = useState<string | null>(null);
+    const [amountStr, setAmountStr] = useState<string>(String(debt.remainingALL));
+
+    useEffect(() => {
+        setAmountStr(String(debt.remainingALL));
+    }, [debt.remainingALL]);
+
     const owedToMe = debt.direction === 'OwedToMe';
+    const parsed = parseFloat(amountStr);
+    const requested = Number.isNaN(parsed) ? debt.remainingALL : parsed;
+    const clamped = Math.min(Math.max(requested, 0), debt.remainingALL);
+    const isPartial = clamped > 0 && clamped < debt.remainingALL;
+    const isValid = clamped > 0;
 
     const handleCash = async (paidWith: PaymentSource) => {
+        if (!isValid) return;
         setBusy('cash-' + paidWith);
-        await settleDebtCash(debt.id, debt.remainingALL, paidWith);
+        await settleDebtCash(debt.id, clamped, paidWith);
         setBusy(null);
     };
 
     const handleNonCash = async () => {
+        if (!isValid) return;
         setBusy('noncash');
-        await settleDebtNonCash(debt.id, debt.remainingALL);
+        await settleDebtNonCash(debt.id, clamped);
         setBusy(null);
     };
 
@@ -326,12 +339,49 @@ const DebtRowActions: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
     };
 
     return (
-        <div className="space-y-1.5 pt-1">
+        <div className="space-y-2 pt-1">
+            <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                        Amount to settle
+                    </p>
+                    <input
+                        type="number"
+                        inputMode="decimal"
+                        step="any"
+                        value={amountStr}
+                        onChange={(e) => setAmountStr(e.target.value)}
+                        placeholder="0"
+                        className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+                    />
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0 pt-4">
+                    {isPartial ? (
+                        <span className="text-[10px] font-semibold text-amber-400">
+                            Partial · {formatCurrency(clamped, 'ALL')}
+                        </span>
+                    ) : (
+                        <span className="text-[10px] font-semibold text-emerald-400">
+                            Full
+                        </span>
+                    )}
+                    {requested !== debt.remainingALL && (
+                        <button
+                            type="button"
+                            onClick={() => setAmountStr(String(debt.remainingALL))}
+                            className="text-[10px] text-slate-500 hover:text-slate-300 underline cursor-pointer"
+                        >
+                            Reset
+                        </button>
+                    )}
+                </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-1.5">
                 <button
                     type="button"
                     onClick={() => handleCash('Cash')}
-                    disabled={busy !== null}
+                    disabled={busy !== null || !isValid}
                     className="flex items-center justify-center gap-1 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
                 >
                     <Banknote className="w-3 h-3" />
@@ -340,7 +390,7 @@ const DebtRowActions: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                 <button
                     type="button"
                     onClick={() => handleCash('Card')}
-                    disabled={busy !== null}
+                    disabled={busy !== null || !isValid}
                     className="flex items-center justify-center gap-1 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
                 >
                     <Wallet className="w-3 h-3" />
@@ -351,7 +401,7 @@ const DebtRowActions: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                 <button
                     type="button"
                     onClick={handleNonCash}
-                    disabled={busy !== null}
+                    disabled={busy !== null || !isValid}
                     className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
                 >
                     Non-cash offset
@@ -375,7 +425,6 @@ const DebtDetailModal: React.FC<{
 }> = ({ counterpartyKey, onClose }) => {
     const { debts } = useDebts();
 
-    // Derive from live data every render — no stale snapshots.
     const myDebts = useMemo(
         () => debts.filter((d) => d.counterpartyKey === counterpartyKey),
         [debts, counterpartyKey]

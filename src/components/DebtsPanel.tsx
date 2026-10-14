@@ -147,17 +147,32 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
 
 const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
     const [busyAction, setBusyAction] = useState<string | null>(null);
+    const [amountStr, setAmountStr] = useState<string>(String(debt.remainingALL));
+
+    // Keep the amount field synced with the remaining balance when it changes
+    // externally (e.g. after a partial settle from another tab).
+    useEffect(() => {
+        setAmountStr(String(debt.remainingALL));
+    }, [debt.remainingALL]);
+
     const owedToMe = debt.direction === 'OwedToMe';
+    const parsed = parseFloat(amountStr);
+    const requested = Number.isNaN(parsed) ? debt.remainingALL : parsed;
+    const clamped = Math.min(Math.max(requested, 0), debt.remainingALL);
+    const isPartial = clamped > 0 && clamped < debt.remainingALL;
+    const isValid = clamped > 0;
 
     const handleCash = async (paidWith: PaymentSource) => {
+        if (!isValid) return;
         setBusyAction('cash-' + paidWith);
-        await settleDebtCash(debt.id, debt.remainingALL, paidWith);
+        await settleDebtCash(debt.id, clamped, paidWith);
         setBusyAction(null);
     };
 
     const handleNonCash = async () => {
+        if (!isValid) return;
         setBusyAction('noncash');
-        await settleDebtNonCash(debt.id, debt.remainingALL);
+        await settleDebtNonCash(debt.id, clamped);
         setBusyAction(null);
     };
 
@@ -186,11 +201,48 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
 
             {debt.note && <p className="text-[11px] text-slate-400 italic">{debt.note}</p>}
 
+            <div className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                        Amount to settle
+                    </p>
+                    <input
+                        type="number"
+                        inputMode="decimal"
+                        step="any"
+                        value={amountStr}
+                        onChange={(e) => setAmountStr(e.target.value)}
+                        placeholder="0"
+                        className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+                    />
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0 pt-4">
+                    {isPartial ? (
+                        <span className="text-[10px] font-semibold text-amber-400">
+                            Partial · {formatCurrency(clamped, 'ALL')}
+                        </span>
+                    ) : (
+                        <span className="text-[10px] font-semibold text-emerald-400">
+                            Full settlement
+                        </span>
+                    )}
+                    {requested !== debt.remainingALL && (
+                        <button
+                            type="button"
+                            onClick={() => setAmountStr(String(debt.remainingALL))}
+                            className="text-[10px] text-slate-500 hover:text-slate-300 underline cursor-pointer"
+                        >
+                            Reset
+                        </button>
+                    )}
+                </div>
+            </div>
+
             <div className="grid grid-cols-4 gap-1">
                 <button
                     type="button"
                     onClick={() => handleCash('Cash')}
-                    disabled={busyAction !== null}
+                    disabled={busyAction !== null || !isValid}
                     className="py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
                 >
                     <Banknote className="w-3 h-3" />
@@ -199,7 +251,7 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                 <button
                     type="button"
                     onClick={() => handleCash('Card')}
-                    disabled={busyAction !== null}
+                    disabled={busyAction !== null || !isValid}
                     className="py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
                 >
                     <Wallet className="w-3 h-3" />
@@ -208,8 +260,9 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                 <button
                     type="button"
                     onClick={handleNonCash}
-                    disabled={busyAction !== null}
+                    disabled={busyAction !== null || !isValid}
                     className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                    title="They bought something for you instead (no cash moved)"
                 >
                     Non-cash
                 </button>
@@ -218,6 +271,7 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                     onClick={handleWriteOff}
                     disabled={busyAction !== null}
                     className="py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                    title="Close the entire remaining balance without payment"
                 >
                     {owedToMe ? 'Write off' : 'Forgiven'}
                 </button>
