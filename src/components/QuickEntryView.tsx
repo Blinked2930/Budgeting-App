@@ -32,7 +32,7 @@ import {
 import { CurrencyToggle } from './CurrencyToggle';
 import { AdvancedDrawer } from './AdvancedDrawer';
 import { RecentTransactions } from './RecentTransactions';
-import { LentBorrowModal } from './LentBorrowModal';
+import { DebtsPanel } from './DebtsPanel';
 import { addExpense, updateExpense, addTransfer, addDebt } from '../db';
 import { useExpenses } from '../hooks/useExpenses';
 import { useTransfers } from '../hooks/useTransfers';
@@ -168,7 +168,7 @@ export const QuickEntryView: React.FC = () => {
 
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [isWithdrawOpen, setIsWithdrawOpen] = useState<boolean>(false);
-  const [isLentBorrowOpen, setIsLentBorrowOpen] = useState<boolean>(false);
+  const [isDebtsOpen, setIsDebtsOpen] = useState<boolean>(false);
   const [itemName, setItemName] = useState<string>('');
   const [subcategory, setSubcategory] = useState<string | undefined>(undefined);
   const [vendorType, setVendorType] = useState<VendorType | undefined>(undefined);
@@ -345,7 +345,9 @@ export const QuickEntryView: React.FC = () => {
           });
 
           const latencyMs = Math.round(performance.now() - startTime);
-          setFeedback(`Logged with ${formatCurrency(shareAmount, 'ALL')} owed to you in ${latencyMs}ms ⚡`);
+          setFeedback(
+            `Logged with ${formatCurrency(shareAmount, 'ALL')} owed to you in ${latencyMs}ms ⚡`
+          );
         } else {
           await addExpense({ ...baseData, timestamp });
           const latencyMs = Math.round(performance.now() - startTime);
@@ -455,12 +457,12 @@ export const QuickEntryView: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setIsLentBorrowOpen(true)}
+            onClick={() => setIsDebtsOpen(true)}
             className="flex items-center justify-center gap-1.5 py-2 rounded-2xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/40 text-[11px] font-semibold text-purple-300 transition-colors cursor-pointer"
-            title="Log a loan or a borrowing"
+            title="Manage debts"
           >
             <HandCoins className="w-3.5 h-3.5" />
-            Lend / Borrow
+            Debts
           </button>
         </div>
 
@@ -663,11 +665,7 @@ export const QuickEntryView: React.FC = () => {
         onSaved={() => setIsWithdrawOpen(false)}
       />
 
-      <LentBorrowModal
-        isOpen={isLentBorrowOpen}
-        onClose={() => setIsLentBorrowOpen(false)}
-        onSaved={() => setIsLentBorrowOpen(false)}
-      />
+      <DebtsPanel isOpen={isDebtsOpen} onClose={() => setIsDebtsOpen(false)} />
 
       <RecentTransactions
         expenses={expenses}

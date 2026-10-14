@@ -303,39 +303,89 @@ const BankCheck: React.FC = () => {
     );
 };
 
-interface CounterpartyGroup {
-    key: string;
-    name: string;
-    receivables: number;
-    payables: number;
-    debts: DebtRecord[];
-}
+const DebtRowActions: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
+    const [busy, setBusy] = useState<string | null>(null);
+    const owedToMe = debt.direction === 'OwedToMe';
+
+    const handleCash = async (paidWith: PaymentSource) => {
+        setBusy('cash-' + paidWith);
+        await settleDebtCash(debt.id, debt.remainingALL, paidWith);
+        setBusy(null);
+    };
+
+    const handleNonCash = async () => {
+        setBusy('noncash');
+        await settleDebtNonCash(debt.id, debt.remainingALL);
+        setBusy(null);
+    };
+
+    const handleWriteOff = async () => {
+        setBusy('writeoff');
+        await writeOffDebt(debt.id);
+        setBusy(null);
+    };
+
+    return (
+        <div className="space-y-1.5 pt-1">
+            <div className="grid grid-cols-2 gap-1.5">
+                <button
+                    type="button"
+                    onClick={() => handleCash('Cash')}
+                    disabled={busy !== null}
+                    className="flex items-center justify-center gap-1 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                >
+                    <Banknote className="w-3 h-3" />
+                    {owedToMe ? 'Got cash' : 'Paid cash'}
+                </button>
+                <button
+                    type="button"
+                    onClick={() => handleCash('Card')}
+                    disabled={busy !== null}
+                    className="flex items-center justify-center gap-1 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                >
+                    <Wallet className="w-3 h-3" />
+                    {owedToMe ? 'Got bank' : 'Paid bank'}
+                </button>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+                <button
+                    type="button"
+                    onClick={handleNonCash}
+                    disabled={busy !== null}
+                    className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                >
+                    Non-cash offset
+                </button>
+                <button
+                    type="button"
+                    onClick={handleWriteOff}
+                    disabled={busy !== null}
+                    className="py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                >
+                    {owedToMe ? 'Write off' : 'Forgiven'}
+                </button>
+            </div>
+        </div>
+    );
+};
 
 const DebtDetailModal: React.FC<{
-    group: CounterpartyGroup | null;
+    counterpartyKey: string | null;
     onClose: () => void;
-}> = ({ group, onClose }) => {
-    const [busyId, setBusyId] = useState<string | null>(null);
+}> = ({ counterpartyKey, onClose }) => {
+    const { debts } = useDebts();
 
-    if (!group) return null;
+    // Derive from live data every render — no stale snapshots.
+    const myDebts = useMemo(
+        () => debts.filter((d) => d.counterpartyKey === counterpartyKey),
+        [debts, counterpartyKey]
+    );
 
-    const handleSettle = async (debt: DebtRecord, paidWith: PaymentSource) => {
-        setBusyId(debt.id);
-        await settleDebtCash(debt.id, debt.remainingALL, paidWith);
-        setBusyId(null);
-    };
+    if (!counterpartyKey || myDebts.length === 0) return null;
 
-    const handleNonCash = async (debt: DebtRecord) => {
-        setBusyId(debt.id);
-        await settleDebtNonCash(debt.id, debt.remainingALL);
-        setBusyId(null);
-    };
-
-    const handleWriteOff = async (debt: DebtRecord) => {
-        setBusyId(debt.id);
-        await writeOffDebt(debt.id);
-        setBusyId(null);
-    };
+    const name = myDebts[0].counterparty;
+    const openDebts = myDebts.filter((d) => d.status === 'open');
+    const resolvedDebts = myDebts.filter((d) => d.status === 'resolved');
 
     return (
         <div
@@ -352,9 +402,9 @@ const DebtDetailModal: React.FC<{
                             <HandCoins className="w-4 h-4 text-purple-400" />
                         </div>
                         <div>
-                            <h3 className="text-base font-bold text-white">{group.name}</h3>
+                            <h3 className="text-base font-bold text-white">{name}</h3>
                             <p className="text-[10px] text-slate-500">
-                                {group.debts.length} {group.debts.length === 1 ? 'debt' : 'debts'} open
+                                {openDebts.length} open · {resolvedDebts.length} resolved
                             </p>
                         </div>
                     </div>
@@ -368,11 +418,8 @@ const DebtDetailModal: React.FC<{
                 </div>
 
                 <div className="overflow-y-auto p-4 space-y-3">
-                    {group.debts.map((debt) => {
+                    {openDebts.map((debt) => {
                         const owedToMe = debt.direction === 'OwedToMe';
-                        const isBusy = busyId === debt.id;
-                        const amt = formatCurrency(debt.remainingALL, 'ALL');
-
                         return (
                             <div
                                 key={debt.id}
@@ -393,14 +440,12 @@ const DebtDetailModal: React.FC<{
                                         {owedToMe ? 'Owes you' : 'You owe'}
                                     </span>
                                     <span className="text-sm font-mono font-bold text-white">
-                                        {amt}
+                                        {formatCurrency(debt.remainingALL, 'ALL')}
                                     </span>
                                 </div>
 
                                 {debt.note && (
-                                    <p className="text-[11px] text-slate-400 italic">
-                                        {debt.note}
-                                    </p>
+                                    <p className="text-[11px] text-slate-400 italic">{debt.note}</p>
                                 )}
 
                                 <p className="text-[10px] text-slate-600">
@@ -411,88 +456,36 @@ const DebtDetailModal: React.FC<{
                                     })}
                                 </p>
 
-                                <div className="space-y-1.5 pt-1">
-                                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                                        Settle full amount
-                                    </p>
-                                    <div className="grid grid-cols-2 gap-1.5">
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSettle(debt, 'Cash')}
-                                            disabled={isBusy}
-                                            className="flex items-center justify-center gap-1 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                                            title={
-                                                owedToMe
-                                                    ? 'They handed you the cash'
-                                                    : 'You handed them cash'
-                                            }
-                                        >
-                                            <Banknote className="w-3 h-3" />
-                                            {owedToMe ? 'Got cash' : 'Paid cash'}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSettle(debt, 'Card')}
-                                            disabled={isBusy}
-                                            className="flex items-center justify-center gap-1 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                                            title={
-                                                owedToMe
-                                                    ? 'They sent to your bank'
-                                                    : 'You sent from your bank'
-                                            }
-                                        >
-                                            <Wallet className="w-3 h-3" />
-                                            {owedToMe ? 'Got bank' : 'Paid bank'}
-                                        </button>
-                                    </div>
-
-                                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider pt-1">
-                                        Or close it out
-                                    </p>
-                                    <div className="grid grid-cols-2 gap-1.5">
-                                        <button
-                                            type="button"
-                                            onClick={() => handleNonCash(debt)}
-                                            disabled={isBusy}
-                                            className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                                            title={
-                                                owedToMe
-                                                    ? 'They bought something for you instead'
-                                                    : 'You bought something for them instead'
-                                            }
-                                        >
-                                            Non-cash offset
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleWriteOff(debt)}
-                                            disabled={isBusy}
-                                            className="py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                                            title={
-                                                owedToMe
-                                                    ? 'Forgive the debt — becomes a gift you gave'
-                                                    : 'They forgave you — clears the debt'
-                                            }
-                                        >
-                                            {owedToMe ? 'Write off (gift)' : 'Forgiven'}
-                                        </button>
-                                    </div>
-                                </div>
+                                <DebtRowActions debt={debt} />
                             </div>
                         );
                     })}
-                </div>
 
-                <div className="p-4 border-t border-slate-800 flex items-center justify-between text-[11px] font-mono">
-                    {group.receivables > 0 && (
-                        <span className="text-emerald-400">
-                            Owes you {formatCurrency(group.receivables, 'ALL')}
-                        </span>
-                    )}
-                    {group.payables > 0 && (
-                        <span className="text-rose-400">
-                            You owe {formatCurrency(group.payables, 'ALL')}
-                        </span>
+                    {resolvedDebts.length > 0 && (
+                        <>
+                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider pt-2">
+                                Resolved
+                            </p>
+                            {resolvedDebts.map((debt) => (
+                                <div
+                                    key={debt.id}
+                                    className="p-2.5 rounded-xl bg-slate-900/30 border border-slate-800/50 flex items-center justify-between gap-2"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="text-[11px] font-medium text-slate-500 line-through truncate">
+                                            {debt.direction === 'OwedToMe' ? 'Owes you' : 'You owe'}{' '}
+                                            {formatCurrency(debt.amountALL, 'ALL')}
+                                        </p>
+                                        {debt.note && (
+                                            <p className="text-[10px] text-slate-600 italic truncate line-through">
+                                                {debt.note}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <Check className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                                </div>
+                            ))}
+                        </>
                     )}
                 </div>
             </div>
@@ -502,10 +495,13 @@ const DebtDetailModal: React.FC<{
 
 const DebtsSection: React.FC = () => {
     const { openDebts } = useDebts();
-    const [selected, setSelected] = useState<CounterpartyGroup | null>(null);
+    const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-    const groups = useMemo<CounterpartyGroup[]>(() => {
-        const map = new Map<string, CounterpartyGroup>();
+    const groups = useMemo(() => {
+        const map = new Map<
+            string,
+            { key: string; name: string; receivables: number; payables: number; count: number }
+        >();
         for (const d of openDebts) {
             let g = map.get(d.counterpartyKey);
             if (!g) {
@@ -514,13 +510,13 @@ const DebtsSection: React.FC = () => {
                     name: d.counterparty,
                     receivables: 0,
                     payables: 0,
-                    debts: [],
+                    count: 0,
                 };
                 map.set(d.counterpartyKey, g);
             }
             if (d.direction === 'OwedToMe') g.receivables += d.remainingALL;
             else g.payables += d.remainingALL;
-            g.debts.push(d);
+            g.count += 1;
         }
         return Array.from(map.values()).sort((a, b) => {
             const aTotal = a.receivables + a.payables;
@@ -533,7 +529,7 @@ const DebtsSection: React.FC = () => {
         return (
             <Card>
                 <p className="text-xs text-slate-400">
-                    No open debts. Log a shared expense from Advanced Entry, or use Lend / Borrow on the Log tab.
+                    No open debts. Log a shared expense from Advanced Entry, or use Debts on the Log tab.
                 </p>
             </Card>
         );
@@ -548,7 +544,7 @@ const DebtsSection: React.FC = () => {
                         <button
                             key={g.key}
                             type="button"
-                            onClick={() => setSelected(g)}
+                            onClick={() => setSelectedKey(g.key)}
                             className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-950/70 hover:bg-slate-950 border border-slate-800 hover:border-slate-700 transition-colors cursor-pointer"
                         >
                             <div className="flex items-center gap-2.5 min-w-0">
@@ -562,7 +558,7 @@ const DebtsSection: React.FC = () => {
                                         {g.name}
                                     </p>
                                     <p className="text-[10px] text-slate-500">
-                                        {g.debts.length} {g.debts.length === 1 ? 'item' : 'items'}
+                                        {g.count} {g.count === 1 ? 'item' : 'items'}
                                     </p>
                                 </div>
                             </div>
@@ -589,7 +585,10 @@ const DebtsSection: React.FC = () => {
                 })}
             </Card>
 
-            <DebtDetailModal group={selected} onClose={() => setSelected(null)} />
+            <DebtDetailModal
+                counterpartyKey={selectedKey}
+                onClose={() => setSelectedKey(null)}
+            />
         </>
     );
 };
@@ -698,7 +697,9 @@ export const InsightsView: React.FC = () => {
                                 <p className="text-3xl font-mono font-extrabold text-emerald-300 tracking-tight">
                                     {formatCurrency(overall.costPerMeal, 'ALL')}
                                 </p>
-                                <p className="text-[11px] text-slate-500 mt-1">average across all logged meals</p>
+                                <p className="text-[11px] text-slate-500 mt-1">
+                                    average across all logged meals
+                                </p>
                             </div>
                             <p className="text-[11px] font-mono text-slate-500 text-right">
                                 {formatCurrency(overall.mealSpend, 'ALL')}
@@ -708,8 +709,8 @@ export const InsightsView: React.FC = () => {
                         </div>
                     ) : (
                         <p className="text-xs text-slate-400">
-                            Add an estimated meal count in Advanced Entry when you log food, and your average
-                            cost per meal will show up here.
+                            Add an estimated meal count in Advanced Entry when you log food, and your
+                            average cost per meal will show up here.
                         </p>
                     )}
                 </Card>
@@ -741,7 +742,9 @@ export const InsightsView: React.FC = () => {
                     {monthOptions.length > 0 && (
                         <ChipRow
                             label="Month"
-                            options={monthOptions.slice(0, 6).map((m) => ({ value: m, label: monthLabel(m) }))}
+                            options={monthOptions
+                                .slice(0, 6)
+                                .map((m) => ({ value: m, label: monthLabel(m) }))}
                             selected={filters.month}
                             onSelect={update('month')}
                         />
@@ -759,12 +762,20 @@ export const InsightsView: React.FC = () => {
 
                     <div className="pt-3 border-t border-slate-800">
                         {filtered.length === 0 ? (
-                            <p className="text-xs text-slate-500">No expenses match these filters.</p>
+                            <p className="text-xs text-slate-500">
+                                No expenses match these filters.
+                            </p>
                         ) : (
                             <div className="grid grid-cols-2 gap-4">
-                                <Metric label="Total" value={formatCurrency(filteredAgg.total, 'ALL')} />
+                                <Metric
+                                    label="Total"
+                                    value={formatCurrency(filteredAgg.total, 'ALL')}
+                                />
                                 <Metric label="Entries" value={String(filteredAgg.count)} />
-                                <Metric label="Average" value={formatCurrency(filteredAgg.average, 'ALL')} />
+                                <Metric
+                                    label="Average"
+                                    value={formatCurrency(filteredAgg.average, 'ALL')}
+                                />
                                 <Metric
                                     label="Per meal"
                                     value={

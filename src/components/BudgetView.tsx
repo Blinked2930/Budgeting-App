@@ -287,8 +287,14 @@ const TransferModal: React.FC<{
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4">
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={onClose}
+        >
+            <div
+                className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4"
+                onClick={(e) => e.stopPropagation()}
+            >
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center">
@@ -390,7 +396,11 @@ export const BudgetView: React.FC = () => {
     const [isTransferOpen, setIsTransferOpen] = useState(false);
 
     if (isLoading) {
-        return <div className="w-full max-w-md mx-auto px-4 py-10 text-center text-xs text-slate-500">Loading…</div>;
+        return (
+            <div className="w-full max-w-md mx-auto px-4 py-10 text-center text-xs text-slate-500">
+                Loading…
+            </div>
+        );
     }
 
     const today = new Date();
@@ -498,11 +508,15 @@ export const BudgetView: React.FC = () => {
                 ? 'bg-amber-400'
                 : 'bg-emerald-400';
 
+    const hasDebts = stats.receivablesALL > 0 || stats.payablesALL > 0;
+
     return (
         <div className="w-full max-w-md mx-auto px-3 sm:px-4 py-4 space-y-3.5">
             {stats.isPaydayReached && (
                 <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-3">
-                    <span className="font-medium">Payday date reached. Ready for the next cycle?</span>
+                    <span className="font-medium">
+                        Payday date reached. Ready for the next cycle?
+                    </span>
                     <button
                         type="button"
                         onClick={() => setFormMode('next')}
@@ -561,13 +575,36 @@ export const BudgetView: React.FC = () => {
                 />
             </div>
 
-            {(stats.receivablesALL > 0 || stats.payablesALL > 0) && (
-                <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-purple-500/10 border border-purple-500/40">
-                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-300">
-                        <HandCoins className="w-3.5 h-3.5" />
-                        <span>Net of debts</span>
+            {hasDebts && (
+                <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-purple-500/30 space-y-2.5">
+                    <div className="flex items-center gap-1.5">
+                        <HandCoins className="w-3.5 h-3.5 text-purple-400" />
+                        <p className="text-[10px] font-semibold text-purple-300 uppercase tracking-wider">
+                            Debts
+                        </p>
                     </div>
-                    <div className="text-right">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                Owed to you
+                            </p>
+                            <p className="text-sm font-mono font-bold text-emerald-400">
+                                {formatCurrency(stats.receivablesALL, 'ALL')}
+                            </p>
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                You owe
+                            </p>
+                            <p className="text-sm font-mono font-bold text-rose-400">
+                                {formatCurrency(stats.payablesALL, 'ALL')}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="pt-2.5 border-t border-slate-800/60 flex items-center justify-between">
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                            Net
+                        </p>
                         <p
                             className={cn(
                                 'text-sm font-mono font-bold',
@@ -580,13 +617,6 @@ export const BudgetView: React.FC = () => {
                         >
                             {stats.netOfDebtsALL > 0 ? '+' : ''}
                             {formatCurrency(Math.abs(stats.netOfDebtsALL), 'ALL')}
-                        </p>
-                        <p className="text-[10px] text-slate-500">
-                            {stats.receivablesALL > 0 &&
-                                `you're owed ${formatCurrency(stats.receivablesALL, 'ALL')}`}
-                            {stats.receivablesALL > 0 && stats.payablesALL > 0 && ' · '}
-                            {stats.payablesALL > 0 &&
-                                `you owe ${formatCurrency(stats.payablesALL, 'ALL')}`}
                         </p>
                     </div>
                 </div>
@@ -631,8 +661,8 @@ export const BudgetView: React.FC = () => {
 
             {stats.travelSpent > 0 && (
                 <p className="text-[11px] text-slate-500 px-1">
-                    {formatCurrency(stats.travelSpent, 'ALL')} of Travel spending is paid from the stash,
-                    not the daily budget.
+                    {formatCurrency(stats.travelSpent, 'ALL')} of Travel spending is paid from the
+                    stash, not the daily budget.
                 </p>
             )}
 
@@ -670,7 +700,8 @@ export const BudgetView: React.FC = () => {
                         Ledger Adjustment
                     </p>
                     <p className="text-[10px] text-slate-500 mt-1">
-                        Log additions (like refunds) or subtractions without editing your full cycle stats.
+                        Log additions (like refunds) or subtractions without editing your full cycle
+                        stats.
                     </p>
                 </div>
                 <div className="flex gap-2">
