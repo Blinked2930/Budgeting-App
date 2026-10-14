@@ -18,6 +18,7 @@ import {
   Wallet,
   Banknote,
   ArrowLeftRight,
+  HandCoins,
 } from 'lucide-react';
 import {
   type Currency,
@@ -31,7 +32,8 @@ import {
 import { CurrencyToggle } from './CurrencyToggle';
 import { AdvancedDrawer } from './AdvancedDrawer';
 import { RecentTransactions } from './RecentTransactions';
-import { addExpense, updateExpense, addTransfer } from '../db';
+import { LentBorrowModal } from './LentBorrowModal';
+import { addExpense, updateExpense, addTransfer, addDebt } from '../db';
 import { useExpenses } from '../hooks/useExpenses';
 import { useTransfers } from '../hooks/useTransfers';
 import { convertToALL, formatCurrency } from '../utils/currency';
@@ -158,11 +160,14 @@ export const QuickEntryView: React.FC = () => {
 
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [isWithdrawOpen, setIsWithdrawOpen] = useState<boolean>(false);
+  const [isLentBorrowOpen, setIsLentBorrowOpen] = useState<boolean>(false);
   const [itemName, setItemName] = useState<string>('');
   const [subcategory, setSubcategory] = useState<string | undefined>(undefined);
   const [vendorType, setVendorType] = useState<VendorType | undefined>(undefined);
   const [foodType, setFoodType] = useState<FoodType | undefined>(undefined);
   const [estimatedMeals, setEstimatedMeals] = useState<number | undefined>(undefined);
+  const [shareCounterparty, setShareCounterparty] = useState<string>('');
+  const [shareAmountStr, setShareAmountStr] = useState<string>('');
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [originalDateOverride, setOriginalDateOverride] = useState<string | null>(null);
@@ -180,8 +185,11 @@ export const QuickEntryView: React.FC = () => {
   const parsedAmount = parseFloat(amountStr) || 0;
   const normalizedALL = convertToALL(parsedAmount, currency);
 
+  const shareAmount = parseFloat(shareAmountStr) || 0;
+  const hasShare = shareAmount > 0 && shareCounterparty.trim().length > 0;
+
   const hasAdvancedData = Boolean(
-    itemName.trim() || subcategory || vendorType || foodType || estimatedMeals
+    itemName.trim() || subcategory || vendorType || foodType || estimatedMeals || hasShare
   );
 
   const handleCategoryChange = (next: Category) => {
@@ -222,6 +230,8 @@ export const QuickEntryView: React.FC = () => {
     setVendorType(undefined);
     setFoodType(undefined);
     setEstimatedMeals(undefined);
+    setShareCounterparty('');
+    setShareAmountStr('');
   };
 
   const handleResetForm = () => {
@@ -241,6 +251,8 @@ export const QuickEntryView: React.FC = () => {
     setVendorType(expense.vendorType);
     setFoodType(expense.foodType);
     setEstimatedMeals(expense.estimatedMeals);
+    setShareCounterparty('');
+    setShareAmountStr('');
 
     const expenseDate = toDateInputValue(new Date(expense.timestamp));
     const override = expenseDate === todayStr ? null : expenseDate;
@@ -270,7 +282,17 @@ export const QuickEntryView: React.FC = () => {
       setIsSaving(true);
       const startTime = performance.now();
 
-      const baseData = {
+      const baseData: Partial<ExpenseRecord> & {
+        amount: number;
+        currency: Currency;
+        category: Category;
+        paidWith: PaymentSource;
+        itemName?: string;
+        subcategory?: string;
+        vendorType?: VendorType;
+        foodType?: FoodType;
+        estimatedMeals?: number;
+      } = {
         amount: parsedAmount,
         currency,
         category,
@@ -297,21 +319,37 @@ export const QuickEntryView: React.FC = () => {
         const latencyMs = Math.round(performance.now() - startTime);
         setFeedback(`Updated in ${latencyMs}ms ⚡`);
       } else {
-        await addExpense({
-          ...baseData,
-          timestamp: dateOverride ? dateToNoonISO(dateOverride) : undefined,
-        });
+        const timestamp = dateOverride ? dateToNoonISO(dateOverride) : undefined;
 
-        const latencyMs = Math.round(performance.now() - startTime);
-        setFeedback(
-          dateOverride
-            ? `Logged ${formatCurrency(parsedAmount, currency)} for ${dateOverride}`
-            : `Logged ${formatCurrency(parsedAmount, currency)} in ${latencyMs}ms ⚡ (Dexie local)`
-        );
+        if (hasShare && shareAmount < normalizedALL) {
+          const saved = await addExpense({
+            ...baseData,
+            budgetAmountALL: normalizedALL - shareAmount,
+            timestamp,
+          });
+
+          await addDebt({
+            counterparty: shareCounterparty,
+            direction: 'OwedToMe',
+            amountALL: shareAmount,
+            sourceExpenseId: saved.id,
+            note: itemName.trim() || undefined,
+          });
+
+          const latencyMs = Math.round(performance.now() - startTime);
+          setFeedback(`Logged with ${formatCurrency(shareAmount, 'ALL')} owed to you in ${latencyMs}ms ⚡`);
+        } else {
+          await addExpense({ ...baseData, timestamp });
+          const latencyMs = Math.round(performance.now() - startTime);
+          setFeedback(
+            dateOverride
+              ? `Logged ${formatCurrency(parsedAmount, currency)} for ${dateOverride}`
+              : `Logged ${formatCurrency(parsedAmount, currency)} in ${latencyMs}ms ⚡ (Dexie local)`
+          );
+        }
       }
 
       setTimeout(() => setFeedback(null), 2500);
-
       setEditingId(null);
       setOriginalDateOverride(null);
       handleResetForm();
@@ -365,14 +403,14 @@ export const QuickEntryView: React.FC = () => {
           <CurrencyToggle selected={currency} onChange={setCurrency} />
         </div>
 
-        {/* Cash / Card toggle + Withdraw shortcut */}
+        {/* Cash / Card toggle + quick actions */}
         <div className="flex items-center justify-center gap-2 flex-wrap">
           <div className="inline-flex p-1 rounded-2xl bg-slate-950 border border-slate-800">
             <button
               type="button"
               onClick={() => setPaidWith('Cash')}
               className={cn(
-                'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                'flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
                 paidWith === 'Cash'
                   ? 'bg-emerald-500/20 text-emerald-300'
                   : 'text-slate-400 hover:text-slate-200'
@@ -385,7 +423,7 @@ export const QuickEntryView: React.FC = () => {
               type="button"
               onClick={() => setPaidWith('Card')}
               className={cn(
-                'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                'flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
                 paidWith === 'Card'
                   ? 'bg-cyan-500/20 text-cyan-300'
                   : 'text-slate-400 hover:text-slate-200'
@@ -400,10 +438,20 @@ export const QuickEntryView: React.FC = () => {
             type="button"
             onClick={() => setIsWithdrawOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-[11px] font-semibold text-amber-300 transition-colors cursor-pointer"
-            title="Move money from bank to cash"
+            title="Withdraw cash from bank"
           >
             <ArrowLeftRight className="w-3.5 h-3.5" />
             Withdraw
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsLentBorrowOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/40 text-[11px] font-semibold text-purple-300 transition-colors cursor-pointer"
+            title="Log a loan or a borrowing"
+          >
+            <HandCoins className="w-3.5 h-3.5" />
+            Lend / Borrow
           </button>
         </div>
 
@@ -530,6 +578,7 @@ export const QuickEntryView: React.FC = () => {
               <span className="truncate">
                 {itemName || subcategory || 'Item'} {vendorType ? `• ${vendorType}` : ''}{' '}
                 {estimatedMeals ? `• ${estimatedMeals} meal(s)` : ''}
+                {hasShare ? ` • ${shareCounterparty} owes ${formatCurrency(shareAmount, 'ALL')}` : ''}
               </span>
             </div>
             <button
@@ -591,6 +640,10 @@ export const QuickEntryView: React.FC = () => {
         setFoodType={setFoodType}
         estimatedMeals={estimatedMeals}
         setEstimatedMeals={setEstimatedMeals}
+        shareCounterparty={shareCounterparty}
+        setShareCounterparty={setShareCounterparty}
+        shareAmountStr={shareAmountStr}
+        setShareAmountStr={setShareAmountStr}
         onApplyAndClose={() => setIsDrawerOpen(false)}
         onClear={handleClearAdvanced}
       />
@@ -599,6 +652,12 @@ export const QuickEntryView: React.FC = () => {
         isOpen={isWithdrawOpen}
         onClose={() => setIsWithdrawOpen(false)}
         onSaved={() => setIsWithdrawOpen(false)}
+      />
+
+      <LentBorrowModal
+        isOpen={isLentBorrowOpen}
+        onClose={() => setIsLentBorrowOpen(false)}
+        onSaved={() => setIsLentBorrowOpen(false)}
       />
 
       <RecentTransactions

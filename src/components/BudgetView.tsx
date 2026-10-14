@@ -10,6 +10,7 @@ import {
     Banknote,
     ArrowLeftRight,
     X,
+    HandCoins,
 } from 'lucide-react';
 import type { BudgetCycle, TransferDirection } from '../types';
 import { saveBudgetCycle, addExpense, addTransfer } from '../db';
@@ -162,10 +163,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 min-w-0">
-                <Field
-                    label="Bank at start (L)"
-                    hint="Raiffeisen balance when cycle starts."
-                >
+                <Field label="Bank at start (L)" hint="Raiffeisen balance when cycle starts.">
                     <input
                         type="number"
                         inputMode="decimal"
@@ -176,10 +174,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
                         className={inputClass}
                     />
                 </Field>
-                <Field
-                    label="Cash at start (L)"
-                    hint="Cash in your pocket when cycle starts."
-                >
+                <Field label="Cash at start (L)" hint="Cash in your pocket when cycle starts.">
                     <input
                         type="number"
                         inputMode="decimal"
@@ -565,6 +560,37 @@ export const BudgetView: React.FC = () => {
                     negative={stats.estimatedCashBalance < 0}
                 />
             </div>
+
+            {(stats.receivablesALL > 0 || stats.payablesALL > 0) && (
+                <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-purple-500/10 border border-purple-500/40">
+                    <div className="flex items-center gap-1.5 text-[11px] font-semibold text-purple-300">
+                        <HandCoins className="w-3.5 h-3.5" />
+                        <span>Net of debts</span>
+                    </div>
+                    <div className="text-right">
+                        <p
+                            className={cn(
+                                'text-sm font-mono font-bold',
+                                stats.netOfDebtsALL > 0
+                                    ? 'text-emerald-400'
+                                    : stats.netOfDebtsALL < 0
+                                        ? 'text-rose-400'
+                                        : 'text-slate-400'
+                            )}
+                        >
+                            {stats.netOfDebtsALL > 0 ? '+' : ''}
+                            {formatCurrency(Math.abs(stats.netOfDebtsALL), 'ALL')}
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                            {stats.receivablesALL > 0 &&
+                                `you're owed ${formatCurrency(stats.receivablesALL, 'ALL')}`}
+                            {stats.receivablesALL > 0 && stats.payablesALL > 0 && ' · '}
+                            {stats.payablesALL > 0 &&
+                                `you owe ${formatCurrency(stats.payablesALL, 'ALL')}`}
+                        </p>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-2 gap-2.5">
                 <StatTile

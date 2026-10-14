@@ -4,6 +4,8 @@ import type {
   BudgetCycle,
   Category,
   Currency,
+  DebtDirection,
+  DebtRecord,
   ExpenseRecord,
   FoodType,
   PaymentSource,
@@ -18,6 +20,7 @@ export class LekFlowDatabase extends Dexie {
   expenses!: Table<ExpenseRecord, string>;
   budgetCycles!: Table<BudgetCycle, string>;
   transfers!: Table<TransferRecord, string>;
+  debts!: Table<DebtRecord, string>;
 
   constructor() {
     super('LekFlowDB');
@@ -29,11 +32,17 @@ export class LekFlowDatabase extends Dexie {
       expenses: 'id, timestamp, category, vendorType, isSynced, amountInALL',
       budgetCycles: 'id, startDate, targetEndDate, isSynced, updatedAt',
     });
-    // v3 adds the transfers table and paidWith on expenses (no index change needed).
     this.version(3).stores({
       expenses: 'id, timestamp, category, vendorType, isSynced, amountInALL',
       budgetCycles: 'id, startDate, targetEndDate, isSynced, updatedAt',
       transfers: 'id, timestamp, isSynced, updatedAt',
+    });
+    // v4 adds the debts table.
+    this.version(4).stores({
+      expenses: 'id, timestamp, category, vendorType, isSynced, amountInALL',
+      budgetCycles: 'id, startDate, targetEndDate, isSynced, updatedAt',
+      transfers: 'id, timestamp, isSynced, updatedAt',
+      debts: 'id, counterpartyKey, status, direction, isSynced, updatedAt',
     });
   }
 }
@@ -53,6 +62,10 @@ export interface RemoteExpense {
   itemName?: string;
   estimatedMeals?: number;
   paidWith?: string;
+  budgetAmountALL?: number;
+  debtId?: string;
+  debtRelated?: boolean;
+  walletNeutral?: boolean;
   timestamp: string;
   updatedAt?: string;
   deleted?: boolean;
@@ -78,6 +91,23 @@ export interface RemoteTransfer {
   amountALL: number;
   direction: string;
   timestamp: string;
+  updatedAt?: string;
+  deleted?: boolean;
+}
+
+export interface RemoteDebt {
+  _id?: string;
+  localId: string;
+  counterparty: string;
+  counterpartyKey: string;
+  direction: string;
+  amountALL: number;
+  remainingALL: number;
+  note?: string;
+  status: string;
+  sourceExpenseId?: string;
+  createdAt: string;
+  resolvedAt?: string;
   updatedAt?: string;
   deleted?: boolean;
 }
@@ -160,14 +190,6 @@ export async function getUnsyncedExpenses(): Promise<ExpenseRecord[]> {
   return db.expenses.filter((e) => !e.isSynced).toArray();
 }
 
-export async function markExpensesAsSynced(ids: string[]): Promise<void> {
-  await db.transaction('rw', db.expenses, async () => {
-    for (const id of ids) {
-      await db.expenses.update(id, { isSynced: true });
-    }
-  });
-}
-
 export async function markSyncedIfUnchanged(
   entries: { id: string; updatedAt: string; convexId?: string }[]
 ): Promise<void> {
@@ -213,6 +235,10 @@ export async function applyRemoteExpenses(remote: RemoteExpense[]): Promise<void
         itemName: r.itemName,
         estimatedMeals: r.estimatedMeals,
         paidWith: r.paidWith as PaymentSource | undefined,
+        budgetAmountALL: r.budgetAmountALL,
+        debtId: r.debtId,
+        debtRelated: r.debtRelated,
+        walletNeutral: r.walletNeutral,
         timestamp: r.timestamp,
         updatedAt: remoteUpdatedAt,
         deleted: r.deleted,
@@ -314,6 +340,255 @@ export async function applyRemoteTransfers(remote: RemoteTransfer[]): Promise<vo
         amountALL: r.amountALL,
         direction: r.direction as TransferDirection,
         timestamp: r.timestamp,
+        updatedAt: remoteUpdatedAt,
+        deleted: r.deleted,
+        isSynced: true,
+      });
+    }
+  });
+}
+
+// ---------- Debt helpers ----------
+
+function normalizeKey(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+export async function addDebt(data: {
+  counterparty: string;
+  direction: DebtDirection;
+  amountALL: number;
+  note?: string;
+  sourceExpenseId?: string;
+  timestamp?: string;
+}): Promise<DebtRecord> {
+  const now = new Date().toISOString();
+  const record: DebtRecord = {
+    id: crypto.randomUUID(),
+    counterparty: data.counterparty.trim(),
+    counterpartyKey: normalizeKey(data.counterparty),
+    direction: data.direction,
+    amountALL: data.amountALL,
+    remainingALL: data.amountALL,
+    note: data.note,
+    status: 'open',
+    sourceExpenseId: data.sourceExpenseId,
+    createdAt: data.timestamp ?? now,
+    isSynced: false,
+    updatedAt: now,
+  };
+  await db.debts.add(record);
+  return record;
+}
+
+export async function getDebts(): Promise<DebtRecord[]> {
+  return db.debts
+    .orderBy('createdAt')
+    .reverse()
+    .filter((d) => !d.deleted)
+    .toArray();
+}
+
+export async function getOpenDebts(): Promise<DebtRecord[]> {
+  return db.debts.filter((d) => !d.deleted && d.status === 'open').toArray();
+}
+
+export async function getDebt(id: string): Promise<DebtRecord | undefined> {
+  const d = await db.debts.get(id);
+  return d && !d.deleted ? d : undefined;
+}
+
+export async function deleteDebt(id: string): Promise<void> {
+  await db.debts.update(id, {
+    deleted: true,
+    isSynced: false,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Settle part or all of a debt with a real cash/bank movement.
+ * Creates an expense marked debtRelated (hits wallet, skips budget)
+ * and reduces the debt's remaining balance.
+ *
+ *   debt.direction === 'OwedToMe' → you receive money → amount is negative
+ *   debt.direction === 'iOwe'     → you pay money out → amount is positive
+ */
+export async function settleDebtCash(
+  debtId: string,
+  amountALL: number,
+  paidWith: PaymentSource
+): Promise<void> {
+  const debt = await getDebt(debtId);
+  if (!debt || debt.status !== 'open') return;
+
+  const clamped = Math.min(amountALL, debt.remainingALL);
+  if (clamped <= 0) return;
+
+  const signedAmount = debt.direction === 'OwedToMe' ? -clamped : clamped;
+
+  await addExpense({
+    amount: signedAmount,
+    currency: 'ALL',
+    category: 'Other',
+    itemName: debt.direction === 'OwedToMe' ? `Repaid by ${debt.counterparty}` : `Repaid to ${debt.counterparty}`,
+    paidWith,
+    debtId: debt.id,
+    debtRelated: true,
+  });
+
+  const newRemaining = debt.remainingALL - clamped;
+  const isResolved = newRemaining <= 0;
+  await db.debts.update(debt.id, {
+    remainingALL: newRemaining,
+    status: isResolved ? 'resolved' : 'open',
+    resolvedAt: isResolved ? new Date().toISOString() : undefined,
+    isSynced: false,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Settle part or all of a debt without moving money.
+ * Used when someone buys you something in lieu of paying cash
+ * (e.g. Alex owes you 800, buys you a 300 drink → his debt drops to 500).
+ * No expense is created; only the debt balance changes.
+ */
+export async function settleDebtNonCash(debtId: string, amountALL: number): Promise<void> {
+  const debt = await getDebt(debtId);
+  if (!debt || debt.status !== 'open') return;
+
+  const clamped = Math.min(amountALL, debt.remainingALL);
+  if (clamped <= 0) return;
+
+  const newRemaining = debt.remainingALL - clamped;
+  const isResolved = newRemaining <= 0;
+  await db.debts.update(debt.id, {
+    remainingALL: newRemaining,
+    status: isResolved ? 'resolved' : 'open',
+    resolvedAt: isResolved ? new Date().toISOString() : undefined,
+    isSynced: false,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Write off a debt as a gift. Two cases:
+ *
+ * 1. Debt came from a shared expense (`sourceExpenseId` set). We bump
+ *    the original expense's budgetAmountALL up to amountInALL so the
+ *    full amount now counts against the budget. Wallet does not change.
+ *
+ * 2. Debt was a standalone loan (no source). We create a wallet-neutral
+ *    expense for the remaining amount so the budget absorbs it, and
+ *    mark the debt resolved.
+ */
+export async function writeOffDebt(debtId: string): Promise<void> {
+  const debt = await getDebt(debtId);
+  if (!debt || debt.status !== 'open') return;
+  const amount = debt.remainingALL;
+  if (amount <= 0) return;
+
+  if (debt.sourceExpenseId) {
+    const source = await db.expenses.get(debt.sourceExpenseId);
+    if (source && !source.deleted) {
+      const newBudget = Math.min(source.amountInALL, (source.budgetAmountALL ?? source.amountInALL) + amount);
+      await updateExpense(source.id, { budgetAmountALL: newBudget });
+    }
+  } else {
+    await addExpense({
+      amount,
+      currency: 'ALL',
+      category: 'Other',
+      itemName: `Gift to ${debt.counterparty}`,
+      walletNeutral: true,
+      debtId: debt.id,
+    });
+  }
+
+  await db.debts.update(debt.id, {
+    remainingALL: 0,
+    status: 'resolved',
+    resolvedAt: new Date().toISOString(),
+    isSynced: false,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Distinct counterparties across all historical debts, sorted by
+ * frequency and recency. Used for autofill in the debt entry fields.
+ */
+export async function getCounterparties(): Promise<string[]> {
+  const all = await db.debts.filter((d) => !d.deleted).toArray();
+  const map = new Map<string, { name: string; count: number; latest: number }>();
+
+  for (const d of all) {
+    const key = d.counterpartyKey;
+    const existing = map.get(key);
+    const ts = new Date(d.createdAt).getTime();
+    if (existing) {
+      existing.count += 1;
+      if (ts > existing.latest) existing.latest = ts;
+    } else {
+      map.set(key, { name: d.counterparty, count: 1, latest: ts });
+    }
+  }
+
+  return Array.from(map.values())
+    .sort((a, b) => b.count - a.count || b.latest - a.latest)
+    .map((m) => m.name);
+}
+
+export async function getUnsyncedDebts(): Promise<DebtRecord[]> {
+  return db.debts.filter((d) => !d.isSynced).toArray();
+}
+
+export async function markDebtsSyncedIfUnchanged(
+  entries: { id: string; updatedAt: string; convexId?: string }[]
+): Promise<void> {
+  await db.transaction('rw', db.debts, async () => {
+    for (const entry of entries) {
+      const current = await db.debts.get(entry.id);
+      if (!current) continue;
+
+      const currentUpdatedAt = current.updatedAt ?? current.createdAt;
+      if (currentUpdatedAt === entry.updatedAt) {
+        await db.debts.update(entry.id, {
+          isSynced: true,
+          convexId: entry.convexId,
+        });
+      }
+    }
+  });
+}
+
+export async function applyRemoteDebts(remote: RemoteDebt[]): Promise<void> {
+  await db.transaction('rw', db.debts, async () => {
+    for (const r of remote) {
+      const local = await db.debts.get(r.localId);
+      const remoteUpdatedAt = r.updatedAt ?? r.createdAt;
+
+      if (local) {
+        const localUpdatedAt = local.updatedAt ?? local.createdAt;
+        if (remoteUpdatedAt <= localUpdatedAt) continue;
+      } else if (r.deleted) {
+        continue;
+      }
+
+      await db.debts.put({
+        id: r.localId,
+        convexId: r._id ?? local?.convexId,
+        counterparty: r.counterparty,
+        counterpartyKey: r.counterpartyKey,
+        direction: r.direction as DebtDirection,
+        amountALL: r.amountALL,
+        remainingALL: r.remainingALL,
+        note: r.note,
+        status: r.status as 'open' | 'resolved',
+        sourceExpenseId: r.sourceExpenseId,
+        createdAt: r.createdAt,
+        resolvedAt: r.resolvedAt,
         updatedAt: remoteUpdatedAt,
         deleted: r.deleted,
         isSynced: true,

@@ -25,43 +25,76 @@ export type FoodType =
   | 'Snack'
   | 'Beverage';
 
-/** Where money physically is when spent or held. */
 export type PaymentSource = 'Cash' | 'Card';
 
-/** Direction of a transfer between the two money sources. */
 export type TransferDirection = 'BankToCash' | 'CashToBank';
 
+export type DebtDirection = 'iOwe' | 'OwedToMe';
+
 export interface ExpenseRecord {
-  id: string; // UUID / Dexie string id
-  convexId?: string; // Convex document ID once synced
-  amount: number; // Raw entered amount
+  id: string;
+  convexId?: string;
+  amount: number;
   currency: Currency;
-  amountInALL: number; // Normalized base amount for analytics
+  amountInALL: number;
   category: Category;
   subcategory?: string;
   vendorType?: VendorType;
   foodType?: FoodType;
   itemName?: string;
   estimatedMeals?: number;
-  timestamp: string; // ISO 8601 string: YYYY-MM-DDTHH:mm:ssZ
-  paidWith?: PaymentSource; // Missing = 'Card' (legacy default)
-  isSynced: boolean; // Sync flag for offline engine
-  updatedAt?: string; // ISO 8601 string for conflict resolution
-  deleted?: boolean; // Soft-delete tombstone so deletions sync across devices
+  timestamp: string;
+  paidWith?: PaymentSource;
+
+  /**
+   * When set, this expense only counts this much against the budget.
+   * Used when part of the payment was covering someone else's share.
+   * Falls back to amountInALL when undefined.
+   */
+  budgetAmountALL?: number;
+
+  /** Links this expense to a debt (as a settlement or as the original shared payment). */
+  debtId?: string;
+
+  /** Marks this expense as a debt settlement — hits wallet, skips budget. */
+  debtRelated?: boolean;
+
+  /**
+   * When true, this expense hits the budget but skips the wallet entirely.
+   * Used when writing off a standalone loan — the wallet already moved when
+   * the money was lent, so absorbing the budget impact shouldn't move it again.
+   */
+  walletNeutral?: boolean;
+
+  isSynced: boolean;
+  updatedAt?: string;
+  deleted?: boolean;
 }
 
-/**
- * A transfer moves money between Bank and Cash without being spending.
- * Amounts are always positive; direction determines which way the money flows.
- *   BankToCash: bank goes down, cash goes up.
- *   CashToBank: cash goes down, bank goes up.
- */
 export interface TransferRecord {
   id: string;
   convexId?: string;
-  amountALL: number; // Always positive
+  amountALL: number;
   direction: TransferDirection;
   timestamp: string;
+  isSynced: boolean;
+  updatedAt?: string;
+  deleted?: boolean;
+}
+
+export interface DebtRecord {
+  id: string;
+  convexId?: string;
+  counterparty: string;
+  counterpartyKey: string;
+  direction: DebtDirection;
+  amountALL: number;
+  remainingALL: number;
+  note?: string;
+  status: 'open' | 'resolved';
+  sourceExpenseId?: string;
+  createdAt: string;
+  resolvedAt?: string;
   isSynced: boolean;
   updatedAt?: string;
   deleted?: boolean;
@@ -74,7 +107,7 @@ export interface BudgetCycle {
   targetEndDate: string;
   stipendAmountALL: number;
   startingRaiffeisenBalanceALL: number;
-  startingCashALL?: number; // Missing = 0
+  startingCashALL?: number;
   bufferPoolALL: number;
   travelStashALL: number;
   isSynced?: boolean;
@@ -83,9 +116,9 @@ export interface BudgetCycle {
 }
 
 export interface ExchangeRates {
-  EUR: number; // e.g. 1 EUR = 100 ALL
-  USD: number; // e.g. 1 USD = 90 ALL
-  ALL: number; // 1
+  EUR: number;
+  USD: number;
+  ALL: number;
 }
 
 export const DEFAULT_EXCHANGE_RATES: ExchangeRates = {

@@ -4,11 +4,13 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { getCurrentBudgetCycle } from '../db';
 import { useExpenses } from './useExpenses';
 import { useTransfers } from './useTransfers';
+import { useDebts } from './useDebts';
 import { computeBudgetStats } from '../utils/budget';
 
 export function useBudgetCycle() {
     const { expenses } = useExpenses();
     const { transfers } = useTransfers();
+    const { openDebts } = useDebts();
 
     const cycleResult = useLiveQuery(
         async () => (await getCurrentBudgetCycle()) ?? null,
@@ -24,8 +26,11 @@ export function useBudgetCycle() {
     const cycle = cycleResult ?? null;
 
     const stats = useMemo(
-        () => (cycle ? computeBudgetStats(cycle, expenses, transfers, now) : null),
-        [cycle, expenses, transfers, now]
+        () =>
+            cycle
+                ? computeBudgetStats(cycle, expenses, transfers, openDebts, now)
+                : null,
+        [cycle, expenses, transfers, openDebts, now]
     );
 
     return { cycle, stats, isLoading: cycleResult === undefined };

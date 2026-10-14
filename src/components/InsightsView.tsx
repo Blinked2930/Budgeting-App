@@ -9,11 +9,16 @@ import {
     Utensils,
     Check,
     Banknote,
+    HandCoins,
+    ArrowUpRight,
+    ArrowDownLeft,
+    X,
 } from 'lucide-react';
-import { FOOD_TYPES, VENDORS, type Currency, type PaymentSource } from '../types';
+import { FOOD_TYPES, VENDORS, type Currency, type PaymentSource, type DebtRecord } from '../types';
 import { useExpenses } from '../hooks/useExpenses';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
-import { addExpense } from '../db';
+import { useDebts } from '../hooks/useDebts';
+import { addExpense, settleDebtCash, settleDebtNonCash, writeOffDebt } from '../db';
 import {
     DEFAULT_FILTERS,
     aggregate,
@@ -129,11 +134,9 @@ const ReconcileRow: React.FC<{
 
     return (
         <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                    {icon}
-                    <span>{label}</span>
-                </div>
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                {icon}
+                <span>{label}</span>
             </div>
             <div>
                 <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
@@ -273,7 +276,256 @@ const BankCheck: React.FC = () => {
                     paidWith="Cash"
                 />
             </div>
+            <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                    Net worth (with debts)
+                </p>
+                <p
+                    className={cn(
+                        'text-base font-mono font-bold',
+                        stats.netWorthALL < 0 ? 'text-rose-400' : 'text-white'
+                    )}
+                >
+                    {formatCurrency(stats.netWorthALL, 'ALL')}
+                </p>
+            </div>
         </Card>
+    );
+};
+
+interface CounterpartyGroup {
+    key: string;
+    name: string;
+    receivables: number;
+    payables: number;
+    debts: DebtRecord[];
+}
+
+const DebtDetailModal: React.FC<{
+    group: CounterpartyGroup | null;
+    onClose: () => void;
+}> = ({ group, onClose }) => {
+    const [busyId, setBusyId] = useState<string | null>(null);
+
+    if (!group) return null;
+
+    const handleSettleCash = async (debt: DebtRecord) => {
+        setBusyId(debt.id);
+        const paidWith: PaymentSource = 'Cash';
+        await settleDebtCash(debt.id, debt.remainingALL, paidWith);
+        setBusyId(null);
+    };
+
+    const handleSettleNonCash = async (debt: DebtRecord) => {
+        setBusyId(debt.id);
+        await settleDebtNonCash(debt.id, debt.remainingALL);
+        setBusyId(null);
+    };
+
+    const handleWriteOff = async (debt: DebtRecord) => {
+        setBusyId(debt.id);
+        await writeOffDebt(debt.id);
+        setBusyId(null);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <div className="w-full max-w-md max-h-[85vh] flex flex-col bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl">
+                <div className="flex items-center justify-between p-5 border-b border-slate-800">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-500/40 flex items-center justify-center">
+                            <HandCoins className="w-4 h-4 text-purple-400" />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold text-white">{group.name}</h3>
+                            <p className="text-[10px] text-slate-500">
+                                {group.debts.length} {group.debts.length === 1 ? 'debt' : 'debts'} open
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                    >
+                        <X className="w-4 h-4" />
+                    </button>
+                </div>
+
+                <div className="overflow-y-auto p-4 space-y-3">
+                    {group.debts.map((debt) => {
+                        const owedToMe = debt.direction === 'OwedToMe';
+                        const isBusy = busyId === debt.id;
+                        return (
+                            <div
+                                key={debt.id}
+                                className="p-3 rounded-2xl bg-slate-950/70 border border-slate-800 space-y-2"
+                            >
+                                <div className="flex items-center justify-between">
+                                    <span
+                                        className={cn(
+                                            'text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1',
+                                            owedToMe ? 'text-emerald-400' : 'text-rose-400'
+                                        )}
+                                    >
+                                        {owedToMe ? (
+                                            <ArrowUpRight className="w-3 h-3" />
+                                        ) : (
+                                            <ArrowDownLeft className="w-3 h-3" />
+                                        )}
+                                        {owedToMe ? 'Owes you' : 'You owe'}
+                                    </span>
+                                    <span className="text-sm font-mono font-bold text-white">
+                                        {formatCurrency(debt.remainingALL, 'ALL')}
+                                    </span>
+                                </div>
+
+                                {debt.note && (
+                                    <p className="text-[11px] text-slate-400 italic">
+                                        {debt.note}
+                                    </p>
+                                )}
+
+                                <p className="text-[10px] text-slate-600">
+                                    {new Date(debt.createdAt).toLocaleDateString('en-GB', {
+                                        day: 'numeric',
+                                        month: 'short',
+                                        year: 'numeric',
+                                    })}
+                                </p>
+
+                                <div className="grid grid-cols-3 gap-1.5 pt-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSettleCash(debt)}
+                                        disabled={isBusy}
+                                        className="py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                                        title={owedToMe ? 'They paid me in cash' : 'I paid them in cash'}
+                                    >
+                                        Cash settled
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleSettleNonCash(debt)}
+                                        disabled={isBusy}
+                                        className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                                        title="Settle without cash (e.g. they bought you a drink)"
+                                    >
+                                        Non-cash
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleWriteOff(debt)}
+                                        disabled={isBusy}
+                                        className="py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                                        title="Convert this to a gift you paid for"
+                                    >
+                                        Write off
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div className="p-4 border-t border-slate-800 flex items-center justify-between text-[11px] font-mono">
+                    {group.receivables > 0 && (
+                        <span className="text-emerald-400">
+                            Owes you {formatCurrency(group.receivables, 'ALL')}
+                        </span>
+                    )}
+                    {group.payables > 0 && (
+                        <span className="text-rose-400">
+                            You owe {formatCurrency(group.payables, 'ALL')}
+                        </span>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const DebtsSection: React.FC = () => {
+    const { openDebts } = useDebts();
+    const [selected, setSelected] = useState<CounterpartyGroup | null>(null);
+
+    const groups = useMemo<CounterpartyGroup[]>(() => {
+        const map = new Map<string, CounterpartyGroup>();
+        for (const d of openDebts) {
+            let g = map.get(d.counterpartyKey);
+            if (!g) {
+                g = { key: d.counterpartyKey, name: d.counterparty, receivables: 0, payables: 0, debts: [] };
+                map.set(d.counterpartyKey, g);
+            }
+            if (d.direction === 'OwedToMe') g.receivables += d.remainingALL;
+            else g.payables += d.remainingALL;
+            g.debts.push(d);
+        }
+        return Array.from(map.values()).sort((a, b) => {
+            const aTotal = a.receivables + a.payables;
+            const bTotal = b.receivables + b.payables;
+            return bTotal - aTotal;
+        });
+    }, [openDebts]);
+
+    if (groups.length === 0) {
+        return (
+            <Card>
+                <p className="text-xs text-slate-400">
+                    No open debts. Log a shared expense from Advanced Entry, or use Lend / Borrow on the Log tab.
+                </p>
+            </Card>
+        );
+    }
+
+    return (
+        <>
+            <Card className="space-y-2">
+                {groups.map((g) => {
+                    const net = g.receivables - g.payables;
+                    return (
+                        <button
+                            key={g.key}
+                            type="button"
+                            onClick={() => setSelected(g)}
+                            className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-950/70 hover:bg-slate-950 border border-slate-800 hover:border-slate-700 transition-colors cursor-pointer"
+                        >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-500/40 flex items-center justify-center shrink-0">
+                                    <span className="text-xs font-bold text-purple-300">
+                                        {g.name.charAt(0).toUpperCase()}
+                                    </span>
+                                </div>
+                                <div className="min-w-0 text-left">
+                                    <p className="text-xs font-semibold text-slate-200 truncate">
+                                        {g.name}
+                                    </p>
+                                    <p className="text-[10px] text-slate-500">
+                                        {g.debts.length} {g.debts.length === 1 ? 'item' : 'items'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="text-right shrink-0 ml-2">
+                                <p
+                                    className={cn(
+                                        'text-sm font-mono font-bold',
+                                        net > 0 ? 'text-emerald-400' : net < 0 ? 'text-rose-400' : 'text-slate-400'
+                                    )}
+                                >
+                                    {net > 0 ? '+' : ''}
+                                    {formatCurrency(Math.abs(net), 'ALL')}
+                                </p>
+                                <p className="text-[10px] text-slate-500">
+                                    {net > 0 ? 'owes you' : net < 0 ? 'you owe' : 'settled'}
+                                </p>
+                            </div>
+                        </button>
+                    );
+                })}
+            </Card>
+
+            <DebtDetailModal group={selected} onClose={() => setSelected(null)} />
+        </>
     );
 };
 
@@ -317,6 +569,13 @@ export const InsightsView: React.FC = () => {
                     Reconcile bank & cash
                 </SectionTitle>
                 <BankCheck />
+            </section>
+
+            <section>
+                <SectionTitle icon={<HandCoins className="w-3.5 h-3.5 text-slate-400" />}>
+                    Debts
+                </SectionTitle>
+                <DebtsSection />
             </section>
 
             <section>

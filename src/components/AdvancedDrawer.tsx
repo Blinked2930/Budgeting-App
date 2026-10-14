@@ -1,5 +1,5 @@
 // src/components/AdvancedDrawer.tsx
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Bus,
   Lightbulb,
@@ -10,6 +10,7 @@ import {
   Users,
   Utensils,
   X,
+  HandCoins,
 } from 'lucide-react';
 import {
   CATEGORIES,
@@ -26,6 +27,7 @@ import {
   getVendorOptions,
   showFoodDetails,
 } from '../utils/categoryConfig';
+import { getCounterparties } from '../db';
 import { cn } from '../utils/cn';
 
 interface AdvancedDrawerProps {
@@ -43,6 +45,10 @@ interface AdvancedDrawerProps {
   setFoodType: (value: FoodType | undefined) => void;
   estimatedMeals: number | undefined;
   setEstimatedMeals: (value: number | undefined) => void;
+  shareCounterparty: string;
+  setShareCounterparty: (value: string) => void;
+  shareAmountStr: string;
+  setShareAmountStr: (value: string) => void;
   onApplyAndClose: () => void;
   onClear: () => void;
 }
@@ -134,11 +140,21 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
   setFoodType,
   estimatedMeals,
   setEstimatedMeals,
+  shareCounterparty,
+  setShareCounterparty,
+  shareAmountStr,
+  setShareAmountStr,
   onApplyAndClose,
   onClear,
 }) => {
   const { expenses } = useExpenses();
   const [isFocused, setIsFocused] = useState(false);
+  const [counterparties, setCounterparties] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    getCounterparties().then(setCounterparties);
+  }, [isOpen]);
 
   const config = CATEGORY_CONFIG[category];
   const subcategories = getSubcategories(category);
@@ -330,6 +346,43 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
               </div>
             </>
           )}
+
+          {/* Someone else's share */}
+          <div className="pt-2 border-t border-slate-800/60">
+            <div className="flex items-center gap-1.5 mb-2">
+              <HandCoins className="w-3.5 h-3.5 text-purple-400" />
+              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                Someone else's share
+              </p>
+            </div>
+            <p className="text-[10px] text-slate-600 mb-2">
+              If you covered part of this for someone, put their name and share here. Your budget will only count the rest, and they'll show up as owing you.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <input
+                type="text"
+                value={shareCounterparty}
+                onChange={(e) => setShareCounterparty(e.target.value)}
+                placeholder="Name"
+                list="lekflow-counterparties-share"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/70"
+              />
+              <datalist id="lekflow-counterparties-share">
+                {counterparties.map((c) => (
+                  <option key={c} value={c} />
+                ))}
+              </datalist>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="any"
+                value={shareAmountStr}
+                onChange={(e) => setShareAmountStr(e.target.value)}
+                placeholder="Amount (L)"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/70"
+              />
+            </div>
+          </div>
         </div>
 
         <div

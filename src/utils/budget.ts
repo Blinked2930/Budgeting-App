@@ -1,5 +1,5 @@
 // src/utils/budget.ts
-import type { BudgetCycle, ExpenseRecord, TransferRecord } from '../types';
+import type { BudgetCycle, DebtRecord, ExpenseRecord, TransferRecord } from '../types';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -43,12 +43,17 @@ export interface BudgetStats {
     bufferPool: number;
     travelStashBalance: number;
     projectedSurplus: number;
-    /** Estimated balance in Raiffeisen (starting + stipend − card spend − transfers out + transfers in). */
     estimatedBankBalance: number;
-    /** Estimated balance in cash (starting cash − cash spend − transfers out + transfers in). */
     estimatedCashBalance: number;
-    /** Total tracked money across both sources. */
     estimatedTotalBalance: number;
+    /** Open debts where the counterparty owes you, summed. */
+    receivablesALL: number;
+    /** Open debts where you owe the counterparty, summed. */
+    payablesALL: number;
+    /** receivables − payables. Positive means you are net positive. */
+    netOfDebtsALL: number;
+    /** Bank + Cash + receivables − payables. */
+    netWorthALL: number;
 }
 
 function dayKey(d: Date): string {
@@ -62,6 +67,7 @@ export function computeBudgetStats(
     cycle: BudgetCycle,
     expenses: ExpenseRecord[],
     transfers: TransferRecord[] = [],
+    debts: DebtRecord[] = [],
     now: Date = new Date()
 ): BudgetStats {
     const start = parseLocalDate(cycle.startDate);
@@ -91,25 +97,33 @@ export function computeBudgetStats(
         const whenMs = when.getTime();
         if (whenMs < startMs) continue;
 
+        // Wallet impact — everything that physically moved money,
+        // except entries explicitly marked walletNeutral (gift writeoffs).
+        if (!e.walletNeutral) {
+            if (e.paidWith === 'Cash') {
+                cashSpent += e.amountInALL;
+            } else {
+                cardSpent += e.amountInALL;
+            }
+        }
+
+        // Budget impact — settlement expenses are excluded entirely.
+        if (e.debtRelated) continue;
+
+        const budgetImpact = e.budgetAmountALL ?? e.amountInALL;
+
         if (e.category === 'Travel') {
-            travelSpent += e.amountInALL;
+            travelSpent += budgetImpact;
             continue;
         }
 
-        spent += e.amountInALL;
-
-        // Legacy rows without paidWith are treated as Card.
-        if (e.paidWith === 'Cash') {
-            cashSpent += e.amountInALL;
-        } else {
-            cardSpent += e.amountInALL;
-        }
+        spent += budgetImpact;
 
         if (whenMs >= todayMs) {
-            spentToday += e.amountInALL;
+            spentToday += budgetImpact;
         } else {
             const key = dayKey(when);
-            spentByDay.set(key, (spentByDay.get(key) ?? 0) + e.amountInALL);
+            spentByDay.set(key, (spentByDay.get(key) ?? 0) + budgetImpact);
         }
     }
 
@@ -149,6 +163,15 @@ export function computeBudgetStats(
     const estimatedCashBalance =
         startingCash - cashSpent - cashToBank + bankToCash;
 
+    let receivablesALL = 0;
+    let payablesALL = 0;
+    for (const d of debts) {
+        if (d.deleted || d.status !== 'open') continue;
+        if (d.direction === 'OwedToMe') receivablesALL += d.remainingALL;
+        else payablesALL += d.remainingALL;
+    }
+    const netOfDebtsALL = receivablesALL - payablesALL;
+
     return {
         cycleBudget,
         spent,
@@ -168,6 +191,10 @@ export function computeBudgetStats(
         estimatedBankBalance,
         estimatedCashBalance,
         estimatedTotalBalance: estimatedBankBalance + estimatedCashBalance,
+        receivablesALL,
+        payablesALL,
+        netOfDebtsALL,
+        netWorthALL: estimatedBankBalance + estimatedCashBalance + netOfDebtsALL,
     };
 }
 

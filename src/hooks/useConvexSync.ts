@@ -9,9 +9,12 @@ import {
     markBudgetCyclesSyncedIfUnchanged,
     getUnsyncedTransfers,
     markTransfersSyncedIfUnchanged,
+    getUnsyncedDebts,
+    markDebtsSyncedIfUnchanged,
     applyRemoteExpenses,
     applyRemoteBudgetCycles,
     applyRemoteTransfers,
+    applyRemoteDebts,
 } from '../db';
 
 export function useConvexSync() {
@@ -21,10 +24,12 @@ export function useConvexSync() {
     const upsertExpenseMutation = useMutation(api.expenses.upsertExpense);
     const upsertBudgetCycleMutation = useMutation(api.budgetCycles.upsertBudgetCycle);
     const upsertTransferMutation = useMutation(api.transfers.upsertTransfer);
+    const upsertDebtMutation = useMutation(api.debts.upsertDebt);
 
     const remoteExpenses = useQuery(api.expenses.getRemoteExpenses);
     const remoteBudgetCycles = useQuery(api.budgetCycles.getRemoteBudgetCycles);
     const remoteTransfers = useQuery(api.transfers.getRemoteTransfers);
+    const remoteDebts = useQuery(api.debts.getRemoteDebts);
 
     const syncPendingExpenses = useCallback(async () => {
         if (!navigator.onLine || isSyncingRef.current) return;
@@ -50,6 +55,10 @@ export function useConvexSync() {
                     itemName: item.itemName,
                     estimatedMeals: item.estimatedMeals,
                     paidWith: item.paidWith,
+                    budgetAmountALL: item.budgetAmountALL,
+                    debtId: item.debtId,
+                    debtRelated: item.debtRelated,
+                    walletNeutral: item.walletNeutral,
                     timestamp: item.timestamp,
                     updatedAt,
                     deleted: item.deleted,
@@ -151,11 +160,57 @@ export function useConvexSync() {
         }
     }, [upsertTransferMutation]);
 
+    const syncPendingDebts = useCallback(async () => {
+        if (!navigator.onLine || isSyncingRef.current) return;
+
+        try {
+            isSyncingRef.current = true;
+            setIsSyncing(true);
+
+            const unsynced = await getUnsyncedDebts();
+            const pushed: { id: string; updatedAt: string; convexId?: string }[] = [];
+
+            for (const d of unsynced) {
+                const updatedAt = d.updatedAt ?? d.createdAt;
+
+                const convexId = await upsertDebtMutation({
+                    localId: d.id,
+                    counterparty: d.counterparty,
+                    counterpartyKey: d.counterpartyKey,
+                    direction: d.direction,
+                    amountALL: d.amountALL,
+                    remainingALL: d.remainingALL,
+                    note: d.note,
+                    status: d.status,
+                    sourceExpenseId: d.sourceExpenseId,
+                    createdAt: d.createdAt,
+                    resolvedAt: d.resolvedAt,
+                    updatedAt,
+                    deleted: d.deleted,
+                });
+
+                if (convexId) {
+                    pushed.push({ id: d.id, updatedAt, convexId: String(convexId) });
+                }
+            }
+
+            if (pushed.length > 0) {
+                await markDebtsSyncedIfUnchanged(pushed);
+            }
+        } catch (err) {
+            console.error('Background debt sync failed:', err);
+        } finally {
+            isSyncingRef.current = false;
+            setIsSyncing(false);
+        }
+    }, [upsertDebtMutation]);
+
     const syncPending = useCallback(async () => {
         await syncPendingExpenses();
         await syncPendingBudgetCycles();
         await syncPendingTransfers();
-    }, [syncPendingExpenses, syncPendingBudgetCycles, syncPendingTransfers]);
+        await syncPendingDebts();
+    }, [syncPendingExpenses, syncPendingBudgetCycles, syncPendingTransfers, syncPendingDebts]);
 
     useEffect(() => {
         if (!remoteExpenses) return;
@@ -179,6 +234,13 @@ export function useConvexSync() {
     }, [remoteTransfers]);
 
     useEffect(() => {
+        if (!remoteDebts) return;
+        applyRemoteDebts(remoteDebts).catch((err) => {
+            console.error('Failed to apply remote debts:', err);
+        });
+    }, [remoteDebts]);
+
+    useEffect(() => {
         syncPending();
 
         const handleOnline = () => syncPending();
@@ -196,6 +258,7 @@ export function useConvexSync() {
         syncPendingExpenses,
         syncPendingBudgetCycles,
         syncPendingTransfers,
+        syncPendingDebts,
         syncPending,
         isSyncing,
     };
