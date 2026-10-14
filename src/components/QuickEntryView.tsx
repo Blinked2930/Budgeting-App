@@ -36,6 +36,7 @@ import { LentBorrowModal } from './LentBorrowModal';
 import { addExpense, updateExpense, addTransfer, addDebt } from '../db';
 import { useExpenses } from '../hooks/useExpenses';
 import { useTransfers } from '../hooks/useTransfers';
+import { useDebts } from '../hooks/useDebts';
 import { convertToALL, formatCurrency } from '../utils/currency';
 import { dateToNoonISO, toDateInputValue } from '../utils/budget';
 import { getVendorOptions, showFoodDetails } from '../utils/categoryConfig';
@@ -73,8 +74,14 @@ const QuickWithdrawModal: React.FC<{
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center">
@@ -149,6 +156,7 @@ const QuickWithdrawModal: React.FC<{
 export const QuickEntryView: React.FC = () => {
   const { expenses, totalSpentALL } = useExpenses();
   const { transfers } = useTransfers();
+  const { debts } = useDebts();
 
   const [amountStr, setAmountStr] = useState<string>('');
   const [currency, setCurrency] = useState<Currency>('ALL');
@@ -403,7 +411,6 @@ export const QuickEntryView: React.FC = () => {
           <CurrencyToggle selected={currency} onChange={setCurrency} />
         </div>
 
-        {/* Cash / Card toggle */}
         <div className="flex justify-center">
           <div className="inline-flex p-1 rounded-2xl bg-slate-950 border border-slate-800">
             <button
@@ -435,7 +442,6 @@ export const QuickEntryView: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick actions row — Withdraw and Lend/Borrow side by side */}
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
@@ -666,6 +672,7 @@ export const QuickEntryView: React.FC = () => {
       <RecentTransactions
         expenses={expenses}
         transfers={transfers}
+        debts={debts}
         onEdit={handleStartEdit}
       />
     </div>

@@ -14,15 +14,19 @@ import {
   Banknote,
   Wallet,
   ArrowLeftRight,
+  HandCoins,
+  ArrowUpRight,
+  ArrowDownLeft,
 } from 'lucide-react';
-import type { ExpenseRecord, Category, TransferRecord } from '../types';
+import type { ExpenseRecord, Category, TransferRecord, DebtRecord } from '../types';
 import { formatCurrency } from '../utils/currency';
-import { deleteExpense, deleteTransfer } from '../db';
+import { deleteExpense, deleteTransfer, deleteDebt } from '../db';
 import { cn } from '../utils/cn';
 
 interface RecentTransactionsProps {
   expenses: ExpenseRecord[];
   transfers?: TransferRecord[];
+  debts?: DebtRecord[];
   onDeleted?: () => void;
   onEdit?: (expense: ExpenseRecord) => void;
 }
@@ -58,11 +62,13 @@ function formatRelativeTime(isoString: string): string {
 
 type MergedItem =
   | { kind: 'expense'; record: ExpenseRecord; timestamp: string }
-  | { kind: 'transfer'; record: TransferRecord; timestamp: string };
+  | { kind: 'transfer'; record: TransferRecord; timestamp: string }
+  | { kind: 'debt'; record: DebtRecord; timestamp: string };
 
 export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   expenses,
   transfers = [],
+  debts = [],
   onDeleted,
   onEdit,
 }) => {
@@ -78,14 +84,23 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
     if (onDeleted) onDeleted();
   };
 
+  const handleDeleteDebt = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    await deleteDebt(id);
+    if (onDeleted) onDeleted();
+  };
+
   const handleEdit = (expense: ExpenseRecord, e: React.MouseEvent) => {
     e.stopPropagation();
     if (onEdit) onEdit(expense);
   };
 
+  const openDebts = debts.filter((d) => d.status === 'open');
+
   const merged: MergedItem[] = [
     ...expenses.map((e) => ({ kind: 'expense' as const, record: e, timestamp: e.timestamp })),
     ...transfers.map((t) => ({ kind: 'transfer' as const, record: t, timestamp: t.timestamp })),
+    ...openDebts.map((d) => ({ kind: 'debt' as const, record: d, timestamp: d.createdAt })),
   ].sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
 
   if (merged.length === 0) {
@@ -112,6 +127,72 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
 
       <div className="space-y-1.5">
         {merged.slice(0, 15).map((item) => {
+          if (item.kind === 'debt') {
+            const d = item.record;
+            const owedToMe = d.direction === 'OwedToMe';
+            const partial = d.remainingALL < d.amountALL;
+            return (
+              <div
+                key={d.id}
+                className="group flex items-center justify-between p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-900 border border-purple-500/25 transition-all hover:border-purple-500/50"
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-500/40 flex items-center justify-center shrink-0">
+                    {owedToMe ? (
+                      <ArrowUpRight className="w-3.5 h-3.5 text-purple-400" />
+                    ) : (
+                      <ArrowDownLeft className="w-3.5 h-3.5 text-purple-400" />
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-semibold text-purple-200 truncate">
+                      {owedToMe ? `${d.counterparty} owes you` : `You owe ${d.counterparty}`}
+                    </span>
+                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                      <span>{formatRelativeTime(d.createdAt)}</span>
+                      <span>•</span>
+                      <span className="flex items-center gap-1">
+                        <HandCoins className="w-3 h-3 text-purple-400" />
+                        <span className="text-[10px] text-purple-300">Debt</span>
+                      </span>
+                      {partial && (
+                        <>
+                          <span>•</span>
+                          <span className="text-[10px] text-slate-500">
+                            of {formatCurrency(d.amountALL, 'ALL')}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    {d.note && (
+                      <p className="text-[10px] text-slate-500 italic truncate mt-0.5">
+                        {d.note}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <p
+                    className={cn(
+                      'text-sm font-bold font-mono tracking-tight',
+                      owedToMe ? 'text-emerald-300' : 'text-rose-300'
+                    )}
+                  >
+                    {formatCurrency(d.remainingALL, 'ALL')}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteDebt(d.id, e)}
+                    className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
+                    title="Delete debt"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
           if (item.kind === 'transfer') {
             const t = item.record;
             const label = t.direction === 'BankToCash' ? 'Bank → Cash' : 'Cash → Bank';
@@ -164,6 +245,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           const expense = item.record;
           const isForeignCurrency = expense.currency !== 'ALL';
           const isCash = expense.paidWith === 'Cash';
+          const isSettlement = Boolean(expense.debtRelated);
 
           return (
             <div
@@ -190,22 +272,29 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                         {expense.estimatedMeals} meal{expense.estimatedMeals > 1 ? 's' : ''}
                       </span>
                     )}
-                    <span
-                      className={cn(
-                        'text-[10px] px-1.5 py-0.2 rounded-md font-medium flex items-center gap-0.5',
-                        isCash
-                          ? 'bg-emerald-500/10 text-emerald-400'
-                          : 'bg-cyan-500/10 text-cyan-400'
-                      )}
-                      title={isCash ? 'Paid with cash' : 'Paid with card'}
-                    >
-                      {isCash ? (
-                        <Banknote className="w-2.5 h-2.5" />
-                      ) : (
-                        <Wallet className="w-2.5 h-2.5" />
-                      )}
-                      {isCash ? 'Cash' : 'Card'}
-                    </span>
+                    {isSettlement ? (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-purple-500/10 text-purple-300 font-medium flex items-center gap-0.5">
+                        <HandCoins className="w-2.5 h-2.5" />
+                        Settlement
+                      </span>
+                    ) : (
+                      <span
+                        className={cn(
+                          'text-[10px] px-1.5 py-0.2 rounded-md font-medium flex items-center gap-0.5',
+                          isCash
+                            ? 'bg-emerald-500/10 text-emerald-400'
+                            : 'bg-cyan-500/10 text-cyan-400'
+                        )}
+                        title={isCash ? 'Paid with cash' : 'Paid with card'}
+                      >
+                        {isCash ? (
+                          <Banknote className="w-2.5 h-2.5" />
+                        ) : (
+                          <Wallet className="w-2.5 h-2.5" />
+                        )}
+                        {isCash ? 'Cash' : 'Card'}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
@@ -239,14 +328,16 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                 </div>
 
                 <div className="flex items-center gap-0.5">
-                  <button
-                    type="button"
-                    onClick={(e) => handleEdit(expense, e)}
-                    className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all cursor-pointer"
-                    title="Edit record"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
+                  {!isSettlement && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleEdit(expense, e)}
+                      className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all cursor-pointer"
+                      title="Edit record"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
 
                   <button
                     type="button"

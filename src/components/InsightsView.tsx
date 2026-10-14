@@ -13,6 +13,7 @@ import {
     ArrowUpRight,
     ArrowDownLeft,
     X,
+    Wallet,
 } from 'lucide-react';
 import { FOOD_TYPES, VENDORS, type Currency, type PaymentSource, type DebtRecord } from '../types';
 import { useExpenses } from '../hooks/useExpenses';
@@ -185,8 +186,17 @@ const ReconcileRow: React.FC<{
             )}
 
             {showDialog && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <div className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4">
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+                    onClick={() => {
+                        dismissedValueRef.current = actualStr;
+                        setShowDialog(false);
+                    }}
+                >
+                    <div
+                        className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4"
+                        onClick={(e) => e.stopPropagation()}
+                    >
                         <div className="flex items-start gap-3">
                             <div className="w-10 h-10 rounded-2xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
                                 <TriangleAlert className="w-5 h-5 text-amber-400" />
@@ -309,14 +319,13 @@ const DebtDetailModal: React.FC<{
 
     if (!group) return null;
 
-    const handleSettleCash = async (debt: DebtRecord) => {
+    const handleSettle = async (debt: DebtRecord, paidWith: PaymentSource) => {
         setBusyId(debt.id);
-        const paidWith: PaymentSource = 'Cash';
         await settleDebtCash(debt.id, debt.remainingALL, paidWith);
         setBusyId(null);
     };
 
-    const handleSettleNonCash = async (debt: DebtRecord) => {
+    const handleNonCash = async (debt: DebtRecord) => {
         setBusyId(debt.id);
         await settleDebtNonCash(debt.id, debt.remainingALL);
         setBusyId(null);
@@ -329,8 +338,14 @@ const DebtDetailModal: React.FC<{
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <div className="w-full max-w-md max-h-[85vh] flex flex-col bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl">
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={onClose}
+        >
+            <div
+                className="w-full max-w-md max-h-[85vh] flex flex-col bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+            >
                 <div className="flex items-center justify-between p-5 border-b border-slate-800">
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-500/40 flex items-center justify-center">
@@ -356,6 +371,8 @@ const DebtDetailModal: React.FC<{
                     {group.debts.map((debt) => {
                         const owedToMe = debt.direction === 'OwedToMe';
                         const isBusy = busyId === debt.id;
+                        const amt = formatCurrency(debt.remainingALL, 'ALL');
+
                         return (
                             <div
                                 key={debt.id}
@@ -376,7 +393,7 @@ const DebtDetailModal: React.FC<{
                                         {owedToMe ? 'Owes you' : 'You owe'}
                                     </span>
                                     <span className="text-sm font-mono font-bold text-white">
-                                        {formatCurrency(debt.remainingALL, 'ALL')}
+                                        {amt}
                                     </span>
                                 </div>
 
@@ -394,34 +411,72 @@ const DebtDetailModal: React.FC<{
                                     })}
                                 </p>
 
-                                <div className="grid grid-cols-3 gap-1.5 pt-1">
-                                    <button
-                                        type="button"
-                                        onClick={() => handleSettleCash(debt)}
-                                        disabled={isBusy}
-                                        className="py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                                        title={owedToMe ? 'They paid me in cash' : 'I paid them in cash'}
-                                    >
-                                        Cash settled
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleSettleNonCash(debt)}
-                                        disabled={isBusy}
-                                        className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                                        title="Settle without cash (e.g. they bought you a drink)"
-                                    >
-                                        Non-cash
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleWriteOff(debt)}
-                                        disabled={isBusy}
-                                        className="py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                                        title="Convert this to a gift you paid for"
-                                    >
-                                        Write off
-                                    </button>
+                                <div className="space-y-1.5 pt-1">
+                                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                        Settle full amount
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSettle(debt, 'Cash')}
+                                            disabled={isBusy}
+                                            className="flex items-center justify-center gap-1 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                                            title={
+                                                owedToMe
+                                                    ? 'They handed you the cash'
+                                                    : 'You handed them cash'
+                                            }
+                                        >
+                                            <Banknote className="w-3 h-3" />
+                                            {owedToMe ? 'Got cash' : 'Paid cash'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSettle(debt, 'Card')}
+                                            disabled={isBusy}
+                                            className="flex items-center justify-center gap-1 py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                                            title={
+                                                owedToMe
+                                                    ? 'They sent to your bank'
+                                                    : 'You sent from your bank'
+                                            }
+                                        >
+                                            <Wallet className="w-3 h-3" />
+                                            {owedToMe ? 'Got bank' : 'Paid bank'}
+                                        </button>
+                                    </div>
+
+                                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider pt-1">
+                                        Or close it out
+                                    </p>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleNonCash(debt)}
+                                            disabled={isBusy}
+                                            className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                                            title={
+                                                owedToMe
+                                                    ? 'They bought something for you instead'
+                                                    : 'You bought something for them instead'
+                                            }
+                                        >
+                                            Non-cash offset
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleWriteOff(debt)}
+                                            disabled={isBusy}
+                                            className="py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                                            title={
+                                                owedToMe
+                                                    ? 'Forgive the debt — becomes a gift you gave'
+                                                    : 'They forgave you — clears the debt'
+                                            }
+                                        >
+                                            {owedToMe ? 'Write off (gift)' : 'Forgiven'}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         );
@@ -454,7 +509,13 @@ const DebtsSection: React.FC = () => {
         for (const d of openDebts) {
             let g = map.get(d.counterpartyKey);
             if (!g) {
-                g = { key: d.counterpartyKey, name: d.counterparty, receivables: 0, payables: 0, debts: [] };
+                g = {
+                    key: d.counterpartyKey,
+                    name: d.counterparty,
+                    receivables: 0,
+                    payables: 0,
+                    debts: [],
+                };
                 map.set(d.counterpartyKey, g);
             }
             if (d.direction === 'OwedToMe') g.receivables += d.remainingALL;
@@ -509,7 +570,11 @@ const DebtsSection: React.FC = () => {
                                 <p
                                     className={cn(
                                         'text-sm font-mono font-bold',
-                                        net > 0 ? 'text-emerald-400' : net < 0 ? 'text-rose-400' : 'text-slate-400'
+                                        net > 0
+                                            ? 'text-emerald-400'
+                                            : net < 0
+                                                ? 'text-rose-400'
+                                                : 'text-slate-400'
                                     )}
                                 >
                                     {net > 0 ? '+' : ''}

@@ -37,7 +37,6 @@ export class LekFlowDatabase extends Dexie {
       budgetCycles: 'id, startDate, targetEndDate, isSynced, updatedAt',
       transfers: 'id, timestamp, isSynced, updatedAt',
     });
-    // v4 adds the debts table.
     this.version(4).stores({
       expenses: 'id, timestamp, category, vendorType, isSynced, amountInALL',
       budgetCycles: 'id, startDate, targetEndDate, isSynced, updatedAt',
@@ -408,11 +407,8 @@ export async function deleteDebt(id: string): Promise<void> {
 
 /**
  * Settle part or all of a debt with a real cash/bank movement.
- * Creates an expense marked debtRelated (hits wallet, skips budget)
- * and reduces the debt's remaining balance.
- *
- *   debt.direction === 'OwedToMe' → you receive money → amount is negative
- *   debt.direction === 'iOwe'     → you pay money out → amount is positive
+ *   debt.direction === 'OwedToMe' → you receive money
+ *   debt.direction === 'iOwe'     → you pay money out
  */
 export async function settleDebtCash(
   debtId: string,
@@ -425,13 +421,18 @@ export async function settleDebtCash(
   const clamped = Math.min(amountALL, debt.remainingALL);
   if (clamped <= 0) return;
 
+  // OwedToMe → you get money → negative expense
+  // iOwe     → you pay out  → positive expense
   const signedAmount = debt.direction === 'OwedToMe' ? -clamped : clamped;
 
   await addExpense({
     amount: signedAmount,
     currency: 'ALL',
     category: 'Other',
-    itemName: debt.direction === 'OwedToMe' ? `Repaid by ${debt.counterparty}` : `Repaid to ${debt.counterparty}`,
+    itemName:
+      debt.direction === 'OwedToMe'
+        ? `Repaid by ${debt.counterparty}`
+        : `Repaid to ${debt.counterparty}`,
     paidWith,
     debtId: debt.id,
     debtRelated: true,
@@ -449,10 +450,8 @@ export async function settleDebtCash(
 }
 
 /**
- * Settle part or all of a debt without moving money.
- * Used when someone buys you something in lieu of paying cash
- * (e.g. Alex owes you 800, buys you a 300 drink → his debt drops to 500).
- * No expense is created; only the debt balance changes.
+ * Settle without moving money. Used when someone buys you something in lieu
+ * of paying cash (e.g. Alex owes you 800, buys you a 300 drink → debt drops to 500).
  */
 export async function settleDebtNonCash(debtId: string, amountALL: number): Promise<void> {
   const debt = await getDebt(debtId);
@@ -473,15 +472,15 @@ export async function settleDebtNonCash(debtId: string, amountALL: number): Prom
 }
 
 /**
- * Write off a debt as a gift. Two cases:
+ * Write off a debt.
  *
- * 1. Debt came from a shared expense (`sourceExpenseId` set). We bump
- *    the original expense's budgetAmountALL up to amountInALL so the
- *    full amount now counts against the budget. Wallet does not change.
+ * OwedToMe (they never paid): the amount becomes a gift you gave them.
+ *   - If it came from a shared expense, bump the source's budgetAmountALL
+ *     back up so the budget absorbs the full amount.
+ *   - If it was a standalone loan, create a wallet-neutral gift expense.
  *
- * 2. Debt was a standalone loan (no source). We create a wallet-neutral
- *    expense for the remaining amount so the budget absorbs it, and
- *    mark the debt resolved.
+ * iOwe (they forgave you): just clear the debt. No money moved, no
+ *   expense created. Your payables drop, which is the correct outcome.
  */
 export async function writeOffDebt(debtId: string): Promise<void> {
   const debt = await getDebt(debtId);
@@ -489,10 +488,26 @@ export async function writeOffDebt(debtId: string): Promise<void> {
   const amount = debt.remainingALL;
   if (amount <= 0) return;
 
+  if (debt.direction === 'iOwe') {
+    // Forgiven — nothing more to do than clear the debt.
+    await db.debts.update(debt.id, {
+      remainingALL: 0,
+      status: 'resolved',
+      resolvedAt: new Date().toISOString(),
+      isSynced: false,
+      updatedAt: new Date().toISOString(),
+    });
+    return;
+  }
+
+  // OwedToMe — convert to a gift you gave.
   if (debt.sourceExpenseId) {
     const source = await db.expenses.get(debt.sourceExpenseId);
     if (source && !source.deleted) {
-      const newBudget = Math.min(source.amountInALL, (source.budgetAmountALL ?? source.amountInALL) + amount);
+      const newBudget = Math.min(
+        source.amountInALL,
+        (source.budgetAmountALL ?? source.amountInALL) + amount
+      );
       await updateExpense(source.id, { budgetAmountALL: newBudget });
     }
   } else {
@@ -515,10 +530,6 @@ export async function writeOffDebt(debtId: string): Promise<void> {
   });
 }
 
-/**
- * Distinct counterparties across all historical debts, sorted by
- * frequency and recency. Used for autofill in the debt entry fields.
- */
 export async function getCounterparties(): Promise<string[]> {
   const all = await db.debts.filter((d) => !d.deleted).toArray();
   const map = new Map<string, { name: string; count: number; latest: number }>();
