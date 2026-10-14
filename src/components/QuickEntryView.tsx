@@ -403,14 +403,14 @@ export const QuickEntryView: React.FC = () => {
           <CurrencyToggle selected={currency} onChange={setCurrency} />
         </div>
 
-        {/* Cash / Card toggle + quick actions */}
-        <div className="flex items-center justify-center gap-2 flex-wrap">
+        {/* Cash / Card toggle */}
+        <div className="flex justify-center">
           <div className="inline-flex p-1 rounded-2xl bg-slate-950 border border-slate-800">
             <button
               type="button"
               onClick={() => setPaidWith('Cash')}
               className={cn(
-                'flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
                 paidWith === 'Cash'
                   ? 'bg-emerald-500/20 text-emerald-300'
                   : 'text-slate-400 hover:text-slate-200'
@@ -423,7 +423,7 @@ export const QuickEntryView: React.FC = () => {
               type="button"
               onClick={() => setPaidWith('Card')}
               className={cn(
-                'flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
                 paidWith === 'Card'
                   ? 'bg-cyan-500/20 text-cyan-300'
                   : 'text-slate-400 hover:text-slate-200'
@@ -433,11 +433,14 @@ export const QuickEntryView: React.FC = () => {
               Card
             </button>
           </div>
+        </div>
 
+        {/* Quick actions row — Withdraw and Lend/Borrow side by side */}
+        <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             onClick={() => setIsWithdrawOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-[11px] font-semibold text-amber-300 transition-colors cursor-pointer"
+            className="flex items-center justify-center gap-1.5 py-2 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-[11px] font-semibold text-amber-300 transition-colors cursor-pointer"
             title="Withdraw cash from bank"
           >
             <ArrowLeftRight className="w-3.5 h-3.5" />
@@ -447,7 +450,7 @@ export const QuickEntryView: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsLentBorrowOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/40 text-[11px] font-semibold text-purple-300 transition-colors cursor-pointer"
+            className="flex items-center justify-center gap-1.5 py-2 rounded-2xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/40 text-[11px] font-semibold text-purple-300 transition-colors cursor-pointer"
             title="Log a loan or a borrowing"
           >
             <HandCoins className="w-3.5 h-3.5" />
