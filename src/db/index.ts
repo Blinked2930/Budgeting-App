@@ -406,9 +406,9 @@ export async function deleteDebt(id: string): Promise<void> {
 }
 
 /**
- * Settle part or all of a debt with a real cash/bank movement.
- *   debt.direction === 'OwedToMe' → you receive money
- *   debt.direction === 'iOwe'     → you pay money out
+ * Settle part or all of a debt with real cash/bank movement.
+ *   OwedToMe → I receive money → negative expense (wallet up, budget skipped)
+ *   iOwe     → I pay out       → positive expense (wallet down, budget skipped)
  */
 export async function settleDebtCash(
   debtId: string,
@@ -421,8 +421,6 @@ export async function settleDebtCash(
   const clamped = Math.min(amountALL, debt.remainingALL);
   if (clamped <= 0) return;
 
-  // OwedToMe → you get money → negative expense
-  // iOwe     → you pay out  → positive expense
   const signedAmount = debt.direction === 'OwedToMe' ? -clamped : clamped;
 
   await addExpense({
@@ -450,15 +448,49 @@ export async function settleDebtCash(
 }
 
 /**
- * Settle without moving money. Used when someone buys you something in lieu
- * of paying cash (e.g. Alex owes you 800, buys you a 300 drink → debt drops to 500).
+ * Settle part or all of a debt without cash changing hands.
+ *
+ *   OwedToMe: they gave me something of equal value instead of paying.
+ *             → Wallet unchanged. Budget absorbs the value I received.
+ *             (Wallet-neutral expense.)
+ *
+ *   iOwe:     I gave them something of equal value instead of paying cash.
+ *             → Wallet decreases (I paid, with cash or card).
+ *             → Budget unchanged (repayment, not consumption).
+ *             (Debt-related expense.)
  */
-export async function settleDebtNonCash(debtId: string, amountALL: number): Promise<void> {
+export async function settleDebtNonCash(
+  debtId: string,
+  amountALL: number,
+  paidWith: PaymentSource = 'Cash'
+): Promise<void> {
   const debt = await getDebt(debtId);
   if (!debt || debt.status !== 'open') return;
 
   const clamped = Math.min(amountALL, debt.remainingALL);
   if (clamped <= 0) return;
+
+  if (debt.direction === 'OwedToMe') {
+    await addExpense({
+      amount: clamped,
+      currency: 'ALL',
+      category: 'Other',
+      itemName: `Offset from ${debt.counterparty}`,
+      walletNeutral: true,
+      debtId: debt.id,
+      debtRelated: false,
+    });
+  } else {
+    await addExpense({
+      amount: clamped,
+      currency: 'ALL',
+      category: 'Other',
+      itemName: `Offset to ${debt.counterparty}`,
+      paidWith,
+      debtId: debt.id,
+      debtRelated: true,
+    });
+  }
 
   const newRemaining = debt.remainingALL - clamped;
   const isResolved = newRemaining <= 0;
@@ -474,13 +506,10 @@ export async function settleDebtNonCash(debtId: string, amountALL: number): Prom
 /**
  * Write off a debt.
  *
- * OwedToMe (they never paid): the amount becomes a gift you gave them.
- *   - If it came from a shared expense, bump the source's budgetAmountALL
- *     back up so the budget absorbs the full amount.
- *   - If it was a standalone loan, create a wallet-neutral gift expense.
+ *   OwedToMe: they never paid; I forgive the debt. It becomes a gift I gave.
+ *             Budget absorbs it. Wallet unchanged.
  *
- * iOwe (they forgave you): just clear the debt. No money moved, no
- *   expense created. Your payables drop, which is the correct outcome.
+ *   iOwe:     they forgave me. Nothing moves. Just close the debt.
  */
 export async function writeOffDebt(debtId: string): Promise<void> {
   const debt = await getDebt(debtId);
@@ -489,7 +518,6 @@ export async function writeOffDebt(debtId: string): Promise<void> {
   if (amount <= 0) return;
 
   if (debt.direction === 'iOwe') {
-    // Forgiven — nothing more to do than clear the debt.
     await db.debts.update(debt.id, {
       remainingALL: 0,
       status: 'resolved',
@@ -500,7 +528,6 @@ export async function writeOffDebt(debtId: string): Promise<void> {
     return;
   }
 
-  // OwedToMe — convert to a gift you gave.
   if (debt.sourceExpenseId) {
     const source = await db.expenses.get(debt.sourceExpenseId);
     if (source && !source.deleted) {

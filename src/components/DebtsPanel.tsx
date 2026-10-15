@@ -149,8 +149,6 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
     const [busyAction, setBusyAction] = useState<string | null>(null);
     const [amountStr, setAmountStr] = useState<string>(String(debt.remainingALL));
 
-    // Keep the amount field synced with the remaining balance when it changes
-    // externally (e.g. after a partial settle from another tab).
     useEffect(() => {
         setAmountStr(String(debt.remainingALL));
     }, [debt.remainingALL]);
@@ -169,10 +167,10 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
         setBusyAction(null);
     };
 
-    const handleNonCash = async () => {
+    const handleNonCash = async (paidWith: PaymentSource) => {
         if (!isValid) return;
-        setBusyAction('noncash');
-        await settleDebtNonCash(debt.id, clamped);
+        setBusyAction('noncash-' + paidWith);
+        await settleDebtNonCash(debt.id, clamped, paidWith);
         setBusyAction(null);
     };
 
@@ -238,44 +236,98 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-1">
-                <button
-                    type="button"
-                    onClick={() => handleCash('Cash')}
-                    disabled={busyAction !== null || !isValid}
-                    className="py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
-                >
-                    <Banknote className="w-3 h-3" />
-                    {owedToMe ? 'Got cash' : 'Paid cash'}
-                </button>
-                <button
-                    type="button"
-                    onClick={() => handleCash('Card')}
-                    disabled={busyAction !== null || !isValid}
-                    className="py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
-                >
-                    <Wallet className="w-3 h-3" />
-                    {owedToMe ? 'Got bank' : 'Paid bank'}
-                </button>
-                <button
-                    type="button"
-                    onClick={handleNonCash}
-                    disabled={busyAction !== null || !isValid}
-                    className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                    title="They bought something for you instead (no cash moved)"
-                >
-                    Non-cash
-                </button>
-                <button
-                    type="button"
-                    onClick={handleWriteOff}
-                    disabled={busyAction !== null}
-                    className="py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                    title="Close the entire remaining balance without payment"
-                >
-                    {owedToMe ? 'Write off' : 'Forgiven'}
-                </button>
-            </div>
+            {owedToMe ? (
+                <div className="grid grid-cols-4 gap-1">
+                    <button
+                        type="button"
+                        onClick={() => handleCash('Cash')}
+                        disabled={busyAction !== null || !isValid}
+                        className="py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                        <Banknote className="w-3 h-3" />
+                        Got cash
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleCash('Card')}
+                        disabled={busyAction !== null || !isValid}
+                        className="py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                        <Wallet className="w-3 h-3" />
+                        Got bank
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleNonCash('Cash')}
+                        disabled={busyAction !== null || !isValid}
+                        className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                        title="They gave me something instead of cash. Hits budget, no wallet change."
+                    >
+                        They offset
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleWriteOff}
+                        disabled={busyAction !== null}
+                        className="py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                        title="Forgive the debt — becomes a gift you gave"
+                    >
+                        Write off
+                    </button>
+                </div>
+            ) : (
+                <div className="space-y-1">
+                    <div className="grid grid-cols-2 gap-1">
+                        <button
+                            type="button"
+                            onClick={() => handleCash('Cash')}
+                            disabled={busyAction !== null || !isValid}
+                            className="py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
+                        >
+                            <Banknote className="w-3 h-3" />
+                            Paid cash
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleCash('Card')}
+                            disabled={busyAction !== null || !isValid}
+                            className="py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
+                        >
+                            <Wallet className="w-3 h-3" />
+                            Paid bank
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1">
+                        <button
+                            type="button"
+                            onClick={() => handleNonCash('Cash')}
+                            disabled={busyAction !== null || !isValid}
+                            className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                            title="I bought them something with cash instead of paying cash directly. Hits wallet only."
+                        >
+                            Offset cash
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleNonCash('Card')}
+                            disabled={busyAction !== null || !isValid}
+                            className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                            title="I bought them something with card instead of paying cash directly. Hits wallet only."
+                        >
+                            Offset card
+                        </button>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={handleWriteOff}
+                        disabled={busyAction !== null}
+                        className="w-full py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                        title="They forgave me — clears the debt, nothing moves"
+                    >
+                        Forgiven
+                    </button>
+                </div>
+            )}
         </div>
     );
 };
