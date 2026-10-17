@@ -32,10 +32,10 @@ interface FormValues {
 }
 
 const inputClass =
-    'w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70';
+    'w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors';
 
 const dateInputClass =
-    'block w-full min-w-0 max-w-full appearance-none bg-slate-950 border border-slate-800 rounded-xl px-2 py-2 text-xs font-mono text-white focus:outline-none focus:border-emerald-500/70 [color-scheme:dark]';
+    'block w-full min-w-0 max-w-full appearance-none bg-slate-50 border border-slate-200 rounded-xl px-2 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors';
 
 const Field: React.FC<{
     label: string;
@@ -43,11 +43,11 @@ const Field: React.FC<{
     children: React.ReactNode;
 }> = ({ label, hint, children }) => (
     <label className="block space-y-1 min-w-0">
-        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+        <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
             {label}
         </span>
         {children}
-        {hint && <span className="block text-[10px] text-slate-600">{hint}</span>}
+        {hint && <span className="block text-[10px] text-slate-400 mt-1">{hint}</span>}
     </label>
 );
 
@@ -121,12 +121,12 @@ const CycleForm: React.FC<CycleFormProps> = ({
     return (
         <form
             onSubmit={handleSubmit}
-            className="bg-slate-900/90 border border-slate-800/90 rounded-3xl p-4 sm:p-5 shadow-2xl space-y-4 overflow-hidden"
+            className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-5 shadow-sm space-y-4 overflow-hidden"
         >
-            <h2 className="text-base font-bold text-white">{title}</h2>
+            <h2 className="text-base font-bold text-slate-900">{title}</h2>
 
             {notice && (
-                <p className="text-xs text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-3 py-2">
+                <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
                     {notice}
                 </p>
             )}
@@ -212,13 +212,13 @@ const CycleForm: React.FC<CycleFormProps> = ({
                 </Field>
             </div>
 
-            {error && <p className="text-xs text-rose-400 font-medium">{error}</p>}
+            {error && <p className="text-xs text-rose-600 font-medium">{error}</p>}
 
             <div className="space-y-2 pt-1">
                 <button
                     type="submit"
                     disabled={isSaving}
-                    className="w-full py-3 rounded-2xl font-bold text-sm bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 cursor-pointer active:scale-[0.98] transition-all disabled:opacity-60"
+                    className="w-full py-3 rounded-2xl font-bold text-sm bg-emerald-600 text-white hover:bg-emerald-700 cursor-pointer active:scale-[0.98] transition-all disabled:opacity-60 shadow-sm"
                 >
                     {submitLabel}
                 </button>
@@ -226,7 +226,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
                     <button
                         type="button"
                         onClick={onCancel}
-                        className="w-full py-2.5 rounded-2xl text-xs font-semibold text-slate-400 hover:text-white bg-slate-950 border border-slate-800 cursor-pointer"
+                        className="w-full py-2.5 rounded-2xl text-xs font-semibold text-slate-500 hover:text-slate-900 bg-slate-50 border border-slate-200 cursor-pointer transition-colors"
                     >
                         Cancel
                     </button>
@@ -243,20 +243,20 @@ const StatTile: React.FC<{
     sub?: string;
     negative?: boolean;
 }> = ({ icon, label, value, sub, negative }) => (
-    <div className="p-3 rounded-2xl bg-slate-900/80 border border-slate-800/80 min-w-0">
-        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+    <div className="p-3 rounded-2xl bg-white border border-slate-200 shadow-sm min-w-0">
+        <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
             {icon}
             <span className="truncate">{label}</span>
         </div>
         <p
             className={cn(
                 'mt-1 text-base sm:text-lg font-mono font-bold tracking-tight truncate',
-                negative ? 'text-rose-400' : 'text-white'
+                negative ? 'text-rose-600' : 'text-slate-900'
             )}
         >
             {value}
         </p>
-        {sub && <p className="text-[10px] text-slate-500 mt-0.5 truncate">{sub}</p>}
+        {sub && <p className="text-[10px] text-slate-400 mt-0.5 truncate">{sub}</p>}
     </div>
 );
 
@@ -288,24 +288,24 @@ const TransferModal: React.FC<{
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
             onClick={onClose}
         >
             <div
-                className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-2xl space-y-4"
+                className="w-full max-w-sm bg-white border border-slate-200 rounded-3xl p-5 shadow-xl space-y-4"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center">
-                            <ArrowLeftRight className="w-4 h-4 text-amber-400" />
+                        <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center">
+                            <ArrowLeftRight className="w-4 h-4 text-amber-600" />
                         </div>
-                        <h3 className="text-base font-bold text-white">Move money</h3>
+                        <h3 className="text-base font-bold text-slate-900">Move money</h3>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer transition-colors"
                     >
                         <X className="w-4 h-4" />
                     </button>
@@ -322,8 +322,8 @@ const TransferModal: React.FC<{
                         className={cn(
                             'p-2.5 rounded-2xl border text-xs font-semibold transition-colors cursor-pointer',
                             direction === 'BankToCash'
-                                ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
-                                : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                                ? 'bg-amber-50 border-amber-500 text-amber-700'
+                                : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800'
                         )}
                     >
                         Bank → Cash
@@ -334,8 +334,8 @@ const TransferModal: React.FC<{
                         className={cn(
                             'p-2.5 rounded-2xl border text-xs font-semibold transition-colors cursor-pointer',
                             direction === 'CashToBank'
-                                ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
-                                : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                                ? 'bg-amber-50 border-amber-500 text-amber-700'
+                                : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800'
                         )}
                     >
                         Cash → Bank
@@ -359,10 +359,10 @@ const TransferModal: React.FC<{
 
                 <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-slate-500">
                     <div>
-                        Bank: <span className="text-slate-300">{formatCurrency(bankBalance, 'ALL')}</span>
+                        Bank: <span className="text-slate-800">{formatCurrency(bankBalance, 'ALL')}</span>
                     </div>
                     <div>
-                        Cash: <span className="text-slate-300">{formatCurrency(cashBalance, 'ALL')}</span>
+                        Cash: <span className="text-slate-800">{formatCurrency(cashBalance, 'ALL')}</span>
                     </div>
                 </div>
 
@@ -370,7 +370,7 @@ const TransferModal: React.FC<{
                     <button
                         type="button"
                         onClick={onClose}
-                        className="py-2.5 rounded-2xl bg-slate-950 border border-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+                        className="py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-600 text-xs font-semibold cursor-pointer hover:bg-slate-50 transition-colors"
                     >
                         Cancel
                     </button>
@@ -378,7 +378,7 @@ const TransferModal: React.FC<{
                         type="button"
                         onClick={handleSave}
                         disabled={!valid || isSaving}
-                        className="py-2.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 text-xs font-bold cursor-pointer disabled:opacity-50"
+                        className="py-2.5 rounded-2xl bg-emerald-600 text-white text-xs font-bold cursor-pointer disabled:opacity-50 hover:bg-emerald-700 transition-colors"
                     >
                         {isSaving ? 'Saving…' : 'Move it'}
                     </button>
@@ -396,11 +396,7 @@ export const BudgetView: React.FC = () => {
     const [isTransferOpen, setIsTransferOpen] = useState(false);
 
     if (isLoading) {
-        return (
-            <div className="w-full max-w-md mx-auto px-4 py-10 text-center text-xs text-slate-500">
-                Loading…
-            </div>
-        );
+        return <div className="w-full max-w-md mx-auto px-4 py-10 text-center text-xs text-slate-500">Loading…</div>;
     }
 
     const today = new Date();
@@ -505,53 +501,51 @@ export const BudgetView: React.FC = () => {
         stats.percentSpent >= 90
             ? 'bg-rose-500'
             : stats.percentSpent >= 70
-                ? 'bg-amber-400'
-                : 'bg-emerald-400';
+                ? 'bg-amber-500'
+                : 'bg-emerald-500';
 
     const hasDebts = stats.receivablesALL > 0 || stats.payablesALL > 0;
 
     return (
         <div className="w-full max-w-md mx-auto px-3 sm:px-4 py-4 space-y-3.5">
             {stats.isPaydayReached && (
-                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-3">
-                    <span className="font-medium">
-                        Payday date reached. Ready for the next cycle?
-                    </span>
+                <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 text-xs flex items-center justify-between gap-3 shadow-sm">
+                    <span className="font-medium">Payday date reached. Ready for the next cycle?</span>
                     <button
                         type="button"
                         onClick={() => setFormMode('next')}
-                        className="shrink-0 px-3 py-1.5 rounded-xl bg-amber-400 text-slate-950 font-bold cursor-pointer"
+                        className="shrink-0 px-3 py-1.5 rounded-xl bg-amber-500 text-white font-bold cursor-pointer hover:bg-amber-600 transition-colors shadow-sm"
                     >
                         Start
                     </button>
                 </div>
             )}
 
-            <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-br from-slate-900 to-slate-900/80 border border-slate-800 shadow-xl">
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+            <div className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-sm">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                     Left to spend today
                 </p>
                 <p
                     className={cn(
                         'mt-1 text-3xl sm:text-4xl font-mono font-extrabold tracking-tight leading-tight',
-                        stats.leftToday < 0 ? 'text-rose-400' : 'text-emerald-300'
+                        stats.leftToday < 0 ? 'text-rose-600' : 'text-emerald-600'
                     )}
                 >
                     {formatCurrency(stats.leftToday, 'ALL')}
                 </p>
-                <p className="text-[11px] text-slate-500 mt-1">
+                <p className="text-[11px] text-slate-400 mt-1">
                     of {formatCurrency(stats.dailyAllowance, 'ALL')} today ·{' '}
                     {formatCurrency(stats.spentToday, 'ALL')} spent
                 </p>
 
                 <div className="mt-3.5">
-                    <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                    <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                         <div
                             className={cn('h-full rounded-full transition-all', barColor)}
                             style={{ width: `${stats.percentSpent}%` }}
                         />
                     </div>
-                    <div className="flex justify-between mt-1.5 text-[10px] font-mono text-slate-500">
+                    <div className="flex justify-between mt-1.5 text-[10px] font-mono text-slate-400">
                         <span>{formatCurrency(stats.spent, 'ALL')} spent</span>
                         <span>{formatCurrency(stats.cycleBudget, 'ALL')} budget</span>
                     </div>
@@ -560,14 +554,14 @@ export const BudgetView: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-2.5">
                 <StatTile
-                    icon={<Landmark className="w-3.5 h-3.5 text-cyan-400" />}
+                    icon={<Landmark className="w-3.5 h-3.5 text-cyan-600" />}
                     label="Bank"
                     value={formatCurrency(stats.estimatedBankBalance, 'ALL')}
                     sub="Raiffeisen estimate"
                     negative={stats.estimatedBankBalance < 0}
                 />
                 <StatTile
-                    icon={<Banknote className="w-3.5 h-3.5 text-emerald-400" />}
+                    icon={<Banknote className="w-3.5 h-3.5 text-teal-600" />}
                     label="Cash"
                     value={formatCurrency(stats.estimatedCashBalance, 'ALL')}
                     sub="pocket estimate"
@@ -576,10 +570,10 @@ export const BudgetView: React.FC = () => {
             </div>
 
             {hasDebts && (
-                <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-purple-500/30 space-y-2.5">
+                <div className="p-3.5 rounded-2xl bg-white border border-indigo-200 shadow-sm space-y-2.5">
                     <div className="flex items-center gap-1.5">
-                        <HandCoins className="w-3.5 h-3.5 text-purple-400" />
-                        <p className="text-[10px] font-semibold text-purple-300 uppercase tracking-wider">
+                        <HandCoins className="w-3.5 h-3.5 text-indigo-600" />
+                        <p className="text-[10px] font-semibold text-indigo-700 uppercase tracking-wider">
                             Debts
                         </p>
                     </div>
@@ -588,7 +582,7 @@ export const BudgetView: React.FC = () => {
                             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                                 Owed to you
                             </p>
-                            <p className="text-sm font-mono font-bold text-emerald-400">
+                            <p className="text-sm font-mono font-bold text-emerald-600">
                                 {formatCurrency(stats.receivablesALL, 'ALL')}
                             </p>
                         </div>
@@ -596,12 +590,12 @@ export const BudgetView: React.FC = () => {
                             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                                 You owe
                             </p>
-                            <p className="text-sm font-mono font-bold text-rose-400">
+                            <p className="text-sm font-mono font-bold text-rose-600">
                                 {formatCurrency(stats.payablesALL, 'ALL')}
                             </p>
                         </div>
                     </div>
-                    <div className="pt-2.5 border-t border-slate-800/60 flex items-center justify-between">
+                    <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between">
                         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                             Net
                         </p>
@@ -609,10 +603,10 @@ export const BudgetView: React.FC = () => {
                             className={cn(
                                 'text-sm font-mono font-bold',
                                 stats.netOfDebtsALL > 0
-                                    ? 'text-emerald-400'
+                                    ? 'text-emerald-600'
                                     : stats.netOfDebtsALL < 0
-                                        ? 'text-rose-400'
-                                        : 'text-slate-400'
+                                        ? 'text-rose-600'
+                                        : 'text-slate-500'
                             )}
                         >
                             {stats.netOfDebtsALL > 0 ? '+' : ''}
@@ -624,14 +618,14 @@ export const BudgetView: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-2.5">
                 <StatTile
-                    icon={<Wallet className="w-3.5 h-3.5 text-emerald-400" />}
+                    icon={<Wallet className="w-3.5 h-3.5 text-emerald-600" />}
                     label="Remaining"
                     value={formatCurrency(stats.remaining, 'ALL')}
                     sub="this cycle"
                     negative={stats.remaining < 0}
                 />
                 <StatTile
-                    icon={<CalendarDays className="w-3.5 h-3.5 text-cyan-400" />}
+                    icon={<CalendarDays className="w-3.5 h-3.5 text-cyan-600" />}
                     label="To payday"
                     value={
                         stats.isPaydayReached
@@ -641,13 +635,13 @@ export const BudgetView: React.FC = () => {
                     sub={`day ${stats.dayNumber} of ${stats.totalDays}`}
                 />
                 <StatTile
-                    icon={<RefreshCw className="w-3.5 h-3.5 text-amber-400" />}
+                    icon={<RefreshCw className="w-3.5 h-3.5 text-amber-600" />}
                     label="Buffer pool"
                     value={formatCurrency(stats.bufferPool, 'ALL')}
                     sub="unspent from logged days"
                 />
                 <StatTile
-                    icon={<PiggyBank className="w-3.5 h-3.5 text-rose-400" />}
+                    icon={<PiggyBank className="w-3.5 h-3.5 text-rose-600" />}
                     label="Travel stash"
                     value={formatCurrency(stats.travelStashBalance, 'ALL')}
                     sub={
@@ -661,8 +655,8 @@ export const BudgetView: React.FC = () => {
 
             {stats.travelSpent > 0 && (
                 <p className="text-[11px] text-slate-500 px-1">
-                    {formatCurrency(stats.travelSpent, 'ALL')} of Travel spending is paid from the
-                    stash, not the daily budget.
+                    {formatCurrency(stats.travelSpent, 'ALL')} of Travel spending is paid from the stash,
+                    not the daily budget.
                 </p>
             )}
 
@@ -670,7 +664,7 @@ export const BudgetView: React.FC = () => {
                 <button
                     type="button"
                     onClick={() => setFormMode('edit')}
-                    className="py-3 rounded-2xl bg-slate-950 hover:bg-slate-800/70 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                    className="py-3 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-colors"
                 >
                     <Pencil className="w-3.5 h-3.5" />
                     Edit cycle
@@ -678,7 +672,7 @@ export const BudgetView: React.FC = () => {
                 <button
                     type="button"
                     onClick={() => setFormMode('next')}
-                    className="py-3 rounded-2xl bg-slate-950 hover:bg-slate-800/70 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                    className="py-3 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-colors"
                 >
                     <RefreshCw className="w-3.5 h-3.5" />
                     Next cycle
@@ -688,20 +682,19 @@ export const BudgetView: React.FC = () => {
             <button
                 type="button"
                 onClick={() => setIsTransferOpen(true)}
-                className="w-full py-3 rounded-2xl bg-slate-950 hover:bg-slate-800/70 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-3 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 text-xs font-semibold flex items-center justify-center gap-2 cursor-pointer shadow-sm transition-colors"
             >
-                <ArrowLeftRight className="w-3.5 h-3.5 text-amber-400" />
+                <ArrowLeftRight className="w-3.5 h-3.5 text-amber-600" />
                 Move money between Bank and Cash
             </button>
 
-            <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800/80 space-y-3">
+            <div className="p-3.5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-3">
                 <div>
-                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                         Ledger Adjustment
                     </p>
-                    <p className="text-[10px] text-slate-500 mt-1">
-                        Log additions (like refunds) or subtractions without editing your full cycle
-                        stats.
+                    <p className="text-[10px] text-slate-400 mt-1">
+                        Log additions (like refunds) or subtractions without editing your full cycle stats.
                     </p>
                 </div>
                 <div className="flex gap-2">
@@ -712,19 +705,19 @@ export const BudgetView: React.FC = () => {
                         value={adjAmount}
                         onChange={(e) => setAdjAmount(e.target.value)}
                         placeholder="Amount (Lek)"
-                        className="flex-1 min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+                        className="flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
                     />
                     <button
                         disabled={isAdjusting || !adjAmount}
                         onClick={() => handleQuickAdjustment('add')}
-                        className="px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-bold text-xs disabled:opacity-50 transition-colors cursor-pointer shrink-0"
+                        className="px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs disabled:opacity-50 transition-colors cursor-pointer shrink-0 border border-emerald-200"
                     >
                         + Add
                     </button>
                     <button
                         disabled={isAdjusting || !adjAmount}
                         onClick={() => handleQuickAdjustment('sub')}
-                        className="px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 font-bold text-xs disabled:opacity-50 transition-colors cursor-pointer shrink-0"
+                        className="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs disabled:opacity-50 transition-colors cursor-pointer shrink-0 border border-rose-200"
                     >
                         − Sub
                     </button>
