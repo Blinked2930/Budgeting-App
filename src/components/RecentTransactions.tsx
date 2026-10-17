@@ -17,6 +17,7 @@ import {
   HandCoins,
   ArrowUpRight,
   ArrowDownLeft,
+  Gift,
 } from 'lucide-react';
 import type { ExpenseRecord, Category, TransferRecord, DebtRecord } from '../types';
 import { formatCurrency } from '../utils/currency';
@@ -96,10 +97,10 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   };
 
   const openDebts = debts.filter((d) => d.status === 'open');
-  // Hide wallet movements that back a debt event — the debt row (or the
-  // balance change) already tells the story. The expense record still
-  // exists for budget math; it's just not shown here.
-  const visibleExpenses = expenses.filter((e) => !e.debtRelated);
+  // Hide ONLY the initial wallet movement that backs a lend/borrow. The debt
+  // row already represents that event. Settlements and write-offs stay
+  // visible because they're distinct real-world events.
+  const visibleExpenses = expenses.filter((e) => !e.isDebtOrigin);
 
   const merged: MergedItem[] = [
     ...visibleExpenses.map((e) => ({ kind: 'expense' as const, record: e, timestamp: e.timestamp })),
@@ -249,6 +250,8 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           const expense = item.record;
           const isForeignCurrency = expense.currency !== 'ALL';
           const isCash = expense.paidWith === 'Cash';
+          const isSettlement = Boolean(expense.debtRelated) && !expense.isDebtOrigin;
+          const isWriteOff = Boolean(expense.walletNeutral);
 
           return (
             <div
@@ -256,8 +259,21 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
               className="group flex items-center justify-between p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-900 border border-slate-800/80 transition-all hover:border-slate-700/80"
             >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-8 h-8 rounded-xl bg-slate-800/90 border border-slate-700/50 flex items-center justify-center shrink-0">
-                  {CATEGORY_ICONS[expense.category] || <MoreHorizontal className="w-3.5 h-3.5" />}
+                <div
+                  className={cn(
+                    'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border',
+                    isSettlement || isWriteOff
+                      ? 'bg-purple-500/10 border-purple-500/30'
+                      : 'bg-slate-800/90 border-slate-700/50'
+                  )}
+                >
+                  {isSettlement ? (
+                    <HandCoins className="w-3.5 h-3.5 text-purple-400" />
+                  ) : isWriteOff ? (
+                    <Gift className="w-3.5 h-3.5 text-purple-400" />
+                  ) : (
+                    CATEGORY_ICONS[expense.category] || <MoreHorizontal className="w-3.5 h-3.5" />
+                  )}
                 </div>
 
                 <div className="min-w-0">
@@ -275,27 +291,34 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                         {expense.estimatedMeals} meal{expense.estimatedMeals > 1 ? 's' : ''}
                       </span>
                     )}
-                    {expense.walletNeutral && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-700/50 text-slate-400 font-medium">
-                        no wallet impact
+                    {isSettlement && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-purple-500/10 text-purple-300 font-medium">
+                        Settlement
                       </span>
                     )}
-                    <span
-                      className={cn(
-                        'text-[10px] px-1.5 py-0.2 rounded-md font-medium flex items-center gap-0.5',
-                        isCash
-                          ? 'bg-emerald-500/10 text-emerald-400'
-                          : 'bg-cyan-500/10 text-cyan-400'
-                      )}
-                      title={isCash ? 'Paid with cash' : 'Paid with card'}
-                    >
-                      {isCash ? (
-                        <Banknote className="w-2.5 h-2.5" />
-                      ) : (
-                        <Wallet className="w-2.5 h-2.5" />
-                      )}
-                      {isCash ? 'Cash' : 'Card'}
-                    </span>
+                    {isWriteOff && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-purple-500/10 text-purple-300 font-medium">
+                        Write-off
+                      </span>
+                    )}
+                    {!isWriteOff && (
+                      <span
+                        className={cn(
+                          'text-[10px] px-1.5 py-0.2 rounded-md font-medium flex items-center gap-0.5',
+                          isCash
+                            ? 'bg-emerald-500/10 text-emerald-400'
+                            : 'bg-cyan-500/10 text-cyan-400'
+                        )}
+                        title={isCash ? 'Cash' : 'Bank / card'}
+                      >
+                        {isCash ? (
+                          <Banknote className="w-2.5 h-2.5" />
+                        ) : (
+                          <Wallet className="w-2.5 h-2.5" />
+                        )}
+                        {isCash ? 'Cash' : 'Card'}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
@@ -329,14 +352,16 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                 </div>
 
                 <div className="flex items-center gap-0.5">
-                  <button
-                    type="button"
-                    onClick={(e) => handleEdit(expense, e)}
-                    className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all cursor-pointer"
-                    title="Edit record"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
+                  {!isSettlement && !isWriteOff && (
+                    <button
+                      type="button"
+                      onClick={(e) => handleEdit(expense, e)}
+                      className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all cursor-pointer"
+                      title="Edit record"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  )}
 
                   <button
                     type="button"

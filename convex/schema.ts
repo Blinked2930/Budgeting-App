@@ -18,6 +18,7 @@ export default defineSchema({
         debtId: v.optional(v.string()),
         debtRelated: v.optional(v.boolean()),
         walletNeutral: v.optional(v.boolean()),
+        isDebtOrigin: v.optional(v.boolean()),
         timestamp: v.string(),
         updatedAt: v.optional(v.string()),
         deleted: v.optional(v.boolean()),

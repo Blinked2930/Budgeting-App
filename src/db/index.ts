@@ -65,6 +65,7 @@ export interface RemoteExpense {
   debtId?: string;
   debtRelated?: boolean;
   walletNeutral?: boolean;
+  isDebtOrigin?: boolean;
   timestamp: string;
   updatedAt?: string;
   deleted?: boolean;
@@ -238,6 +239,7 @@ export async function applyRemoteExpenses(remote: RemoteExpense[]): Promise<void
         debtId: r.debtId,
         debtRelated: r.debtRelated,
         walletNeutral: r.walletNeutral,
+        isDebtOrigin: r.isDebtOrigin,
         timestamp: r.timestamp,
         updatedAt: remoteUpdatedAt,
         deleted: r.deleted,
@@ -357,16 +359,8 @@ function normalizeKey(name: string): string {
  * Create a new debt record.
  *
  * If `moveWalletWith` is provided AND `sourceExpenseId` is not, a
- * wallet-moving expense is also created:
- *
- *   direction === 'iOwe'     → wallet up by amount (money came IN from lender)
- *   direction === 'OwedToMe' → wallet down by amount (money went OUT when you lent)
- *
- * That expense is marked `debtRelated: true` so it never counts against the
- * budget. It's purely a wallet movement.
- *
- * When `sourceExpenseId` is set (the shared-expense path), the parent
- * expense already moved the wallet, so we skip the extra movement.
+ * wallet-moving expense is also created and marked `isDebtOrigin: true`
+ * so the log can hide it (the debt row already represents it).
  */
 export async function addDebt(data: {
   counterparty: string;
@@ -407,6 +401,7 @@ export async function addDebt(data: {
       paidWith: data.moveWalletWith,
       debtId: record.id,
       debtRelated: true,
+      isDebtOrigin: true,
     });
   }
 

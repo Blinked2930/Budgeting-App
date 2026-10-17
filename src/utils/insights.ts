@@ -1,3 +1,4 @@
+// src/utils/insights.ts
 import type { Currency, ExpenseRecord, FoodType, VendorType } from '../types';
 
 export interface InsightFilters {
@@ -29,10 +30,13 @@ export function monthLabel(key: string): string {
     });
 }
 
-/** Distinct months that have expenses, newest first. */
+/** Distinct months that have real spending (settlements excluded), newest first. */
 export function getMonthOptions(expenses: ExpenseRecord[]): string[] {
     const keys = new Set<string>();
-    for (const e of expenses) keys.add(monthKey(e.timestamp));
+    for (const e of expenses) {
+        if (e.debtRelated) continue;
+        keys.add(monthKey(e.timestamp));
+    }
     return Array.from(keys).sort().reverse();
 }
 
@@ -41,6 +45,7 @@ export function filterExpenses(
     filters: InsightFilters
 ): ExpenseRecord[] {
     return expenses.filter((e) => {
+        if (e.debtRelated) return false;
         if (filters.vendor !== 'all' && e.vendorType !== filters.vendor) return false;
         if (filters.currency !== 'all' && e.currency !== filters.currency) return false;
         if (filters.foodType !== 'all' && e.foodType !== filters.foodType) return false;
@@ -63,21 +68,30 @@ export interface Aggregate {
 
 export function aggregate(expenses: ExpenseRecord[]): Aggregate {
     let total = 0;
+    let count = 0;
     let meals = 0;
     let mealSpend = 0;
 
     for (const e of expenses) {
-        total += e.amountInALL;
+        // Settlements and origin movements never count as budget spending.
+        if (e.debtRelated) continue;
+
+        // Use the budget-effective amount when a shared expense exists.
+        const effectiveAmount = e.budgetAmountALL ?? e.amountInALL;
+
+        total += effectiveAmount;
+        count += 1;
+
         if (e.estimatedMeals && e.estimatedMeals > 0) {
             meals += e.estimatedMeals;
-            mealSpend += e.amountInALL;
+            mealSpend += effectiveAmount;
         }
     }
 
     return {
         total,
-        count: expenses.length,
-        average: expenses.length > 0 ? total / expenses.length : 0,
+        count,
+        average: count > 0 ? total / count : 0,
         meals,
         mealSpend,
         costPerMeal: meals > 0 ? mealSpend / meals : null,
@@ -87,11 +101,6 @@ export function aggregate(expenses: ExpenseRecord[]): Aggregate {
 export interface MarketComparison {
     pazar: Aggregate;
     store: Aggregate;
-    /**
-     * How much cheaper (positive) or pricier (negative) Pazar is per meal
-     * than the supermarket, as a percentage. Null if either side has no
-     * meal estimates to compare.
-     */
     pazarCheaperByPct: number | null;
 }
 

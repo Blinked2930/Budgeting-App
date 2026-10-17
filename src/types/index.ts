@@ -1,6 +1,4 @@
 // src/types/index.ts
-// LekFlow Data Schema Definitions
-
 export type Currency = 'ALL' | 'EUR' | 'USD';
 
 export type Category =
@@ -48,23 +46,27 @@ export interface ExpenseRecord {
 
   /**
    * When set, this expense only counts this much against the budget.
-   * Used when part of the payment was covering someone else's share.
    * Falls back to amountInALL when undefined.
    */
   budgetAmountALL?: number;
 
-  /** Links this expense to a debt (as a settlement or as the original shared payment). */
+  /** Links this expense to a debt. */
   debtId?: string;
 
-  /** Marks this expense as a debt settlement — hits wallet, skips budget. */
+  /** Marks a debt settlement — hits wallet, skips budget. */
   debtRelated?: boolean;
 
   /**
-   * When true, this expense hits the budget but skips the wallet entirely.
-   * Used when writing off a standalone loan — the wallet already moved when
-   * the money was lent, so absorbing the budget impact shouldn't move it again.
+   * When true, this expense hits the budget but skips the wallet.
+   * Used when writing off a standalone loan.
    */
   walletNeutral?: boolean;
+
+  /**
+   * True only for the initial wallet movement of a lend/borrow.
+   * Hidden from the recent feed because the debt row already represents it.
+   */
+  isDebtOrigin?: boolean;
 
   isSynced: boolean;
   updatedAt?: string;
