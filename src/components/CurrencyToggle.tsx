@@ -1,3 +1,4 @@
+// src/components/CurrencyToggle.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import { Coins, ChevronDown, Check } from 'lucide-react';
 import type { Currency } from '../types';
@@ -44,42 +45,42 @@ export const CurrencyToggle: React.FC<CurrencyToggleProps> = ({
 
   return (
     <div ref={containerRef} className={cn('relative inline-block', className)}>
-      {/* Little clickable currency icon button */}
+      {/* Currency icon button */}
       <button
         type="button"
         onClick={() => setIsOpen((prev) => !prev)}
         className={cn(
           'flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all duration-150 cursor-pointer shadow-sm select-none',
           selected === 'ALL'
-            ? 'bg-slate-800/90 hover:bg-slate-850 border-slate-700/70 text-slate-200 hover:border-slate-600'
-            : 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/50 text-emerald-300'
+            ? 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
+            : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-700'
         )}
         title="Change currency / fund (automatically defaults to Lekë)"
         aria-label="Select currency"
       >
-        <Coins className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+        <Coins className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
         <span className="font-mono font-bold text-xs">
           {currentConfig.symbol}
         </span>
-        <span className="text-[11px] font-semibold text-slate-400">
+        <span className="text-[11px] font-semibold text-slate-500">
           {selected === 'ALL' ? 'Lekë' : selected}
         </span>
         <ChevronDown
           className={cn(
             'w-3 h-3 text-slate-400 transition-transform duration-150',
-            isOpen && 'rotate-180 text-emerald-400'
+            isOpen && 'rotate-180 text-emerald-600'
           )}
         />
       </button>
 
       {/* Floating Mini Menu */}
       {isOpen && (
-        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-52 bg-slate-900 border border-slate-700/80 rounded-2xl shadow-2xl p-1.5 z-40 animate-fade-in text-left">
-          <div className="px-2.5 py-1.5 border-b border-slate-800 mb-1">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-52 bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 z-40 animate-fade-in text-left">
+          <div className="px-2.5 py-1.5 border-b border-slate-100 mb-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
               Currency / Fund
             </span>
-            <p className="text-[10px] text-slate-500">Auto-resets to Lekë</p>
+            <p className="text-[10px] text-slate-400">Auto-resets to Lekë</p>
           </div>
 
           <div className="space-y-1">
@@ -96,22 +97,22 @@ export const CurrencyToggle: React.FC<CurrencyToggleProps> = ({
                   className={cn(
                     'w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer text-left',
                     isActive
-                      ? 'bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/30'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      ? 'bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200'
+                      : 'text-slate-700 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
                   )}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="w-5 text-center font-mono font-bold text-slate-200">
+                    <span className="w-5 text-center font-mono font-bold text-slate-800">
                       {curr.symbol}
                     </span>
                     <div>
                       <div className="text-xs">{curr.label}</div>
-                      <div className="text-[10px] text-slate-500 font-normal">
+                      <div className="text-[10px] text-slate-400 font-normal">
                         {curr.note}
                       </div>
                     </div>
                   </div>
-                  {isActive && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 ml-1" />}
+                  {isActive && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 ml-1" />}
                 </button>
               );
             })}
