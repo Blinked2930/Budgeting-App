@@ -58,6 +58,50 @@ function formatRelativeTime(isoString: string): string {
   }
 }
 
+/**
+ * Classify a debt-related expense into a display category.
+ * Returns null for regular (non-debt) expenses.
+ */
+type DebtClass =
+  | 'originLend'
+  | 'originBorrow'
+  | 'repaidIn'
+  | 'repaidOut'
+  | 'offsetIn'
+  | 'offsetOut'
+  | 'gift';
+
+function classifyDebtExpense(e: ExpenseRecord): DebtClass | null {
+  const hasDebt = Boolean(e.debtId) || Boolean(e.debtRelated) || Boolean(e.isDebtOrigin);
+  if (!hasDebt) return null;
+
+  const name = e.itemName ?? '';
+  const walletNeutral = Boolean(e.walletNeutral);
+  const isOrigin = Boolean(e.isDebtOrigin);
+  const isIncome = e.amount < 0;
+
+  if (isOrigin) return isIncome ? 'originBorrow' : 'originLend';
+  if (walletNeutral) {
+    if (name.startsWith('Gift to ')) return 'gift';
+    return 'offsetIn';
+  }
+  if (name.startsWith('Offset to ')) return 'offsetOut';
+  return isIncome ? 'repaidIn' : 'repaidOut';
+}
+
+const DEBT_META: Record<
+  DebtClass,
+  { badge: string; isWalletNeutral: boolean }
+> = {
+  originLend: { badge: 'Lent out', isWalletNeutral: false },
+  originBorrow: { badge: 'Borrowed', isWalletNeutral: false },
+  repaidIn: { badge: 'Received', isWalletNeutral: false },
+  repaidOut: { badge: 'Paid back', isWalletNeutral: false },
+  offsetIn: { badge: 'Offset in', isWalletNeutral: true },
+  offsetOut: { badge: 'Offset out', isWalletNeutral: false },
+  gift: { badge: 'Gift', isWalletNeutral: true },
+};
+
 type MergedItem =
   | { kind: 'expense'; record: ExpenseRecord; timestamp: string }
   | { kind: 'transfer'; record: TransferRecord; timestamp: string };
@@ -85,7 +129,6 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
     if (onEdit) onEdit(expense);
   };
 
-  // Pure chronological feed. No current-state debt rows here.
   const merged: MergedItem[] = [
     ...expenses.map((e) => ({ kind: 'expense' as const, record: e, timestamp: e.timestamp })),
     ...transfers.map((t) => ({ kind: 'transfer' as const, record: t, timestamp: t.timestamp })),
@@ -167,50 +210,63 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           const expense = item.record;
           const isForeignCurrency = expense.currency !== 'ALL';
           const isCash = expense.paidWith === 'Cash';
-          const isDebtRelated = Boolean(expense.debtId);
-          const isOrigin = Boolean(expense.isDebtOrigin);
-          const isWriteOffOrOffset = Boolean(expense.walletNeutral);
-
-          // Amount display: positive expense = money out, negative = money in.
-          // Show explicit sign for debt-related events so the flow is obvious.
+          const debtClass = classifyDebtExpense(expense);
+          const debtMeta = debtClass ? DEBT_META[debtClass] : null;
+          const isWalletNeutral = debtMeta?.isWalletNeutral ?? false;
           const isIncome = expense.amount < 0;
-          const displayAmount = isDebtRelated
-            ? `${isIncome ? '+' : '−'}${formatCurrency(Math.abs(expense.amount), expense.currency)}`
-            : formatCurrency(expense.amount, expense.currency);
-          const amountColor = isDebtRelated
-            ? isIncome
-              ? 'text-emerald-300'
-              : 'text-rose-300'
-            : 'text-white';
 
-          let debtBadge: string | null = null;
-          if (isOrigin) debtBadge = isIncome ? 'Borrowed' : 'Loan out';
-          else if (isWriteOffOrOffset) debtBadge = 'Offset';
-          else if (isDebtRelated) debtBadge = 'Repayment';
+          let displayAmount: string;
+          let amountColor: string;
+          let amountHint: string | null = null;
+
+          if (debtClass) {
+            if (isWalletNeutral) {
+              displayAmount = formatCurrency(Math.abs(expense.amount), expense.currency);
+              amountColor = 'text-slate-400';
+              amountHint = 'no wallet change';
+            } else {
+              displayAmount = `${isIncome ? '+' : '−'}${formatCurrency(
+                Math.abs(expense.amount),
+                expense.currency
+              )}`;
+              amountColor = isIncome ? 'text-emerald-300' : 'text-rose-300';
+            }
+          } else {
+            displayAmount = formatCurrency(expense.amount, expense.currency);
+            amountColor = 'text-white';
+          }
+
+          let icon: React.ReactNode;
+          if (debtClass === 'offsetIn' || debtClass === 'gift') {
+            icon = <Gift className="w-3.5 h-3.5 text-purple-400" />;
+          } else if (debtClass) {
+            icon = <HandCoins className="w-3.5 h-3.5 text-purple-400" />;
+          } else {
+            icon = CATEGORY_ICONS[expense.category] || <MoreHorizontal className="w-3.5 h-3.5" />;
+          }
 
           return (
             <div
               key={expense.id}
-              className="group flex items-center justify-between p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-900 border border-slate-800/80 transition-all hover:border-slate-700/80"
+              className={cn(
+                'group flex items-center justify-between p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-900 transition-all border',
+                debtClass && isWalletNeutral
+                  ? 'border-purple-500/20 border-dashed hover:border-purple-500/40'
+                  : debtClass
+                    ? 'border-purple-500/30 hover:border-purple-500/50'
+                    : 'border-slate-800/80 hover:border-slate-700/80'
+              )}
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div
                   className={cn(
                     'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border',
-                    isDebtRelated
+                    debtClass
                       ? 'bg-purple-500/10 border-purple-500/30'
                       : 'bg-slate-800/90 border-slate-700/50'
                   )}
                 >
-                  {isDebtRelated ? (
-                    isWriteOffOrOffset ? (
-                      <Gift className="w-3.5 h-3.5 text-purple-400" />
-                    ) : (
-                      <HandCoins className="w-3.5 h-3.5 text-purple-400" />
-                    )
-                  ) : (
-                    CATEGORY_ICONS[expense.category] || <MoreHorizontal className="w-3.5 h-3.5" />
-                  )}
+                  {icon}
                 </div>
 
                 <div className="min-w-0">
@@ -228,12 +284,12 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                         {expense.estimatedMeals} meal{expense.estimatedMeals > 1 ? 's' : ''}
                       </span>
                     )}
-                    {debtBadge && (
+                    {debtMeta && (
                       <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-purple-500/10 text-purple-300 font-medium">
-                        {debtBadge}
+                        {debtMeta.badge}
                       </span>
                     )}
-                    {!isWriteOffOrOffset && (
+                    {!isWalletNeutral && (
                       <span
                         className={cn(
                           'text-[10px] px-1.5 py-0.2 rounded-md font-medium flex items-center gap-0.5',
@@ -287,28 +343,35 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                       ≈ {formatCurrency(expense.amountInALL, 'ALL')}
                     </p>
                   )}
+                  {amountHint && (
+                    <p className="text-[9px] text-slate-600 font-medium italic">
+                      {amountHint}
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-0.5">
-                  {!isDebtRelated && (
-                    <button
-                      type="button"
-                      onClick={(e) => handleEdit(expense, e)}
-                      className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all cursor-pointer"
-                      title="Edit record"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  {!debtClass && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => handleEdit(expense, e)}
+                        className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all cursor-pointer"
+                        title="Edit record"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
 
-                  <button
-                    type="button"
-                    onClick={(e) => handleDeleteExpense(expense.id, e)}
-                    className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
-                    title="Delete record"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteExpense(expense.id, e)}
+                        className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
+                        title="Delete record"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
