@@ -12,7 +12,7 @@ import {
   Plane,
   MoreHorizontal,
   Banknote,
-  Wallet,
+  CreditCard,
   ArrowLeftRight,
   HandCoins,
   Gift,
@@ -30,12 +30,12 @@ interface RecentTransactionsProps {
 }
 
 const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
-  Food: <Utensils className="w-3.5 h-3.5 text-emerald-400" />,
-  Utilities: <Lightbulb className="w-3.5 h-3.5 text-amber-400" />,
-  Transport: <Bus className="w-3.5 h-3.5 text-cyan-400" />,
-  Social: <Users className="w-3.5 h-3.5 text-purple-400" />,
-  Travel: <Plane className="w-3.5 h-3.5 text-rose-400" />,
-  Other: <MoreHorizontal className="w-3.5 h-3.5 text-slate-400" />,
+  Food: <Utensils className="w-3.5 h-3.5 text-slate-600" />,
+  Utilities: <Lightbulb className="w-3.5 h-3.5 text-slate-600" />,
+  Transport: <Bus className="w-3.5 h-3.5 text-slate-600" />,
+  Social: <Users className="w-3.5 h-3.5 text-slate-600" />,
+  Travel: <Plane className="w-3.5 h-3.5 text-slate-600" />,
+  Other: <MoreHorizontal className="w-3.5 h-3.5 text-slate-600" />,
 };
 
 function formatRelativeTime(isoString: string): string {
@@ -58,10 +58,6 @@ function formatRelativeTime(isoString: string): string {
   }
 }
 
-/**
- * Classify a debt-related expense into a display category.
- * Returns null for regular (non-debt) expenses.
- */
 type DebtClass =
   | 'originLend'
   | 'originBorrow'
@@ -89,10 +85,7 @@ function classifyDebtExpense(e: ExpenseRecord): DebtClass | null {
   return isIncome ? 'repaidIn' : 'repaidOut';
 }
 
-const DEBT_META: Record<
-  DebtClass,
-  { badge: string; isWalletNeutral: boolean }
-> = {
+const DEBT_META: Record<DebtClass, { badge: string; isWalletNeutral: boolean }> = {
   originLend: { badge: 'Lent out', isWalletNeutral: false },
   originBorrow: { badge: 'Borrowed', isWalletNeutral: false },
   repaidIn: { badge: 'Received', isWalletNeutral: false },
@@ -136,9 +129,9 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
 
   if (merged.length === 0) {
     return (
-      <div className="w-full text-center py-8 px-4 rounded-2xl bg-slate-900/40 border border-slate-800/60 text-slate-500">
-        <p className="text-xs font-medium">No activity logged yet.</p>
-        <p className="text-[11px] text-slate-600 mt-0.5">
+      <div className="w-full text-center py-8 px-4 rounded-2xl bg-white border border-slate-200 border-dashed">
+        <p className="text-xs font-medium text-slate-500">No activity logged yet.</p>
+        <p className="text-[11px] text-slate-400 mt-0.5">
           Enter an amount above to record your first transaction.
         </p>
       </div>
@@ -151,7 +144,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
           Recent activity
         </h2>
-        <span className="text-[11px] font-mono text-slate-500">
+        <span className="text-[11px] font-mono text-slate-400">
           {merged.length} recorded
         </span>
       </div>
@@ -164,24 +157,24 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
             return (
               <div
                 key={t.id}
-                className="group flex items-center justify-between p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-900 border border-slate-800/80 transition-all hover:border-slate-700/80"
+                className="group flex items-center justify-between p-3 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 transition-all shadow-sm"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/40 flex items-center justify-center shrink-0">
-                    <ArrowLeftRight className="w-3.5 h-3.5 text-amber-400" />
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
+                    <ArrowLeftRight className="w-3.5 h-3.5 text-amber-600" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-xs font-semibold text-amber-300 truncate">
+                    <span className="text-xs font-semibold text-amber-700 truncate">
                       {label}
                     </span>
-                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
                       <span>{formatRelativeTime(t.timestamp)}</span>
                       <span>•</span>
                       <span className="flex items-center gap-1">
                         {t.isSynced ? (
-                          <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                          <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                         ) : (
-                          <Clock className="w-3 h-3 text-slate-500" />
+                          <Clock className="w-3 h-3 text-slate-400" />
                         )}
                         <span className="text-[10px]">
                           {t.isSynced ? 'Synced' : 'Offline'}
@@ -191,13 +184,13 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 ml-2">
-                  <p className="text-sm font-bold font-mono text-amber-300 tracking-tight">
+                  <p className="text-sm font-bold font-mono text-amber-700 tracking-tight">
                     {formatCurrency(t.amountALL, 'ALL')}
                   </p>
                   <button
                     type="button"
                     onClick={(e) => handleDeleteTransfer(t.id, e)}
-                    className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
+                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
                     title="Delete transfer"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -215,6 +208,13 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           const isWalletNeutral = debtMeta?.isWalletNeutral ?? false;
           const isIncome = expense.amount < 0;
 
+          // Color theme
+          const theme = debtClass
+            ? { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', icon: 'text-indigo-500' }
+            : isCash
+              ? { bg: 'bg-teal-50', border: 'border-teal-200', text: 'text-teal-700', icon: 'text-teal-600' }
+              : { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-700', icon: 'text-rose-500' };
+
           let displayAmount: string;
           let amountColor: string;
           let amountHint: string | null = null;
@@ -229,18 +229,18 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                 Math.abs(expense.amount),
                 expense.currency
               )}`;
-              amountColor = isIncome ? 'text-emerald-300' : 'text-rose-300';
+              amountColor = isIncome ? 'text-emerald-600' : 'text-rose-600';
             }
           } else {
             displayAmount = formatCurrency(expense.amount, expense.currency);
-            amountColor = 'text-white';
+            amountColor = 'text-slate-900';
           }
 
           let icon: React.ReactNode;
           if (debtClass === 'offsetIn' || debtClass === 'gift') {
-            icon = <Gift className="w-3.5 h-3.5 text-purple-400" />;
+            icon = <Gift className={cn('w-3.5 h-3.5', theme.icon)} />;
           } else if (debtClass) {
-            icon = <HandCoins className="w-3.5 h-3.5 text-purple-400" />;
+            icon = <HandCoins className={cn('w-3.5 h-3.5', theme.icon)} />;
           } else {
             icon = CATEGORY_ICONS[expense.category] || <MoreHorizontal className="w-3.5 h-3.5" />;
           }
@@ -249,21 +249,15 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
             <div
               key={expense.id}
               className={cn(
-                'group flex items-center justify-between p-3 rounded-2xl bg-slate-900/80 hover:bg-slate-900 transition-all border',
-                debtClass && isWalletNeutral
-                  ? 'border-purple-500/20 border-dashed hover:border-purple-500/40'
-                  : debtClass
-                    ? 'border-purple-500/30 hover:border-purple-500/50'
-                    : 'border-slate-800/80 hover:border-slate-700/80'
+                'group flex items-center justify-between p-3 rounded-2xl bg-white hover:bg-slate-50 transition-all border shadow-sm',
+                isWalletNeutral ? 'border-dashed border-slate-300' : 'border-slate-200'
               )}
             >
               <div className="flex items-center gap-3 min-w-0">
                 <div
                   className={cn(
                     'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border',
-                    debtClass
-                      ? 'bg-purple-500/10 border-purple-500/30'
-                      : 'bg-slate-800/90 border-slate-700/50'
+                    debtClass ? cn(theme.bg, theme.border) : 'bg-slate-100 border-slate-200'
                   )}
                 >
                   {icon}
@@ -271,21 +265,21 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
 
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-xs font-semibold text-slate-200 truncate">
+                    <span className="text-xs font-semibold text-slate-900 truncate">
                       {expense.itemName || expense.category}
                     </span>
                     {expense.vendorType && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-800 text-slate-400 font-medium">
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-500 font-medium">
                         {expense.vendorType}
                       </span>
                     )}
                     {expense.estimatedMeals && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-emerald-500/10 text-emerald-400 font-medium">
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 font-medium">
                         {expense.estimatedMeals} meal{expense.estimatedMeals > 1 ? 's' : ''}
                       </span>
                     )}
                     {debtMeta && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-purple-500/10 text-purple-300 font-medium">
+                      <span className={cn('text-[10px] px-1.5 py-0.2 rounded-md font-medium', theme.bg, theme.text)}>
                         {debtMeta.badge}
                       </span>
                     )}
@@ -294,22 +288,22 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                         className={cn(
                           'text-[10px] px-1.5 py-0.2 rounded-md font-medium flex items-center gap-0.5',
                           isCash
-                            ? 'bg-emerald-500/10 text-emerald-400'
-                            : 'bg-cyan-500/10 text-cyan-400'
+                            ? 'bg-teal-50 text-teal-700'
+                            : 'bg-rose-50 text-rose-700'
                         )}
                         title={isCash ? 'Cash' : 'Bank / card'}
                       >
                         {isCash ? (
                           <Banknote className="w-2.5 h-2.5" />
                         ) : (
-                          <Wallet className="w-2.5 h-2.5" />
+                          <CreditCard className="w-2.5 h-2.5" />
                         )}
                         {isCash ? 'Cash' : 'Card'}
                       </span>
                     )}
                   </div>
 
-                  <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
+                  <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
                     <span>{formatRelativeTime(expense.timestamp)}</span>
                     <span>•</span>
                     <span
@@ -321,9 +315,9 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                       }
                     >
                       {expense.isSynced ? (
-                        <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                       ) : (
-                        <Clock className="w-3 h-3 text-slate-500" />
+                        <Clock className="w-3 h-3 text-slate-400" />
                       )}
                       <span className="text-[10px]">
                         {expense.isSynced ? 'Synced' : 'Offline'}
@@ -339,12 +333,12 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                     {displayAmount}
                   </p>
                   {isForeignCurrency && (
-                    <p className="text-[10px] font-mono text-emerald-400 font-medium">
+                    <p className="text-[10px] font-mono text-emerald-600 font-medium">
                       ≈ {formatCurrency(expense.amountInALL, 'ALL')}
                     </p>
                   )}
                   {amountHint && (
-                    <p className="text-[9px] text-slate-600 font-medium italic">
+                    <p className="text-[9px] text-slate-400 font-medium italic">
                       {amountHint}
                     </p>
                   )}
@@ -356,7 +350,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                       <button
                         type="button"
                         onClick={(e) => handleEdit(expense, e)}
-                        className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all cursor-pointer"
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all cursor-pointer"
                         title="Edit record"
                       >
                         <Pencil className="w-3.5 h-3.5" />
@@ -365,7 +359,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                       <button
                         type="button"
                         onClick={(e) => handleDeleteExpense(expense.id, e)}
-                        className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all cursor-pointer"
+                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
                         title="Delete record"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

@@ -12,11 +12,9 @@ export function App() {
   const [tab, setTab] = useState<Tab>('log');
 
   return (
-    <div className="h-dvh bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200 overflow-hidden">
-      {/* App Header */}
+    <div className="h-dvh bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-emerald-500/20 selection:text-emerald-900 overflow-hidden">
       <Header unsyncedCount={unsyncedCount} />
 
-      {/* Main Content Area. All tabs stay mounted so form state survives switching. */}
       <main className="flex-1 min-h-0 overflow-y-auto pb-28 sm:pb-32">
         <div className={tab === 'log' ? 'w-full' : 'hidden'}>
           <QuickEntryView />

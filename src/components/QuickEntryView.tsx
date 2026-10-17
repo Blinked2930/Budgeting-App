@@ -15,7 +15,7 @@ import {
   CalendarDays,
   Pencil,
   X,
-  Wallet,
+  CreditCard,
   Banknote,
   ArrowLeftRight,
   HandCoins,
@@ -64,12 +64,12 @@ const MODES: { id: EntryMode; label: string; icon: React.ReactNode }[] = [
 ];
 
 const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
-  Food: <Utensils className="w-4 h-4 text-emerald-400" />,
-  Utilities: <Lightbulb className="w-4 h-4 text-amber-400" />,
-  Transport: <Bus className="w-4 h-4 text-cyan-400" />,
-  Social: <Users className="w-4 h-4 text-purple-400" />,
-  Travel: <Plane className="w-4 h-4 text-rose-400" />,
-  Other: <MoreHorizontal className="w-4 h-4 text-slate-400" />,
+  Food: <Utensils className="w-4 h-4 text-slate-600" />,
+  Utilities: <Lightbulb className="w-4 h-4 text-slate-600" />,
+  Transport: <Bus className="w-4 h-4 text-slate-600" />,
+  Social: <Users className="w-4 h-4 text-slate-600" />,
+  Travel: <Plane className="w-4 h-4 text-slate-600" />,
+  Other: <MoreHorizontal className="w-4 h-4 text-slate-600" />,
 };
 
 export const QuickEntryView: React.FC = () => {
@@ -367,16 +367,16 @@ export const QuickEntryView: React.FC = () => {
 
   return (
     <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
-      <div className="flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-slate-900/90 border border-slate-800 shadow-sm">
+      <div className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 shadow-sm">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs text-slate-400 font-medium">Logged Total</span>
+          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span className="text-xs text-slate-500 font-medium">Logged Total</span>
         </div>
         <div className="text-right">
-          <span className="text-sm font-mono font-bold text-white tracking-tight">
+          <span className="text-sm font-mono font-bold text-slate-900 tracking-tight">
             {formatCurrency(totalSpentALL, 'ALL')}
           </span>
-          <span className="text-[10px] text-slate-500 ml-1.5 font-medium">
+          <span className="text-[10px] text-slate-400 ml-1.5 font-medium">
             ({expenses.length} logs)
           </span>
         </div>
@@ -385,18 +385,18 @@ export const QuickEntryView: React.FC = () => {
       <form
         ref={formRef}
         onSubmit={handleSave}
-        className="relative bg-slate-900/90 border border-slate-800/90 rounded-3xl p-6 shadow-2xl space-y-5"
+        className="relative bg-white border border-slate-200 rounded-3xl p-6 shadow-xl shadow-slate-200/50 space-y-5"
       >
         {editingId && (
-          <div className="flex items-center justify-between p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/40 text-xs">
-            <div className="flex items-center gap-1.5 text-amber-300 font-medium">
+          <div className="flex items-center justify-between p-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs">
+            <div className="flex items-center gap-1.5 text-amber-700 font-medium">
               <Pencil className="w-3.5 h-3.5" />
               <span>Editing expense</span>
             </div>
             <button
               type="button"
               onClick={handleCancelEdit}
-              className="text-[11px] text-amber-400 hover:underline cursor-pointer flex items-center gap-1"
+              className="text-[11px] text-amber-700 hover:underline cursor-pointer flex items-center gap-1"
             >
               <X className="w-3 h-3" />
               Cancel
@@ -411,7 +411,7 @@ export const QuickEntryView: React.FC = () => {
         <div className="text-center py-1">
           <div className="inline-flex items-baseline justify-center gap-2 max-w-full">
             {currency !== 'ALL' && (
-              <span className="text-2xl font-mono font-medium text-slate-500 select-none">
+              <span className="text-2xl font-mono font-medium text-slate-400 select-none">
                 {currency === 'EUR' ? '€' : '$'}
               </span>
             )}
@@ -423,13 +423,13 @@ export const QuickEntryView: React.FC = () => {
               value={amountStr}
               onChange={(e) => setAmountStr(e.target.value)}
               placeholder="0"
-              className="w-full max-w-[280px] bg-transparent text-center font-mono text-5xl font-extrabold text-white placeholder-slate-700 focus:outline-none tracking-tight selection:bg-emerald-500/40"
+              className="w-full max-w-[280px] bg-transparent text-center font-mono text-5xl font-extrabold text-slate-900 placeholder-slate-300 focus:outline-none tracking-tight selection:bg-emerald-500/20"
               autoFocus
             />
           </div>
 
           {currency !== 'ALL' && parsedAmount > 0 && (
-            <p className="text-xs font-mono text-emerald-400 mt-1 font-semibold">
+            <p className="text-xs font-mono text-emerald-600 mt-1 font-semibold">
               ≈ {formatCurrency(normalizedALL, 'ALL')} base Lek
             </p>
           )}
@@ -440,7 +440,7 @@ export const QuickEntryView: React.FC = () => {
                 key={step}
                 type="button"
                 onClick={() => handleQuickAdd(step)}
-                className="px-2.5 py-1 rounded-xl bg-slate-800/70 hover:bg-slate-700/80 border border-slate-700/50 text-[11px] font-mono font-semibold text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95"
+                className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 text-[11px] font-mono font-semibold text-slate-600 transition-all cursor-pointer active:scale-95"
               >
                 +{step}
               </button>
@@ -449,7 +449,7 @@ export const QuickEntryView: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setAmountStr('')}
-                className="px-2 py-1 rounded-xl bg-slate-800/40 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 text-[11px] font-medium transition-colors cursor-pointer"
+                className="px-2 py-1 rounded-xl bg-slate-100 hover:bg-rose-100 text-slate-500 hover:text-rose-600 text-[11px] font-medium transition-colors cursor-pointer"
                 title="Clear"
               >
                 <RotateCcw className="w-3 h-3" />
@@ -459,7 +459,7 @@ export const QuickEntryView: React.FC = () => {
         </div>
 
         {!editingId && (
-          <div className="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-slate-950 border border-slate-800">
+          <div className="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-slate-100 border border-slate-200">
             {MODES.map((m) => {
               const active = mode === m.id;
               return (
@@ -470,8 +470,8 @@ export const QuickEntryView: React.FC = () => {
                   className={cn(
                     'flex flex-col items-center gap-0.5 py-2 rounded-xl text-[10px] font-semibold transition-colors cursor-pointer',
                     active
-                      ? 'bg-emerald-500/15 text-emerald-300'
-                      : 'text-slate-500 hover:text-slate-300'
+                      ? 'bg-white text-emerald-600 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-600'
                   )}
                 >
                   {m.icon}
@@ -486,10 +486,10 @@ export const QuickEntryView: React.FC = () => {
           <>
             <div>
               <div className="flex items-center justify-between mb-2 px-1">
-                <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   Category
                 </span>
-                <span className="text-[11px] text-emerald-400 font-medium">
+                <span className="text-[11px] text-emerald-600 font-medium">
                   {subcategory ? `${category} · ${subcategory}` : category}
                 </span>
               </div>
@@ -504,8 +504,8 @@ export const QuickEntryView: React.FC = () => {
                       className={cn(
                         'flex items-center gap-2 p-2.5 rounded-2xl border text-xs font-semibold transition-all cursor-pointer text-left',
                         selected
-                          ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300 scale-[1.02]'
-                          : 'bg-slate-950/60 border-slate-800/80 text-slate-400 hover:text-slate-200'
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm'
+                          : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800'
                       )}
                     >
                       <span className="shrink-0">{CATEGORY_ICONS[cat]}</span>
@@ -517,14 +517,14 @@ export const QuickEntryView: React.FC = () => {
             </div>
 
             <div className="flex justify-center">
-              <div className="inline-flex p-1 rounded-2xl bg-slate-950 border border-slate-800">
+              <div className="inline-flex p-1 rounded-2xl bg-slate-100 border border-slate-200">
                 <button
                   type="button"
                   onClick={() => setPaidWith('Cash')}
                   className={cn(
                     'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
                     paidWith === 'Cash'
-                      ? 'bg-emerald-500/20 text-emerald-300'
+                      ? 'bg-white text-teal-700 shadow-sm'
                       : 'text-slate-400'
                   )}
                 >
@@ -537,18 +537,18 @@ export const QuickEntryView: React.FC = () => {
                   className={cn(
                     'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
                     paidWith === 'Card'
-                      ? 'bg-cyan-500/20 text-cyan-300'
+                      ? 'bg-white text-rose-700 shadow-sm'
                       : 'text-slate-400'
                   )}
                 >
-                  <Wallet className="w-3.5 h-3.5" />
+                  <CreditCard className="w-3.5 h-3.5" />
                   Card
                 </button>
               </div>
             </div>
 
             <div className="flex items-center justify-between gap-3 px-1">
-              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                 <CalendarDays className="w-3.5 h-3.5" />
                 Date
               </span>
@@ -557,7 +557,7 @@ export const QuickEntryView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setDateOverride(null)}
-                    className="text-[11px] text-emerald-400 hover:underline cursor-pointer"
+                    className="text-[11px] text-emerald-600 hover:underline cursor-pointer"
                   >
                     Today
                   </button>
@@ -571,19 +571,19 @@ export const QuickEntryView: React.FC = () => {
                     setDateOverride(v && v !== todayStr ? v : null);
                   }}
                   className={cn(
-                    'bg-slate-950 border rounded-xl px-2.5 py-1.5 text-xs font-mono focus:outline-none',
+                    'bg-slate-50 border rounded-xl px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:bg-white',
                     dateOverride
-                      ? 'border-amber-500/60 text-amber-300'
-                      : 'border-slate-800 text-slate-300'
+                      ? 'border-amber-400 text-amber-700'
+                      : 'border-slate-200 text-slate-600'
                   )}
                 />
               </div>
             </div>
 
             {hasAdvancedData && (
-              <div className="p-2.5 rounded-2xl bg-slate-950/70 border border-slate-800 text-xs flex items-center justify-between">
-                <div className="flex items-center gap-1.5 truncate text-slate-300 font-medium">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs flex items-center justify-between">
+                <div className="flex items-center gap-1.5 truncate text-slate-600 font-medium">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                   <span className="truncate">
                     {itemName || subcategory || 'Item'}{' '}
                     {vendorType ? `• ${vendorType}` : ''}{' '}
@@ -596,7 +596,7 @@ export const QuickEntryView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsDrawerOpen(true)}
-                  className="text-[11px] text-emerald-400 hover:underline shrink-0 ml-2 cursor-pointer"
+                  className="text-[11px] text-emerald-600 hover:underline shrink-0 ml-2 cursor-pointer"
                 >
                   Edit
                 </button>
@@ -607,7 +607,7 @@ export const QuickEntryView: React.FC = () => {
 
         {mode === 'withdraw' && (
           <div className="space-y-3">
-            <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
               Direction
             </p>
             <div className="grid grid-cols-2 gap-2">
@@ -617,8 +617,8 @@ export const QuickEntryView: React.FC = () => {
                 className={cn(
                   'p-3 rounded-2xl border text-xs font-semibold transition-colors cursor-pointer',
                   withdrawDirection === 'BankToCash'
-                    ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                    ? 'bg-amber-50 border-amber-500 text-amber-700'
+                    : 'bg-white border-slate-200 text-slate-500'
                 )}
               >
                 Bank → Cash
@@ -629,8 +629,8 @@ export const QuickEntryView: React.FC = () => {
                 className={cn(
                   'p-3 rounded-2xl border text-xs font-semibold transition-colors cursor-pointer',
                   withdrawDirection === 'CashToBank'
-                    ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                    ? 'bg-amber-50 border-amber-500 text-amber-700'
+                    : 'bg-white border-slate-200 text-slate-500'
                 )}
               >
                 Cash → Bank
@@ -642,7 +642,7 @@ export const QuickEntryView: React.FC = () => {
         {mode === 'lend' && (
           <div className="space-y-3">
             <div>
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
                 Person
               </p>
               <input
@@ -651,7 +651,7 @@ export const QuickEntryView: React.FC = () => {
                 onChange={(e) => setLendPerson(e.target.value)}
                 placeholder="Who?"
                 list="lekflow-lend-persons"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
               />
               <datalist id="lekflow-lend-persons">
                 {lendSuggestions.map((p) => (
@@ -667,8 +667,8 @@ export const QuickEntryView: React.FC = () => {
                 className={cn(
                   'flex items-center justify-center gap-1.5 py-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer',
                   lendDirection === 'OwedToMe'
-                    ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                    ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                    : 'bg-white border-slate-200 text-slate-500'
                 )}
               >
                 <ArrowUpRight className="w-3.5 h-3.5" />
@@ -680,8 +680,8 @@ export const QuickEntryView: React.FC = () => {
                 className={cn(
                   'flex items-center justify-center gap-1.5 py-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer',
                   lendDirection === 'iOwe'
-                    ? 'bg-rose-500/15 border-rose-500 text-rose-300'
-                    : 'bg-slate-950 border-slate-800 text-slate-400'
+                    ? 'bg-rose-50 border-rose-500 text-rose-700'
+                    : 'bg-white border-slate-200 text-slate-500'
                 )}
               >
                 <ArrowDownLeft className="w-3.5 h-3.5" />
@@ -690,17 +690,17 @@ export const QuickEntryView: React.FC = () => {
             </div>
 
             <div>
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
                 Money moved via
               </p>
-              <div className="inline-flex w-full p-1 rounded-2xl bg-slate-950 border border-slate-800">
+              <div className="inline-flex w-full p-1 rounded-2xl bg-slate-100 border border-slate-200">
                 <button
                   type="button"
                   onClick={() => setPaidWith('Cash')}
                   className={cn(
                     'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
                     paidWith === 'Cash'
-                      ? 'bg-emerald-500/20 text-emerald-300'
+                      ? 'bg-white text-teal-700 shadow-sm'
                       : 'text-slate-400'
                   )}
                 >
@@ -713,18 +713,18 @@ export const QuickEntryView: React.FC = () => {
                   className={cn(
                     'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
                     paidWith === 'Card'
-                      ? 'bg-cyan-500/20 text-cyan-300'
+                      ? 'bg-white text-rose-700 shadow-sm'
                       : 'text-slate-400'
                   )}
                 >
-                  <Wallet className="w-3.5 h-3.5" />
+                  <CreditCard className="w-3.5 h-3.5" />
                   Bank
                 </button>
               </div>
             </div>
 
             <div>
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+              <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
                 Note (optional)
               </p>
               <input
@@ -732,7 +732,7 @@ export const QuickEntryView: React.FC = () => {
                 value={lendNote}
                 onChange={(e) => setLendNote(e.target.value)}
                 placeholder="What's it for?"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
               />
             </div>
           </div>
@@ -741,12 +741,12 @@ export const QuickEntryView: React.FC = () => {
         {mode === 'settle' && (
           <div className="space-y-3">
             {openDebts.length === 0 ? (
-              <div className="text-center py-4 px-3 text-xs text-slate-500 rounded-xl bg-slate-950/60 border border-slate-800">
+              <div className="text-center py-4 px-3 text-xs text-slate-500 rounded-xl bg-slate-50 border border-slate-200">
                 No open debts. Use the Lend tab to create one first.
               </div>
             ) : (
               <>
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   Pick a debt
                 </p>
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
@@ -760,21 +760,21 @@ export const QuickEntryView: React.FC = () => {
                         className={cn(
                           'w-full flex items-center justify-between p-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer',
                           selected
-                            ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
-                            : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:text-slate-200'
+                            ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                            : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800'
                         )}
                       >
                         <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-6 h-6 rounded-lg bg-purple-500/15 border border-purple-500/40 flex items-center justify-center shrink-0">
+                          <div className="w-6 h-6 rounded-lg bg-indigo-100 border border-indigo-200 flex items-center justify-center shrink-0">
                             {d.direction === 'OwedToMe' ? (
-                              <ArrowUpRight className="w-3 h-3 text-purple-400" />
+                              <ArrowUpRight className="w-3 h-3 text-indigo-600" />
                             ) : (
-                              <ArrowDownLeft className="w-3 h-3 text-purple-400" />
+                              <ArrowDownLeft className="w-3 h-3 text-indigo-600" />
                             )}
                           </div>
                           <div className="text-left min-w-0">
                             <p className="text-xs truncate">{d.counterparty}</p>
-                            <p className="text-[10px] text-slate-500">
+                            <p className="text-[10px] text-slate-400">
                               {d.direction === 'OwedToMe' ? 'owes you' : 'you owe'}
                             </p>
                           </div>
@@ -790,17 +790,17 @@ export const QuickEntryView: React.FC = () => {
                 {selectedDebt && (
                   <>
                     <div>
-                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                      <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
                         Settled with
                       </p>
-                      <div className="inline-flex w-full p-1 rounded-2xl bg-slate-950 border border-slate-800">
+                      <div className="inline-flex w-full p-1 rounded-2xl bg-slate-100 border border-slate-200">
                         <button
                           type="button"
                           onClick={() => setPaidWith('Cash')}
                           className={cn(
                             'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
                             paidWith === 'Cash'
-                              ? 'bg-emerald-500/20 text-emerald-300'
+                              ? 'bg-white text-teal-700 shadow-sm'
                               : 'text-slate-400'
                           )}
                         >
@@ -813,23 +813,23 @@ export const QuickEntryView: React.FC = () => {
                           className={cn(
                             'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
                             paidWith === 'Card'
-                              ? 'bg-cyan-500/20 text-cyan-300'
+                              ? 'bg-white text-rose-700 shadow-sm'
                               : 'text-slate-400'
                           )}
                         >
-                          <Wallet className="w-3.5 h-3.5" />
+                          <CreditCard className="w-3.5 h-3.5" />
                           Bank
                         </button>
                       </div>
                     </div>
 
                     {parsedAmount > selectedDebt.remainingALL && (
-                      <p className="text-[10px] text-amber-400 px-1">
+                      <p className="text-[10px] text-amber-600 px-1">
                         Capped at remaining ({formatCurrency(selectedDebt.remainingALL, 'ALL')})
                       </p>
                     )}
                     {parsedAmount > 0 && parsedAmount < selectedDebt.remainingALL && (
-                      <p className="text-[10px] text-amber-400 px-1">
+                      <p className="text-[10px] text-amber-600 px-1">
                         Partial: {formatCurrency(parsedAmount, 'ALL')} of{' '}
                         {formatCurrency(selectedDebt.remainingALL, 'ALL')}
                       </p>
@@ -840,7 +840,7 @@ export const QuickEntryView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setIsDebtsPanelOpen(true)}
-                  className="text-[11px] text-slate-400 hover:text-white underline cursor-pointer"
+                  className="text-[11px] text-slate-400 hover:text-slate-600 underline cursor-pointer"
                 >
                   Manage all debts →
                 </button>
@@ -854,10 +854,10 @@ export const QuickEntryView: React.FC = () => {
             type="submit"
             disabled={!isValid || isSaving}
             className={cn(
-              'w-full py-4 px-6 rounded-2xl font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 shadow-xl cursor-pointer active:scale-[0.98]',
+              'w-full py-4 px-6 rounded-2xl font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 shadow-lg cursor-pointer active:scale-[0.98]',
               isValid
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 shadow-emerald-500/25'
-                : 'bg-slate-800/60 text-slate-500 border border-slate-800 cursor-not-allowed shadow-none'
+                ? 'bg-emerald-600 text-white shadow-emerald-500/20 hover:bg-emerald-700'
+                : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none'
             )}
           >
             <Zap className="w-5 h-5 fill-current" />
@@ -869,16 +869,16 @@ export const QuickEntryView: React.FC = () => {
             <button
               type="button"
               onClick={() => setIsDrawerOpen(true)}
-              className="w-full py-3 px-4 rounded-2xl bg-slate-950 hover:bg-slate-800/70 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
             >
-              <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
+              <SlidersHorizontal className="w-4 h-4 text-emerald-600" />
               <span>Advanced Entry</span>
             </button>
           )}
         </div>
 
         {feedback && (
-          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 w-11/12 max-w-md bg-emerald-950/90 border border-emerald-500/60 text-emerald-200 px-3 py-2 rounded-xl text-xs font-medium text-center shadow-xl backdrop-blur-md flex items-center justify-center gap-1.5">
+          <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-30 w-11/12 max-w-md bg-slate-900 border border-slate-700 text-white px-3 py-2 rounded-xl text-xs font-medium text-center shadow-xl flex items-center justify-center gap-1.5 animate-in fade-in slide-in-from-bottom-2">
             <Zap className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400" />
             <span>{feedback}</span>
           </div>

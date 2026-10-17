@@ -1,18 +1,16 @@
 // src/utils/insights.ts
-import type { Category, Currency, ExpenseRecord, FoodType, VendorType } from '../types';
+import type { Category, ExpenseRecord, PaymentSource } from '../types';
 
 export interface InsightFilters {
-    vendor: VendorType | 'all';
-    currency: Currency | 'all';
+    category: Category | 'all';
+    paidWith: PaymentSource | 'all';
     month: string;
-    foodType: FoodType | 'all';
 }
 
 export const DEFAULT_FILTERS: InsightFilters = {
-    vendor: 'all',
-    currency: 'all',
+    category: 'all',
+    paidWith: 'all',
     month: 'all',
-    foodType: 'all',
 };
 
 export function monthKey(timestamp: string): string {
@@ -43,9 +41,8 @@ export function filterExpenses(
 ): ExpenseRecord[] {
     return expenses.filter((e) => {
         if (e.debtRelated) return false;
-        if (filters.vendor !== 'all' && e.vendorType !== filters.vendor) return false;
-        if (filters.currency !== 'all' && e.currency !== filters.currency) return false;
-        if (filters.foodType !== 'all' && e.foodType !== filters.foodType) return false;
+        if (filters.category !== 'all' && e.category !== filters.category) return false;
+        if (filters.paidWith !== 'all' && (e.paidWith ?? 'Card') !== filters.paidWith) return false;
         if (filters.month !== 'all' && monthKey(e.timestamp) !== filters.month) return false;
         return true;
     });
@@ -105,21 +102,13 @@ export function compareMarkets(expenses: ExpenseRecord[]): MarketComparison {
     return { pazar, store, pazarCheaperByPct };
 }
 
-// ---------- Category breakdown ----------
-
 export interface CategoryStat {
     category: Category;
     total: number;
     count: number;
-    /** 0–100. Sum of all stats' percents is 100 (or 0 if grandTotal is 0). */
     percent: number;
 }
 
-/**
- * Sum spending per category. Skips debt settlement rows (not consumption).
- * Uses budgetAmountALL ?? amountInALL so shared expenses count only your share.
- * Wallet-neutral gifts and offsets count — they're real budget consumption.
- */
 export function aggregateByCategory(expenses: ExpenseRecord[]): CategoryStat[] {
     const map = new Map<Category, { total: number; count: number }>();
     let grandTotal = 0;
@@ -145,8 +134,6 @@ export function aggregateByCategory(expenses: ExpenseRecord[]): CategoryStat[] {
         .sort((a, b) => b.total - a.total);
 }
 
-// ---------- Cash vs card split ----------
-
 export interface PaidWithStat {
     cash: number;
     card: number;
@@ -154,10 +141,6 @@ export interface PaidWithStat {
     cardPct: number;
 }
 
-/**
- * Split total spending between cash and bank. Same exclusion rules as
- * aggregate — settlements skipped, budget-effective amounts used.
- */
 export function aggregatePaidWith(expenses: ExpenseRecord[]): PaidWithStat {
     let cash = 0;
     let card = 0;
