@@ -2,7 +2,6 @@
 import React from 'react';
 import {
   Trash2,
-  Pencil,
   CheckCircle2,
   Clock,
   Utensils,
@@ -106,19 +105,18 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   onEdit,
 }) => {
   const handleDeleteExpense = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+    e.stopPropagation(); // Prevent opening the edit modal
     await deleteExpense(id);
     if (onDeleted) onDeleted();
   };
 
   const handleDeleteTransfer = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+    e.stopPropagation(); // Prevent row click
     await deleteTransfer(id);
     if (onDeleted) onDeleted();
   };
 
-  const handleEdit = (expense: ExpenseRecord, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleRowClick = (expense: ExpenseRecord) => {
     if (onEdit) onEdit(expense);
   };
 
@@ -187,9 +185,8 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                   <p className="text-sm font-bold font-mono text-amber-700 tracking-tight">
                     {formatCurrency(t.amountALL, 'ALL')}
                   </p>
-                  {/* Fixed width container ensures amounts align perfectly */}
-                  <div className="flex items-center gap-0.5 w-[52px] justify-end">
-                    <div className="w-[26px]" /> {/* Spacer for missing edit button */}
+                  {/* Fixed width container ensures amounts align perfectly across all rows */}
+                  <div className="flex items-center justify-center w-[26px]">
                     <button
                       type="button"
                       onClick={(e) => handleDeleteTransfer(t.id, e)}
@@ -251,8 +248,9 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           return (
             <div
               key={expense.id}
+              onClick={() => handleRowClick(expense)}
               className={cn(
-                'flex items-center justify-between p-3 rounded-2xl bg-white transition-all border shadow-sm',
+                'flex items-center justify-between p-3 rounded-2xl bg-white transition-all border shadow-sm cursor-pointer hover:border-emerald-300 hover:shadow-md',
                 isWalletNeutral ? 'border-dashed border-slate-300' : 'border-slate-200'
               )}
             >
@@ -332,16 +330,8 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                   )}
                 </div>
 
-                {/* Fixed width container ensures amounts align perfectly */}
-                <div className="flex items-center gap-0.5 w-[52px] justify-end">
-                  <button
-                    type="button"
-                    onClick={(e) => handleEdit(expense, e)}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all cursor-pointer"
-                    title="Edit record"
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </button>
+                {/* Fixed width container ensures amounts align perfectly across all rows */}
+                <div className="flex items-center justify-center w-[26px]">
                   <button
                     type="button"
                     onClick={(e) => handleDeleteExpense(expense.id, e)}
