@@ -42,6 +42,7 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
     const [amountStr, setAmountStr] = useState('');
     const [note, setNote] = useState('');
     const [direction, setDirection] = useState<DebtDirection>('OwedToMe');
+    const [paidWith, setPaidWith] = useState<PaymentSource>('Cash');
     const [isSaving, setIsSaving] = useState(false);
     const [suggestions, setSuggestions] = useState<string[]>([]);
 
@@ -60,12 +61,14 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
             direction,
             amountALL: amount,
             note: note.trim() || undefined,
+            moveWalletWith: paidWith,
         });
         setIsSaving(false);
         setCounterparty('');
         setAmountStr('');
         setNote('');
         setDirection('OwedToMe');
+        setPaidWith('Cash');
         onSaved();
     };
 
@@ -123,6 +126,40 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
                     placeholder="Amount (L)"
                     className="w-full min-w-0 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
                 />
+            </div>
+
+            <div>
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Money moved via
+                </p>
+                <div className="inline-flex w-full p-1 rounded-2xl bg-slate-900 border border-slate-800">
+                    <button
+                        type="button"
+                        onClick={() => setPaidWith('Cash')}
+                        className={cn(
+                            'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer',
+                            paidWith === 'Cash'
+                                ? 'bg-emerald-500/20 text-emerald-300'
+                                : 'text-slate-400 hover:text-slate-200'
+                        )}
+                    >
+                        <Banknote className="w-3 h-3" />
+                        Cash
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setPaidWith('Card')}
+                        className={cn(
+                            'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer',
+                            paidWith === 'Card'
+                                ? 'bg-cyan-500/20 text-cyan-300'
+                                : 'text-slate-400 hover:text-slate-200'
+                        )}
+                    >
+                        <Wallet className="w-3 h-3" />
+                        Bank
+                    </button>
+                </div>
             </div>
 
             <input

@@ -353,6 +353,21 @@ function normalizeKey(name: string): string {
   return name.trim().toLowerCase();
 }
 
+/**
+ * Create a new debt record.
+ *
+ * If `moveWalletWith` is provided AND `sourceExpenseId` is not, a
+ * wallet-moving expense is also created:
+ *
+ *   direction === 'iOwe'     → wallet up by amount (money came IN from lender)
+ *   direction === 'OwedToMe' → wallet down by amount (money went OUT when you lent)
+ *
+ * That expense is marked `debtRelated: true` so it never counts against the
+ * budget. It's purely a wallet movement.
+ *
+ * When `sourceExpenseId` is set (the shared-expense path), the parent
+ * expense already moved the wallet, so we skip the extra movement.
+ */
 export async function addDebt(data: {
   counterparty: string;
   direction: DebtDirection;
@@ -360,6 +375,7 @@ export async function addDebt(data: {
   note?: string;
   sourceExpenseId?: string;
   timestamp?: string;
+  moveWalletWith?: PaymentSource;
 }): Promise<DebtRecord> {
   const now = new Date().toISOString();
   const record: DebtRecord = {
@@ -377,6 +393,23 @@ export async function addDebt(data: {
     updatedAt: now,
   };
   await db.debts.add(record);
+
+  if (data.moveWalletWith && !data.sourceExpenseId) {
+    const signedAmount = data.direction === 'iOwe' ? -data.amountALL : data.amountALL;
+    await addExpense({
+      amount: signedAmount,
+      currency: 'ALL',
+      category: 'Other',
+      itemName:
+        data.direction === 'iOwe'
+          ? `Borrowed from ${record.counterparty}`
+          : `Lent to ${record.counterparty}`,
+      paidWith: data.moveWalletWith,
+      debtId: record.id,
+      debtRelated: true,
+    });
+  }
+
   return record;
 }
 
@@ -405,11 +438,6 @@ export async function deleteDebt(id: string): Promise<void> {
   });
 }
 
-/**
- * Settle part or all of a debt with real cash/bank movement.
- *   OwedToMe → I receive money → negative expense (wallet up, budget skipped)
- *   iOwe     → I pay out       → positive expense (wallet down, budget skipped)
- */
 export async function settleDebtCash(
   debtId: string,
   amountALL: number,
@@ -447,18 +475,6 @@ export async function settleDebtCash(
   });
 }
 
-/**
- * Settle part or all of a debt without cash changing hands.
- *
- *   OwedToMe: they gave me something of equal value instead of paying.
- *             → Wallet unchanged. Budget absorbs the value I received.
- *             (Wallet-neutral expense.)
- *
- *   iOwe:     I gave them something of equal value instead of paying cash.
- *             → Wallet decreases (I paid, with cash or card).
- *             → Budget unchanged (repayment, not consumption).
- *             (Debt-related expense.)
- */
 export async function settleDebtNonCash(
   debtId: string,
   amountALL: number,
@@ -503,14 +519,6 @@ export async function settleDebtNonCash(
   });
 }
 
-/**
- * Write off a debt.
- *
- *   OwedToMe: they never paid; I forgive the debt. It becomes a gift I gave.
- *             Budget absorbs it. Wallet unchanged.
- *
- *   iOwe:     they forgave me. Nothing moves. Just close the debt.
- */
 export async function writeOffDebt(debtId: string): Promise<void> {
   const debt = await getDebt(debtId);
   if (!debt || debt.status !== 'open') return;

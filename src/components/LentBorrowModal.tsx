@@ -1,7 +1,7 @@
 // src/components/LentBorrowModal.tsx
 import React, { useEffect, useState } from 'react';
-import { HandCoins, X, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
-import type { DebtDirection } from '../types';
+import { HandCoins, X, ArrowUpRight, ArrowDownLeft, Banknote, Wallet } from 'lucide-react';
+import type { DebtDirection, PaymentSource } from '../types';
 import { addDebt, getCounterparties } from '../db';
 import { cn } from '../utils/cn';
 
@@ -20,6 +20,7 @@ export const LentBorrowModal: React.FC<LentBorrowModalProps> = ({
     const [amountStr, setAmountStr] = useState('');
     const [note, setNote] = useState('');
     const [direction, setDirection] = useState<DebtDirection>('OwedToMe');
+    const [paidWith, setPaidWith] = useState<PaymentSource>('Cash');
     const [isSaving, setIsSaving] = useState(false);
     const [suggestions, setSuggestions] = useState<string[]>([]);
 
@@ -41,12 +42,14 @@ export const LentBorrowModal: React.FC<LentBorrowModalProps> = ({
             direction,
             amountALL: amount,
             note: note.trim() || undefined,
+            moveWalletWith: paidWith,
         });
         setIsSaving(false);
         setCounterparty('');
         setAmountStr('');
         setNote('');
         setDirection('OwedToMe');
+        setPaidWith('Cash');
         onSaved();
     };
 
@@ -137,6 +140,45 @@ export const LentBorrowModal: React.FC<LentBorrowModalProps> = ({
                         placeholder="0"
                         className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
                     />
+                </div>
+
+                <div>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Money moved via
+                    </p>
+                    <div className="inline-flex w-full p-1 rounded-2xl bg-slate-950 border border-slate-800">
+                        <button
+                            type="button"
+                            onClick={() => setPaidWith('Cash')}
+                            className={cn(
+                                'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                                paidWith === 'Cash'
+                                    ? 'bg-emerald-500/20 text-emerald-300'
+                                    : 'text-slate-400 hover:text-slate-200'
+                            )}
+                        >
+                            <Banknote className="w-3.5 h-3.5" />
+                            Cash
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setPaidWith('Card')}
+                            className={cn(
+                                'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                                paidWith === 'Card'
+                                    ? 'bg-cyan-500/20 text-cyan-300'
+                                    : 'text-slate-400 hover:text-slate-200'
+                            )}
+                        >
+                            <Wallet className="w-3.5 h-3.5" />
+                            Bank
+                        </button>
+                    </div>
+                    <p className="text-[10px] text-slate-600 mt-1.5">
+                        {direction === 'iOwe'
+                            ? 'Where the money landed for you.'
+                            : 'Where the money came out of for you.'}
+                    </p>
                 </div>
 
                 <div>
