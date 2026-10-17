@@ -27,7 +27,7 @@ export default function InstallPrompt({ onBypass }: { onBypass: () => void }) {
   if (isStandalone) return null;
 
   return (
-    <div className="fixed inset-0 bg-white/95 backdrop-blur-md z-[9999] flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
+    <div className="fixed inset-0 min-h-[100dvh] bg-white z-[9999] flex flex-col items-center justify-center p-6 animate-in fade-in duration-300">
       {/* Floating Language Toggle */}
       <button
         onClick={() => setLocalLang((l) => (l === 'en' ? 'sq' : 'en'))}
