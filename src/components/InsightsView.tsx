@@ -26,8 +26,8 @@ import {
     DEFAULT_FILTERS,
     aggregate,
     aggregateByCategory,
+    aggregateByVendor,
     aggregatePaidWith,
-    compareMarkets,
     filterExpenses,
     getMonthOptions,
     monthLabel,
@@ -44,6 +44,18 @@ const CATEGORY_COLORS: Record<Category, { bar: string; text: string; dot: string
     Travel: { bar: 'bg-rose-400', text: 'text-rose-700', dot: 'bg-rose-400' },
     Other: { bar: 'bg-slate-400', text: 'text-slate-700', dot: 'bg-slate-400' },
 };
+
+const VENDOR_COLORS: Record<string, { bar: string; text: string; dot: string }> = {
+    Pazar: { bar: 'bg-emerald-400', text: 'text-emerald-700', dot: 'bg-emerald-400' },
+    Supermarket: { bar: 'bg-cyan-400', text: 'text-cyan-700', dot: 'bg-cyan-400' },
+    'Café': { bar: 'bg-purple-400', text: 'text-purple-700', dot: 'bg-purple-400' },
+    Bakery: { bar: 'bg-amber-400', text: 'text-amber-700', dot: 'bg-amber-400' },
+    Restaurant: { bar: 'bg-rose-400', text: 'text-rose-700', dot: 'bg-rose-400' },
+    Other: { bar: 'bg-slate-400', text: 'text-slate-700', dot: 'bg-slate-400' },
+};
+
+const getVendorColor = (vendor: string) =>
+    VENDOR_COLORS[vendor] ?? { bar: 'bg-slate-400', text: 'text-slate-700', dot: 'bg-slate-400' };
 
 const SectionTitle: React.FC<{ icon: React.ReactNode; children: React.ReactNode }> = ({ icon, children }) => (
     <div className="flex items-center gap-1.5 px-1 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -325,6 +337,57 @@ const CategoryBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }
                         <span className="text-rose-700 font-semibold">{paidWith.cardPct.toFixed(0)}%</span>
                     </span>
                 </div>
+            </div>
+        </Card>
+    );
+};
+
+const VendorBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => {
+    const stats = useMemo(() => aggregateByVendor(expenses), [expenses]);
+
+    if (stats.length === 0) {
+        return (
+            <Card>
+                <p className="text-xs text-slate-500">
+                    Log some expenses with a vendor to see where you spend most.
+                </p>
+            </Card>
+        );
+    }
+
+    const top = stats.slice(0, 6);
+    const grandTotal = stats.reduce((s, v) => s + v.total, 0);
+
+    return (
+        <Card className="space-y-3">
+            <div className="flex items-baseline justify-between">
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Total</span>
+                <span className="text-base font-mono font-bold text-slate-900">{formatCurrency(grandTotal, 'ALL')}</span>
+            </div>
+
+            <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden flex">
+                {top.map((v) => (
+                    <div key={v.vendor} className={cn('h-full', getVendorColor(v.vendor).bar)} style={{ width: `${v.percent}%` }} />
+                ))}
+            </div>
+
+            <div className="space-y-1.5">
+                {top.map((v) => {
+                    const c = getVendorColor(v.vendor);
+                    return (
+                        <div key={v.vendor} className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <span className={cn('w-2 h-2 rounded-full shrink-0', c.dot)} />
+                                <span className={cn('font-semibold truncate', c.text)}>{v.vendor}</span>
+                                <span className="text-[10px] text-slate-400 font-mono">{v.count}×</span>
+                            </div>
+                            <div className="flex items-center gap-2.5 font-mono shrink-0">
+                                <span className="text-[10px] text-slate-400">{v.percent.toFixed(0)}%</span>
+                                <span className="font-bold text-slate-900 text-[11px]">{formatCurrency(v.total, 'ALL')}</span>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
         </Card>
     );
@@ -756,7 +819,6 @@ export const InsightsView: React.FC = () => {
     const [filters, setFilters] = useState<InsightFilters>(DEFAULT_FILTERS);
 
     const overall = useMemo(() => aggregate(expenses), [expenses]);
-    const markets = useMemo(() => compareMarkets(expenses), [expenses]);
     const monthOptions = useMemo(() => getMonthOptions(expenses), [expenses]);
     const filtered = useMemo(() => filterExpenses(expenses, filters), [expenses, filters]);
     const filteredAgg = useMemo(() => aggregate(filtered), [filtered]);
@@ -765,24 +827,6 @@ export const InsightsView: React.FC = () => {
         setFilters((prev) => ({ ...prev, [key]: value }));
 
     const hasActiveFilters = JSON.stringify(filters) !== JSON.stringify(DEFAULT_FILTERS);
-
-    const pazarShare =
-        markets.pazar.total + markets.store.total > 0
-            ? (markets.pazar.total / (markets.pazar.total + markets.store.total)) * 100
-            : 0;
-
-    let marketVerdict: string;
-    if (markets.pazarCheaperByPct !== null) {
-        const pct = Math.round(Math.abs(markets.pazarCheaperByPct));
-        marketVerdict =
-            markets.pazarCheaperByPct >= 0
-                ? `Pazar meals cost about ${pct}% less per meal than the supermarket.`
-                : `Supermarket meals cost about ${pct}% less per meal than the Pazar.`;
-    } else if (markets.pazar.count === 0 || markets.store.count === 0) {
-        marketVerdict = 'Log purchases from both Pazar and Supermarket to compare them.';
-    } else {
-        marketVerdict = 'Add estimated meals in Advanced Entry to compare cost per meal.';
-    }
 
     return (
         <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
@@ -809,46 +853,9 @@ export const InsightsView: React.FC = () => {
 
             <section>
                 <SectionTitle icon={<Store className="w-3.5 h-3.5 text-slate-400" />}>
-                    Pazar vs. supermarket
+                    Where you spend most
                 </SectionTitle>
-                <Card className="space-y-3">
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <p className="text-xs font-bold text-emerald-600">Pazar</p>
-                            <Metric label="Spent" value={formatCurrency(markets.pazar.total, 'ALL')} />
-                            <Metric label="Entries" value={String(markets.pazar.count)} />
-                            <Metric
-                                label="Per meal"
-                                value={
-                                    markets.pazar.costPerMeal !== null
-                                        ? formatCurrency(markets.pazar.costPerMeal, 'ALL')
-                                        : '—'
-                                }
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <p className="text-xs font-bold text-cyan-600">Supermarket</p>
-                            <Metric label="Spent" value={formatCurrency(markets.store.total, 'ALL')} />
-                            <Metric label="Entries" value={String(markets.store.count)} />
-                            <Metric
-                                label="Per meal"
-                                value={
-                                    markets.store.costPerMeal !== null
-                                        ? formatCurrency(markets.store.costPerMeal, 'ALL')
-                                        : '—'
-                                }
-                            />
-                        </div>
-                    </div>
-
-                    {markets.pazar.total + markets.store.total > 0 && (
-                        <div className="h-2 rounded-full bg-cyan-100 overflow-hidden">
-                            <div className="h-full bg-emerald-400" style={{ width: `${pazarShare}%` }} />
-                        </div>
-                    )}
-
-                    <p className="text-xs text-slate-500">{marketVerdict}</p>
-                </Card>
+                <VendorBreakdown expenses={expenses} />
             </section>
 
             <section>

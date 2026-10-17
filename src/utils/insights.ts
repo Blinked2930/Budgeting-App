@@ -84,24 +84,6 @@ export function aggregate(expenses: ExpenseRecord[]): Aggregate {
     };
 }
 
-export interface MarketComparison {
-    pazar: Aggregate;
-    store: Aggregate;
-    pazarCheaperByPct: number | null;
-}
-
-export function compareMarkets(expenses: ExpenseRecord[]): MarketComparison {
-    const pazar = aggregate(expenses.filter((e) => e.vendorType === 'Pazar'));
-    const store = aggregate(expenses.filter((e) => e.vendorType === 'Supermarket'));
-
-    let pazarCheaperByPct: number | null = null;
-    if (pazar.costPerMeal !== null && store.costPerMeal !== null && store.costPerMeal > 0) {
-        pazarCheaperByPct = ((store.costPerMeal - pazar.costPerMeal) / store.costPerMeal) * 100;
-    }
-
-    return { pazar, store, pazarCheaperByPct };
-}
-
 export interface CategoryStat {
     category: Category;
     total: number;
@@ -159,4 +141,42 @@ export function aggregatePaidWith(expenses: ExpenseRecord[]): PaidWithStat {
         cashPct: total > 0 ? (cash / total) * 100 : 0,
         cardPct: total > 0 ? (card / total) * 100 : 0,
     };
+}
+
+export interface VendorStat {
+    vendor: string;
+    total: number;
+    count: number;
+    percent: number;
+}
+
+/**
+ * Sum spending per vendor type. Skips debt settlements (not consumption).
+ * Uses budgetAmountALL ?? amountInALL so shared expenses count only your share.
+ * Expenses without a vendorType get lumped into "Other".
+ */
+export function aggregateByVendor(expenses: ExpenseRecord[]): VendorStat[] {
+    const map = new Map<string, { total: number; count: number }>();
+    let grandTotal = 0;
+
+    for (const e of expenses) {
+        if (e.debtRelated) continue;
+        const amount = e.budgetAmountALL ?? e.amountInALL;
+        const key = e.vendorType ?? 'Other';
+        const existing = map.get(key) ?? { total: 0, count: 0 };
+        existing.total += amount;
+        existing.count += 1;
+        map.set(key, existing);
+        grandTotal += amount;
+    }
+
+    return Array.from(map.entries())
+        .filter(([, s]) => s.total > 0)
+        .map(([vendor, s]) => ({
+            vendor,
+            total: s.total,
+            count: s.count,
+            percent: grandTotal > 0 ? (s.total / grandTotal) * 100 : 0,
+        }))
+        .sort((a, b) => b.total - a.total);
 }
