@@ -96,9 +96,13 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   };
 
   const openDebts = debts.filter((d) => d.status === 'open');
+  // Hide wallet movements that back a debt event — the debt row (or the
+  // balance change) already tells the story. The expense record still
+  // exists for budget math; it's just not shown here.
+  const visibleExpenses = expenses.filter((e) => !e.debtRelated);
 
   const merged: MergedItem[] = [
-    ...expenses.map((e) => ({ kind: 'expense' as const, record: e, timestamp: e.timestamp })),
+    ...visibleExpenses.map((e) => ({ kind: 'expense' as const, record: e, timestamp: e.timestamp })),
     ...transfers.map((t) => ({ kind: 'transfer' as const, record: t, timestamp: t.timestamp })),
     ...openDebts.map((d) => ({ kind: 'debt' as const, record: d, timestamp: d.createdAt })),
   ].sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
@@ -245,7 +249,6 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           const expense = item.record;
           const isForeignCurrency = expense.currency !== 'ALL';
           const isCash = expense.paidWith === 'Cash';
-          const isSettlement = Boolean(expense.debtRelated);
 
           return (
             <div
@@ -272,29 +275,27 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                         {expense.estimatedMeals} meal{expense.estimatedMeals > 1 ? 's' : ''}
                       </span>
                     )}
-                    {isSettlement ? (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-purple-500/10 text-purple-300 font-medium flex items-center gap-0.5">
-                        <HandCoins className="w-2.5 h-2.5" />
-                        Settlement
-                      </span>
-                    ) : (
-                      <span
-                        className={cn(
-                          'text-[10px] px-1.5 py-0.2 rounded-md font-medium flex items-center gap-0.5',
-                          isCash
-                            ? 'bg-emerald-500/10 text-emerald-400'
-                            : 'bg-cyan-500/10 text-cyan-400'
-                        )}
-                        title={isCash ? 'Paid with cash' : 'Paid with card'}
-                      >
-                        {isCash ? (
-                          <Banknote className="w-2.5 h-2.5" />
-                        ) : (
-                          <Wallet className="w-2.5 h-2.5" />
-                        )}
-                        {isCash ? 'Cash' : 'Card'}
+                    {expense.walletNeutral && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-700/50 text-slate-400 font-medium">
+                        no wallet impact
                       </span>
                     )}
+                    <span
+                      className={cn(
+                        'text-[10px] px-1.5 py-0.2 rounded-md font-medium flex items-center gap-0.5',
+                        isCash
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : 'bg-cyan-500/10 text-cyan-400'
+                      )}
+                      title={isCash ? 'Paid with cash' : 'Paid with card'}
+                    >
+                      {isCash ? (
+                        <Banknote className="w-2.5 h-2.5" />
+                      ) : (
+                        <Wallet className="w-2.5 h-2.5" />
+                      )}
+                      {isCash ? 'Cash' : 'Card'}
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500">
@@ -328,16 +329,14 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                 </div>
 
                 <div className="flex items-center gap-0.5">
-                  {!isSettlement && (
-                    <button
-                      type="button"
-                      onClick={(e) => handleEdit(expense, e)}
-                      className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all cursor-pointer"
-                      title="Edit record"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => handleEdit(expense, e)}
+                    className="opacity-40 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-all cursor-pointer"
+                    title="Edit record"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
 
                   <button
                     type="button"
