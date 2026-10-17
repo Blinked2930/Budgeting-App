@@ -157,7 +157,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
             return (
               <div
                 key={t.id}
-                className="group flex items-center justify-between p-3 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 transition-all shadow-sm"
+                className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 transition-all shadow-sm"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
@@ -187,14 +187,18 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                   <p className="text-sm font-bold font-mono text-amber-700 tracking-tight">
                     {formatCurrency(t.amountALL, 'ALL')}
                   </p>
-                  <button
-                    type="button"
-                    onClick={(e) => handleDeleteTransfer(t.id, e)}
-                    className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
-                    title="Delete transfer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  {/* Fixed width container ensures amounts align perfectly */}
+                  <div className="flex items-center gap-0.5 w-[52px] justify-end">
+                    <div className="w-[26px]" /> {/* Spacer for missing edit button */}
+                    <button
+                      type="button"
+                      onClick={(e) => handleDeleteTransfer(t.id, e)}
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                      title="Delete transfer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
             );
@@ -208,7 +212,6 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           const isWalletNeutral = debtMeta?.isWalletNeutral ?? false;
           const isIncome = expense.amount < 0;
 
-          // Color theme
           const theme = debtClass
             ? { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', icon: 'text-indigo-500' }
             : isCash
@@ -249,7 +252,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
             <div
               key={expense.id}
               className={cn(
-                'group flex items-center justify-between p-3 rounded-2xl bg-white hover:bg-slate-50 transition-all border shadow-sm',
+                'flex items-center justify-between p-3 rounded-2xl bg-white transition-all border shadow-sm',
                 isWalletNeutral ? 'border-dashed border-slate-300' : 'border-slate-200'
               )}
             >
@@ -287,17 +290,11 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                       <span
                         className={cn(
                           'text-[10px] px-1.5 py-0.2 rounded-md font-medium flex items-center gap-0.5',
-                          isCash
-                            ? 'bg-teal-50 text-teal-700'
-                            : 'bg-rose-50 text-rose-700'
+                          isCash ? 'bg-teal-50 text-teal-700' : 'bg-rose-50 text-rose-700'
                         )}
                         title={isCash ? 'Cash' : 'Bank / card'}
                       >
-                        {isCash ? (
-                          <Banknote className="w-2.5 h-2.5" />
-                        ) : (
-                          <CreditCard className="w-2.5 h-2.5" />
-                        )}
+                        {isCash ? <Banknote className="w-2.5 h-2.5" /> : <CreditCard className="w-2.5 h-2.5" />}
                         {isCash ? 'Cash' : 'Card'}
                       </span>
                     )}
@@ -306,22 +303,13 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                   <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
                     <span>{formatRelativeTime(expense.timestamp)}</span>
                     <span>•</span>
-                    <span
-                      className="flex items-center gap-1"
-                      title={
-                        expense.isSynced
-                          ? 'Synced with cloud'
-                          : 'Saved locally offline in Dexie'
-                      }
-                    >
+                    <span className="flex items-center gap-1">
                       {expense.isSynced ? (
                         <CheckCircle2 className="w-3 h-3 text-emerald-500" />
                       ) : (
                         <Clock className="w-3 h-3 text-slate-400" />
                       )}
-                      <span className="text-[10px]">
-                        {expense.isSynced ? 'Synced' : 'Offline'}
-                      </span>
+                      <span className="text-[10px]">{expense.isSynced ? 'Synced' : 'Offline'}</span>
                     </span>
                   </div>
                 </div>
@@ -344,28 +332,24 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                   )}
                 </div>
 
-                <div className="flex items-center gap-0.5">
-                  {!debtClass && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={(e) => handleEdit(expense, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all cursor-pointer"
-                        title="Edit record"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={(e) => handleDeleteExpense(expense.id, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
-                        title="Delete record"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </>
-                  )}
+                {/* Fixed width container ensures amounts align perfectly */}
+                <div className="flex items-center gap-0.5 w-[52px] justify-end">
+                  <button
+                    type="button"
+                    onClick={(e) => handleEdit(expense, e)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all cursor-pointer"
+                    title="Edit record"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteExpense(expense.id, e)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                    title="Delete record"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             </div>

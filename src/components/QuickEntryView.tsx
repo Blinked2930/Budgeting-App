@@ -22,6 +22,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Check,
+  TriangleAlert,
 } from 'lucide-react';
 import {
   type Currency,
@@ -105,6 +106,7 @@ export const QuickEntryView: React.FC = () => {
   const [settleDebtId, setSettleDebtId] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingIsDebt, setEditingIsDebt] = useState<boolean>(false);
   const [originalDateOverride, setOriginalDateOverride] = useState<string | null>(null);
 
   const [isSaving, setIsSaving] = useState(false);
@@ -205,9 +207,9 @@ export const QuickEntryView: React.FC = () => {
   };
 
   const handleStartEdit = (expense: ExpenseRecord) => {
-    if (expense.debtId) return;
     setMode('expense');
     setEditingId(expense.id);
+    setEditingIsDebt(Boolean(expense.debtId));
     setAmountStr(String(expense.amount));
     setCurrency(expense.currency);
     setCategory(expense.category);
@@ -232,6 +234,7 @@ export const QuickEntryView: React.FC = () => {
 
   const handleCancelEdit = () => {
     setEditingId(null);
+    setEditingIsDebt(false);
     setOriginalDateOverride(null);
     setDateOverride(null);
     handleResetForm();
@@ -321,6 +324,7 @@ export const QuickEntryView: React.FC = () => {
           }
         }
         setEditingId(null);
+        setEditingIsDebt(false);
         setOriginalDateOverride(null);
       } else if (mode === 'withdraw') {
         await addTransfer({
@@ -388,19 +392,36 @@ export const QuickEntryView: React.FC = () => {
         className="relative bg-white border border-slate-200 rounded-3xl p-6 shadow-xl shadow-slate-200/50 space-y-5"
       >
         {editingId && (
-          <div className="flex items-center justify-between p-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs">
-            <div className="flex items-center gap-1.5 text-amber-700 font-medium">
-              <Pencil className="w-3.5 h-3.5" />
-              <span>Editing expense</span>
+          <div className={cn(
+            "flex flex-col gap-2 p-3 rounded-2xl border text-xs",
+            editingIsDebt ? "bg-indigo-50 border-indigo-200" : "bg-amber-50 border-amber-200"
+          )}>
+            <div className="flex items-center justify-between">
+              <div className={cn(
+                "flex items-center gap-1.5 font-medium",
+                editingIsDebt ? "text-indigo-700" : "text-amber-700"
+              )}>
+                <Pencil className="w-3.5 h-3.5" />
+                <span>Editing {editingIsDebt ? 'debt entry' : 'expense'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                className={cn(
+                  "hover:underline cursor-pointer flex items-center gap-1",
+                  editingIsDebt ? "text-indigo-700" : "text-amber-700"
+                )}
+              >
+                <X className="w-3 h-3" />
+                Cancel
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleCancelEdit}
-              className="text-[11px] text-amber-700 hover:underline cursor-pointer flex items-center gap-1"
-            >
-              <X className="w-3 h-3" />
-              Cancel
-            </button>
+            {editingIsDebt && (
+              <div className="flex items-start gap-1.5 text-[10px] text-indigo-600/80">
+                <TriangleAlert className="w-3 h-3 shrink-0 mt-0.5" />
+                <p>This will update the wallet movement. The debt balance itself is managed in the Debts panel.</p>
+              </div>
+            )}
           </div>
         )}
 
