@@ -75,20 +75,17 @@ const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
 export const QuickEntryView: React.FC = () => {
   const { expenses, totalSpentALL } = useExpenses();
   const { transfers } = useTransfers();
-  const { debts, openDebts } = useDebts();
+  const { openDebts } = useDebts();
 
-  // Unified amount — the single source of truth for all modes.
   const [amountStr, setAmountStr] = useState<string>('');
   const [currency, setCurrency] = useState<Currency>('ALL');
   const [mode, setMode] = useState<EntryMode>('expense');
 
-  // Expense mode state
   const [category, setCategory] = useState<Category>('Food');
   const [paidWith, setPaidWith] = useState<PaymentSource>('Cash');
   const [dateOverride, setDateOverride] = useState<string | null>(null);
   const todayStr = toDateInputValue(new Date());
 
-  // Drawer + advanced state (expense only)
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [itemName, setItemName] = useState<string>('');
   const [subcategory, setSubcategory] = useState<string | undefined>(undefined);
@@ -98,23 +95,18 @@ export const QuickEntryView: React.FC = () => {
   const [shareCounterparty, setShareCounterparty] = useState<string>('');
   const [shareAmountStr, setShareAmountStr] = useState<string>('');
 
-  // Withdraw mode state
   const [withdrawDirection, setWithdrawDirection] = useState<TransferDirection>('BankToCash');
 
-  // Lend mode state
   const [lendPerson, setLendPerson] = useState<string>('');
   const [lendDirection, setLendDirection] = useState<DebtDirection>('OwedToMe');
   const [lendNote, setLendNote] = useState<string>('');
   const [lendSuggestions, setLendSuggestions] = useState<string[]>([]);
 
-  // Settle mode state
   const [settleDebtId, setSettleDebtId] = useState<string | null>(null);
 
-  // Edit mode (expense only)
   const [editingId, setEditingId] = useState<string | null>(null);
   const [originalDateOverride, setOriginalDateOverride] = useState<string | null>(null);
 
-  // Feedback + panel
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isDebtsPanelOpen, setIsDebtsPanelOpen] = useState(false);
@@ -142,26 +134,23 @@ export const QuickEntryView: React.FC = () => {
 
   const selectedDebt = openDebts.find((d) => d.id === settleDebtId);
 
-  // Validation per mode
   const isValid =
     parsedAmount > 0 &&
     (mode !== 'lend' || lendPerson.trim().length > 0) &&
     (mode !== 'settle' || selectedDebt !== undefined);
 
-  const saveLabel =
-    editingId
-      ? 'Update Expense'
-      : mode === 'expense'
-        ? 'Save Expense'
-        : mode === 'withdraw'
-          ? 'Move Money'
-          : mode === 'lend'
-            ? 'Save Loan'
-            : 'Settle Debt';
+  const saveLabel = editingId
+    ? 'Update Expense'
+    : mode === 'expense'
+      ? 'Save Expense'
+      : mode === 'withdraw'
+        ? 'Move Money'
+        : mode === 'lend'
+          ? 'Save Loan'
+          : 'Settle Debt';
 
-  // Switching modes should not silently wipe the amount field.
   const handleModeChange = (next: EntryMode) => {
-    if (editingId) return; // locked during edit
+    if (editingId) return;
     setMode(next);
   };
 
@@ -216,7 +205,7 @@ export const QuickEntryView: React.FC = () => {
   };
 
   const handleStartEdit = (expense: ExpenseRecord) => {
-    if (expense.debtId) return; // not editable — debt entries managed from panel
+    if (expense.debtId) return;
     setMode('expense');
     setEditingId(expense.id);
     setAmountStr(String(expense.amount));
@@ -339,7 +328,10 @@ export const QuickEntryView: React.FC = () => {
           direction: withdrawDirection,
         });
         setFeedback(
-          `${withdrawDirection === 'BankToCash' ? 'Withdrew' : 'Deposited'} ${formatCurrency(parsedAmount, 'ALL')}`
+          `${withdrawDirection === 'BankToCash' ? 'Withdrew' : 'Deposited'} ${formatCurrency(
+            parsedAmount,
+            'ALL'
+          )}`
         );
       } else if (mode === 'lend') {
         await addDebt({
@@ -375,7 +367,6 @@ export const QuickEntryView: React.FC = () => {
 
   return (
     <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
-      {/* Summary pill */}
       <div className="flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900 to-slate-900/90 border border-slate-800 shadow-sm">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
@@ -417,7 +408,6 @@ export const QuickEntryView: React.FC = () => {
           <CurrencyToggle selected={currency} onChange={setCurrency} />
         </div>
 
-        {/* Unified amount field */}
         <div className="text-center py-1">
           <div className="inline-flex items-baseline justify-center gap-2 max-w-full">
             {currency !== 'ALL' && (
@@ -468,7 +458,6 @@ export const QuickEntryView: React.FC = () => {
           </div>
         </div>
 
-        {/* Mode tabs */}
         {!editingId && (
           <div className="grid grid-cols-4 gap-1 p-1 rounded-2xl bg-slate-950 border border-slate-800">
             {MODES.map((m) => {
@@ -493,7 +482,6 @@ export const QuickEntryView: React.FC = () => {
           </div>
         )}
 
-        {/* ---------- EXPENSE mode fields ---------- */}
         {mode === 'expense' && (
           <>
             <div>
@@ -617,7 +605,6 @@ export const QuickEntryView: React.FC = () => {
           </>
         )}
 
-        {/* ---------- WITHDRAW mode fields ---------- */}
         {mode === 'withdraw' && (
           <div className="space-y-3">
             <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
@@ -652,7 +639,6 @@ export const QuickEntryView: React.FC = () => {
           </div>
         )}
 
-        {/* ---------- LEND mode fields ---------- */}
         {mode === 'lend' && (
           <div className="space-y-3">
             <div>
@@ -752,7 +738,6 @@ export const QuickEntryView: React.FC = () => {
           </div>
         )}
 
-        {/* ---------- SETTLE mode fields ---------- */}
         {mode === 'settle' && (
           <div className="space-y-3">
             {openDebts.length === 0 ? (
@@ -840,7 +825,7 @@ export const QuickEntryView: React.FC = () => {
 
                     {parsedAmount > selectedDebt.remainingALL && (
                       <p className="text-[10px] text-amber-400 px-1">
-                        Amount capped at remaining ({formatCurrency(selectedDebt.remainingALL, 'ALL')})
+                        Capped at remaining ({formatCurrency(selectedDebt.remainingALL, 'ALL')})
                       </p>
                     )}
                     {parsedAmount > 0 && parsedAmount < selectedDebt.remainingALL && (
@@ -864,7 +849,6 @@ export const QuickEntryView: React.FC = () => {
           </div>
         )}
 
-        {/* Save + advanced */}
         <div className="space-y-2.5 pt-1">
           <button
             type="submit"
@@ -929,7 +913,6 @@ export const QuickEntryView: React.FC = () => {
       <RecentTransactions
         expenses={expenses}
         transfers={transfers}
-        debts={debts}
         onEdit={handleStartEdit}
       />
     </div>
