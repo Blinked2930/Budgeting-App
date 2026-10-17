@@ -14,12 +14,13 @@ import {
     ArrowDownLeft,
     X,
     Wallet,
+    Trash2,
 } from 'lucide-react';
 import { FOOD_TYPES, VENDORS, type Currency, type PaymentSource, type DebtRecord } from '../types';
 import { useExpenses } from '../hooks/useExpenses';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { useDebts } from '../hooks/useDebts';
-import { addExpense, settleDebtCash, settleDebtNonCash, writeOffDebt } from '../db';
+import { addExpense, settleDebtCash, settleDebtNonCash, writeOffDebt, deleteDebt } from '../db';
 import {
     DEFAULT_FILTERS,
     aggregate,
@@ -338,13 +339,30 @@ const DebtRowActions: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
         setBusy(null);
     };
 
+    const handleDelete = async () => {
+        setBusy('delete');
+        await deleteDebt(debt.id);
+        setBusy(null);
+    };
+
     return (
         <div className="space-y-2 pt-1">
+            <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                    Amount to settle
+                </p>
+                <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={busy !== null}
+                    className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-50"
+                    title="Delete debt (undoes cash/bank effect)"
+                >
+                    <Trash2 className="w-3 h-3" />
+                </button>
+            </div>
             <div className="flex items-center gap-2">
                 <div className="flex-1 min-w-0">
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
-                        Amount to settle
-                    </p>
                     <input
                         type="number"
                         inputMode="decimal"
@@ -355,7 +373,7 @@ const DebtRowActions: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                         className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
                     />
                 </div>
-                <div className="flex flex-col items-end gap-1 shrink-0 pt-4">
+                <div className="flex flex-col items-end gap-1 shrink-0">
                     {isPartial ? (
                         <span className="text-[10px] font-semibold text-amber-400">
                             Partial · {formatCurrency(clamped, 'ALL')}
@@ -478,6 +496,7 @@ const DebtDetailModal: React.FC<{
     onClose: () => void;
 }> = ({ counterpartyKey, onClose }) => {
     const { debts } = useDebts();
+    const [busyDeleteId, setBusyDeleteId] = useState<string | null>(null);
 
     const myDebts = useMemo(
         () => debts.filter((d) => d.counterpartyKey === counterpartyKey),
@@ -489,6 +508,12 @@ const DebtDetailModal: React.FC<{
     const name = myDebts[0].counterparty;
     const openDebts = myDebts.filter((d) => d.status === 'open');
     const resolvedDebts = myDebts.filter((d) => d.status === 'resolved');
+
+    const handleDeleteResolved = async (id: string) => {
+        setBusyDeleteId(id);
+        await deleteDebt(id);
+        setBusyDeleteId(null);
+    };
 
     return (
         <div
@@ -585,7 +610,18 @@ const DebtDetailModal: React.FC<{
                                             </p>
                                         )}
                                     </div>
-                                    <Check className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <Check className="w-3.5 h-3.5 text-slate-600" />
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDeleteResolved(debt.id)}
+                                            disabled={busyDeleteId === debt.id}
+                                            className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-50"
+                                            title="Delete resolved debt (undoes all effects)"
+                                        >
+                                            <Trash2 className="w-3 h-3" />
+                                        </button>
+                                    </div>
                                 </div>
                             ))}
                         </>

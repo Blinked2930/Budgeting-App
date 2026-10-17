@@ -10,6 +10,7 @@ import {
     Wallet,
     Check,
     ChevronDown,
+    Trash2,
 } from 'lucide-react';
 import { useDebts } from '../hooks/useDebts';
 import {
@@ -17,6 +18,7 @@ import {
     settleDebtCash,
     settleDebtNonCash,
     writeOffDebt,
+    deleteDebt,
     getCounterparties,
 } from '../db';
 import { formatCurrency } from '../utils/currency';
@@ -217,6 +219,12 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
         setBusyAction(null);
     };
 
+    const handleDelete = async () => {
+        setBusyAction('delete');
+        await deleteDebt(debt.id);
+        setBusyAction(null);
+    };
+
     return (
         <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
             <div className="flex items-center justify-between">
@@ -229,9 +237,20 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                     {owedToMe ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownLeft className="w-3 h-3" />}
                     {owedToMe ? 'Owes you' : 'You owe'}
                 </span>
-                <span className="text-sm font-mono font-bold text-white">
-                    {formatCurrency(debt.remainingALL, 'ALL')}
-                </span>
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-mono font-bold text-white">
+                        {formatCurrency(debt.remainingALL, 'ALL')}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={handleDelete}
+                        disabled={busyAction !== null}
+                        className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-50"
+                        title="Delete debt (undoes cash/bank effect)"
+                    >
+                        <Trash2 className="w-3 h-3" />
+                    </button>
+                </div>
             </div>
 
             {debt.note && <p className="text-[11px] text-slate-400 italic">{debt.note}</p>}
@@ -370,7 +389,15 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
 };
 
 const ResolvedDebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
+    const [busy, setBusy] = useState(false);
     const owedToMe = debt.direction === 'OwedToMe';
+
+    const handleDelete = async () => {
+        setBusy(true);
+        await deleteDebt(debt.id);
+        setBusy(false);
+    };
+
     return (
         <div className="p-2.5 rounded-xl bg-slate-900/30 border border-slate-800/50 flex items-center justify-between gap-2">
             <div className="min-w-0">
@@ -388,7 +415,18 @@ const ResolvedDebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                     </p>
                 )}
             </div>
-            <Check className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+            <div className="flex items-center gap-2 shrink-0">
+                <Check className="w-3.5 h-3.5 text-slate-600" />
+                <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={busy}
+                    className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-50"
+                    title="Delete resolved debt (undoes all effects)"
+                >
+                    <Trash2 className="w-3 h-3" />
+                </button>
+            </div>
         </div>
     );
 };
