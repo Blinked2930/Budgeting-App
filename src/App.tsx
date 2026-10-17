@@ -12,15 +12,12 @@ export function App() {
   const [tab, setTab] = useState<Tab>('log');
 
   return (
-    <div className="h-dvh sm:h-auto sm:min-h-dvh bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200 overflow-hidden sm:overflow-visible">
+    <div className="h-dvh bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-emerald-200 overflow-hidden">
       {/* App Header */}
       <Header unsyncedCount={unsyncedCount} />
 
-      {/* Main Content Area. All tabs stay mounted so form state survives switching.
-          On mobile: flex-1 + overflow-y-auto makes this the scroll container so
-          the nav sits flush at the bottom of the visible viewport.
-          On desktop: flows naturally so the nav sits right below content. */}
-      <main className="flex-1 overflow-y-auto sm:flex-initial sm:overflow-visible">
+      {/* Main Content Area. All tabs stay mounted so form state survives switching. */}
+      <main className="flex-1 min-h-0 overflow-y-auto pb-28 sm:pb-32">
         <div className={tab === 'log' ? 'w-full' : 'hidden'}>
           <QuickEntryView />
         </div>
