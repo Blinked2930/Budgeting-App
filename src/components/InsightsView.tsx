@@ -15,8 +15,9 @@ import {
     X,
     Wallet,
     Trash2,
+    PieChart,
 } from 'lucide-react';
-import { FOOD_TYPES, VENDORS, type Currency, type PaymentSource, type DebtRecord } from '../types';
+import { FOOD_TYPES, VENDORS, type Category, type Currency, type ExpenseRecord, type PaymentSource, type DebtRecord } from '../types';
 import { useExpenses } from '../hooks/useExpenses';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { useDebts } from '../hooks/useDebts';
@@ -24,6 +25,8 @@ import { addExpense, settleDebtCash, settleDebtNonCash, writeOffDebt, deleteDebt
 import {
     DEFAULT_FILTERS,
     aggregate,
+    aggregateByCategory,
+    aggregatePaidWith,
     compareMarkets,
     filterExpenses,
     getMonthOptions,
@@ -34,6 +37,15 @@ import { formatCurrency } from '../utils/currency';
 import { cn } from '../utils/cn';
 
 const CURRENCIES: Currency[] = ['ALL', 'EUR', 'USD'];
+
+const CATEGORY_COLORS: Record<Category, { bar: string; text: string; dot: string }> = {
+    Food: { bar: 'bg-emerald-400', text: 'text-emerald-300', dot: 'bg-emerald-400' },
+    Utilities: { bar: 'bg-amber-400', text: 'text-amber-300', dot: 'bg-amber-400' },
+    Transport: { bar: 'bg-cyan-400', text: 'text-cyan-300', dot: 'bg-cyan-400' },
+    Social: { bar: 'bg-purple-400', text: 'text-purple-300', dot: 'bg-purple-400' },
+    Travel: { bar: 'bg-rose-400', text: 'text-rose-300', dot: 'bg-rose-400' },
+    Other: { bar: 'bg-slate-400', text: 'text-slate-300', dot: 'bg-slate-400' },
+};
 
 const SectionTitle: React.FC<{ icon: React.ReactNode; children: React.ReactNode }> = ({
     icon,
@@ -304,6 +316,97 @@ const BankCheck: React.FC = () => {
     );
 };
 
+// ---------- Category breakdown ----------
+
+const CategoryBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => {
+    const stats = useMemo(() => aggregateByCategory(expenses), [expenses]);
+    const paidWith = useMemo(() => aggregatePaidWith(expenses), [expenses]);
+
+    if (stats.length === 0) {
+        return (
+            <Card>
+                <p className="text-xs text-slate-400">
+                    Log some expenses to see where your money went.
+                </p>
+            </Card>
+        );
+    }
+
+    const grandTotal = stats.reduce((s, c) => s + c.total, 0);
+
+    return (
+        <Card className="space-y-3">
+            <div className="flex items-baseline justify-between">
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                    Total
+                </span>
+                <span className="text-base font-mono font-bold text-white">
+                    {formatCurrency(grandTotal, 'ALL')}
+                </span>
+            </div>
+
+            <div className="h-2.5 rounded-full bg-slate-800 overflow-hidden flex">
+                {stats.map((c) => (
+                    <div
+                        key={c.category}
+                        className={cn('h-full', CATEGORY_COLORS[c.category].bar)}
+                        style={{ width: `${c.percent}%` }}
+                        title={`${c.category}: ${c.percent.toFixed(0)}%`}
+                    />
+                ))}
+            </div>
+
+            <div className="space-y-1.5">
+                {stats.map((c) => (
+                    <div key={c.category} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <span className={cn('w-2 h-2 rounded-full shrink-0', CATEGORY_COLORS[c.category].dot)} />
+                            <span className={cn('font-semibold truncate', CATEGORY_COLORS[c.category].text)}>
+                                {c.category}
+                            </span>
+                            <span className="text-[10px] text-slate-600 font-mono">
+                                {c.count}×
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-2.5 font-mono shrink-0">
+                            <span className="text-[10px] text-slate-500">
+                                {c.percent.toFixed(0)}%
+                            </span>
+                            <span className="font-bold text-white text-[11px]">
+                                {formatCurrency(c.total, 'ALL')}
+                            </span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                    Paid with
+                </span>
+                <div className="flex items-center gap-3 text-[10px] font-mono">
+                    <span className="flex items-center gap-1">
+                        <Banknote className="w-3 h-3 text-emerald-400" />
+                        <span className="text-slate-400">Cash</span>
+                        <span className="text-emerald-300 font-semibold">
+                            {paidWith.cashPct.toFixed(0)}%
+                        </span>
+                    </span>
+                    <span className="flex items-center gap-1">
+                        <Wallet className="w-3 h-3 text-cyan-400" />
+                        <span className="text-slate-400">Card</span>
+                        <span className="text-cyan-300 font-semibold">
+                            {paidWith.cardPct.toFixed(0)}%
+                        </span>
+                    </span>
+                </div>
+            </div>
+        </Card>
+    );
+};
+
+// ---------- Debt UI (unchanged below this line) ----------
+
 const DebtRowActions: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
     const [busy, setBusy] = useState<string | null>(null);
     const [amountStr, setAmountStr] = useState<string>(String(debt.remainingALL));
@@ -379,9 +482,7 @@ const DebtRowActions: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                             Partial · {formatCurrency(clamped, 'ALL')}
                         </span>
                     ) : (
-                        <span className="text-[10px] font-semibold text-emerald-400">
-                            Full
-                        </span>
+                        <span className="text-[10px] font-semibold text-emerald-400">Full</span>
                     )}
                     {requested !== debt.remainingALL && (
                         <button
@@ -779,6 +880,13 @@ export const InsightsView: React.FC = () => {
                     Debts
                 </SectionTitle>
                 <DebtsSection />
+            </section>
+
+            <section>
+                <SectionTitle icon={<PieChart className="w-3.5 h-3.5 text-slate-400" />}>
+                    Where your money went
+                </SectionTitle>
+                <CategoryBreakdown expenses={expenses} />
             </section>
 
             <section>
