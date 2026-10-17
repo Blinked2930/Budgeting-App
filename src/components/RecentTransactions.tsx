@@ -61,6 +61,18 @@ function formatRelativeTime(isoString: string): string {
   }
 }
 
+/**
+ * Returns true when this expense is the wallet movement behind a lend/borrow.
+ * Modern rows carry isDebtOrigin: true. Legacy rows (created before that flag
+ * existed) are detected by their item name.
+ */
+function isOriginWalletMovement(e: ExpenseRecord): boolean {
+  if (e.isDebtOrigin) return true;
+  if (!e.debtRelated) return false;
+  const name = e.itemName ?? '';
+  return name.startsWith('Lent to ') || name.startsWith('Borrowed from ');
+}
+
 type MergedItem =
   | { kind: 'expense'; record: ExpenseRecord; timestamp: string }
   | { kind: 'transfer'; record: TransferRecord; timestamp: string }
@@ -97,10 +109,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   };
 
   const openDebts = debts.filter((d) => d.status === 'open');
-  // Hide ONLY the initial wallet movement that backs a lend/borrow. The debt
-  // row already represents that event. Settlements and write-offs stay
-  // visible because they're distinct real-world events.
-  const visibleExpenses = expenses.filter((e) => !e.isDebtOrigin);
+  const visibleExpenses = expenses.filter((e) => !isOriginWalletMovement(e));
 
   const merged: MergedItem[] = [
     ...visibleExpenses.map((e) => ({ kind: 'expense' as const, record: e, timestamp: e.timestamp })),
@@ -250,7 +259,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
           const expense = item.record;
           const isForeignCurrency = expense.currency !== 'ALL';
           const isCash = expense.paidWith === 'Cash';
-          const isSettlement = Boolean(expense.debtRelated) && !expense.isDebtOrigin;
+          const isSettlement = Boolean(expense.debtRelated) && !isOriginWalletMovement(expense);
           const isWriteOff = Boolean(expense.walletNeutral);
 
           return (
