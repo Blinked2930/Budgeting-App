@@ -62,7 +62,7 @@ const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
   Other: <MoreHorizontal className="w-3.5 h-3.5 text-slate-600" />,
 };
 
-const MEAL_PRESETS = [1, 2, 3, 4, 6];
+const MEAL_PRESETS = [1, 2, 3, 5, 7, 10, 14];
 
 interface Suggestion {
   name: string;
@@ -196,7 +196,6 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
         aria-label="Advanced entry"
         className="relative w-full max-w-md flex flex-col max-h-[90vh] sm:max-h-[85vh] bg-white border-t sm:border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl"
       >
-        {/* Header — fixed height, no shrink */}
         <div className="shrink-0 flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-200">
           <h2 className="text-base font-bold text-slate-900">Advanced entry</h2>
           <button
@@ -209,7 +208,6 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
           </button>
         </div>
 
-        {/* Scrollable content — min-h-0 is what makes this work */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-5">
           <div>
             <SectionLabel>Category</SectionLabel>
@@ -327,7 +325,7 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
                       <Plus className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <div className="flex gap-1.5">
+                  <div className="flex gap-1.5 flex-wrap">
                     {MEAL_PRESETS.map((n) => (
                       <button
                         key={n}
@@ -352,7 +350,6 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
             </>
           )}
 
-          {/* Someone else's share — indigo to match debt theme */}
           <div className="pt-2 border-t border-slate-200">
             <div className="flex items-center gap-1.5 mb-2">
               <HandCoins className="w-3.5 h-3.5 text-indigo-500" />
@@ -390,7 +387,6 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
           </div>
         </div>
 
-        {/* Footer — fixed height, no shrink */}
         <div
           className="shrink-0 px-5 pt-3 pb-4 border-t border-slate-200 grid grid-cols-3 gap-2"
           style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}

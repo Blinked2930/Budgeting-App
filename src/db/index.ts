@@ -418,29 +418,16 @@ export async function getDebt(id: string): Promise<DebtRecord | undefined> {
   return d && !d.deleted ? d : undefined;
 }
 
-/**
- * Delete a debt AND every wallet movement created by it.
- *
- * This fully reverses the lend: cash and bank estimates return to their
- * pre-lend values. Handles:
- *   - origin wallet movement (marked isDebtOrigin: true)
- *   - partial cash settlements
- *   - non-cash offsets
- *   - shared-expense debts: the parent expense has NO debtId, so it's
- *     untouched (user can edit it separately if they want to undo the share).
- */
 export async function deleteDebt(id: string): Promise<void> {
   const debt = await db.debts.get(id);
   if (!debt || debt.deleted) return;
 
-  // 1. Soft-delete the debt record itself.
   await db.debts.update(id, {
     deleted: true,
     isSynced: false,
     updatedAt: new Date().toISOString(),
   });
 
-  // 2. Soft-delete all wallet movements linked to this debt.
   const linkedExpenses = await db.expenses
     .filter((e) => e.debtId === id && !e.deleted)
     .toArray();
@@ -730,11 +717,21 @@ export async function applyRemoteBudgetCycles(remote: RemoteBudgetCycle[]): Prom
 // ---------- Export helpers ----------
 
 export async function exportToCSV(): Promise<string> {
-  const expenses = await getExpenses();
-  return generateCSV(expenses);
+  const [exps, dbt, trf, cyc] = await Promise.all([
+    db.expenses.toArray(),
+    db.debts.toArray(),
+    db.transfers.toArray(),
+    db.budgetCycles.toArray(),
+  ]);
+  return generateCSV(exps, dbt, trf, cyc);
 }
 
 export async function exportToJSON(): Promise<string> {
-  const expenses = await getExpenses();
-  return generateJSON(expenses);
+  const [exps, dbt, trf, cyc] = await Promise.all([
+    db.expenses.toArray(),
+    db.debts.toArray(),
+    db.transfers.toArray(),
+    db.budgetCycles.toArray(),
+  ]);
+  return generateJSON(exps, dbt, trf, cyc);
 }

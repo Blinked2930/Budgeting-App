@@ -15,6 +15,7 @@ import {
   ArrowLeftRight,
   HandCoins,
   Gift,
+  PlusCircle,
 } from 'lucide-react';
 import type { ExpenseRecord, Category, TransferRecord } from '../types';
 import { formatCurrency } from '../utils/currency';
@@ -105,13 +106,13 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   onEdit,
 }) => {
   const handleDeleteExpense = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent opening the edit modal
+    e.stopPropagation();
     await deleteExpense(id);
     if (onDeleted) onDeleted();
   };
 
   const handleDeleteTransfer = async (id: string, e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent row click
+    e.stopPropagation();
     await deleteTransfer(id);
     if (onDeleted) onDeleted();
   };
@@ -185,7 +186,6 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                   <p className="text-sm font-bold font-mono text-amber-700 tracking-tight">
                     {formatCurrency(t.amountALL, 'ALL')}
                   </p>
-                  {/* Fixed width container ensures amounts align perfectly across all rows */}
                   <div className="flex items-center justify-center w-[26px]">
                     <button
                       type="button"
@@ -233,7 +233,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
             }
           } else {
             displayAmount = formatCurrency(expense.amount, expense.currency);
-            amountColor = 'text-slate-900';
+            amountColor = expense.amount < 0 ? 'text-emerald-600' : 'text-slate-900';
           }
 
           let icon: React.ReactNode;
@@ -241,6 +241,8 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
             icon = <Gift className={cn('w-3.5 h-3.5', theme.icon)} />;
           } else if (debtClass) {
             icon = <HandCoins className={cn('w-3.5 h-3.5', theme.icon)} />;
+          } else if (expense.amount < 0) {
+            icon = <PlusCircle className={cn('w-3.5 h-3.5', theme.icon)} />;
           } else {
             icon = CATEGORY_ICONS[expense.category] || <MoreHorizontal className="w-3.5 h-3.5" />;
           }
@@ -258,7 +260,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                 <div
                   className={cn(
                     'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border',
-                    debtClass ? cn(theme.bg, theme.border) : 'bg-slate-100 border-slate-200'
+                    debtClass ? cn(theme.bg, theme.border) : expense.amount < 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-100 border-slate-200'
                   )}
                 >
                   {icon}
@@ -267,7 +269,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-xs font-semibold text-slate-900 truncate">
-                      {expense.itemName || expense.category}
+                      {expense.itemName || (expense.amount < 0 ? 'Income' : expense.category)}
                     </span>
                     {expense.vendorType && (
                       <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-slate-100 text-slate-500 font-medium">
@@ -330,11 +332,13 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                   )}
                 </div>
 
-                {/* Fixed width container ensures amounts align perfectly across all rows */}
                 <div className="flex items-center justify-center w-[26px]">
                   <button
                     type="button"
-                    onClick={(e) => handleDeleteExpense(expense.id, e)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteExpense(expense.id, e);
+                    }}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
                     title="Delete record"
                   >

@@ -1,3 +1,4 @@
+// vite.config.ts
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
@@ -21,8 +22,8 @@ export default defineConfig({
         scope: '/',
         display: 'standalone',
         orientation: 'portrait',
-        background_color: '#090d16',
-        theme_color: '#0f172a',
+        background_color: '#f8fafc',
+        theme_color: '#f8fafc',
         icons: [
           {
             src: 'pwa-192x192.png',
