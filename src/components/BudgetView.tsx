@@ -16,6 +16,7 @@ import {
     Check,
 } from 'lucide-react';
 import type { BudgetCycle, PaymentSource } from '../types';
+import type { BudgetStats } from '../utils/budget';
 import { addExpense, saveBudgetCycle } from '../db';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { useDebts } from '../hooks/useDebts';
@@ -55,6 +56,101 @@ const Field: React.FC<{
         {hint && <span className="block text-[10px] text-slate-400 mt-1">{hint}</span>}
     </label>
 );
+
+const TravelStashModal: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    cycle: BudgetCycle;
+    stats: BudgetStats;
+}> = ({ isOpen, onClose, cycle, stats }) => {
+    const [amountStr, setAmountStr] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
+
+    if (!isOpen) return null;
+
+    const amount = parseFloat(amountStr);
+    const hasAmount = !Number.isNaN(amount) && amount > 0;
+
+    const handleAdd = async () => {
+        if (!hasAmount) return;
+        setIsSaving(true);
+        await saveBudgetCycle({
+            ...cycle,
+            travelStashALL: cycle.travelStashALL + amount,
+            bufferPoolALL: cycle.bufferPoolALL - amount,
+        });
+        setAmountStr('');
+        setIsSaving(false);
+        onClose();
+    };
+
+    const handleWithdraw = async () => {
+        if (!hasAmount) return;
+        setIsSaving(true);
+        await saveBudgetCycle({
+            ...cycle,
+            travelStashALL: cycle.travelStashALL - amount,
+            bufferPoolALL: cycle.bufferPoolALL + amount,
+        });
+        setAmountStr('');
+        setIsSaving(false);
+        onClose();
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm" onClick={onClose}>
+            <div className="w-full max-w-sm bg-white border border-slate-200 rounded-3xl p-5 shadow-xl space-y-4" onClick={(e) => e.stopPropagation()}>
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center">
+                            <PiggyBank className="w-4 h-4 text-rose-600" />
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold text-slate-900">Travel Stash</h3>
+                            <p className="text-[10px] text-slate-500">Current: {formatCurrency(stats.travelStashBalance, 'ALL')}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100"><X className="w-4 h-4" /></button>
+                </div>
+
+                <div className="space-y-3">
+                    <Field label="Amount to move (L)">
+                        <input
+                            type="number"
+                            inputMode="decimal"
+                            step="any"
+                            value={amountStr}
+                            onChange={(e) => setAmountStr(e.target.value)}
+                            placeholder="0"
+                            className={inputClass}
+                        />
+                    </Field>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                        Adding to your stash moves money out of your available daily budget. Withdrawing moves it back. Neither action affects your Raiffeisen or Cash balances — Travel expenses will still deduct from Raiffeisen as usual.
+                    </p>
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                        <button
+                            type="button"
+                            onClick={handleWithdraw}
+                            disabled={isSaving || !hasAmount}
+                            className="py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-600 text-xs font-semibold cursor-pointer hover:bg-slate-50 disabled:opacity-50"
+                        >
+                            Withdraw
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleAdd}
+                            disabled={isSaving || !hasAmount}
+                            className="py-2.5 rounded-2xl bg-emerald-600 text-white text-xs font-bold cursor-pointer hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                            Add to Stash
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const ReconcileRow: React.FC<{
     icon: React.ReactNode;
@@ -424,6 +520,7 @@ export const BudgetView: React.FC = () => {
     const { openDebts } = useDebts();
     const [formMode, setFormMode] = useState<FormMode | null>(null);
     const [isDebtsOpen, setIsDebtsOpen] = useState(false);
+    const [isTravelStashOpen, setIsTravelStashOpen] = useState(false);
     const [infoModal, setInfoModal] = useState<{ title: string; description: string } | null>(null);
 
     const debtGroups = useMemo(() => {
@@ -543,6 +640,7 @@ export const BudgetView: React.FC = () => {
         <div className="w-full max-w-md mx-auto px-3 sm:px-4 py-4 space-y-3.5">
             {infoModal && <InfoModal title={infoModal.title} description={infoModal.description} onClose={() => setInfoModal(null)} />}
             <DebtsPanel isOpen={isDebtsOpen} onClose={() => setIsDebtsOpen(false)} />
+            <TravelStashModal isOpen={isTravelStashOpen} onClose={() => setIsTravelStashOpen(false)} cycle={cycle} stats={stats} />
 
             {stats.isPaydayReached && (
                 <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 text-xs flex items-center justify-between gap-3 shadow-sm">
@@ -701,8 +799,7 @@ export const BudgetView: React.FC = () => {
                     value={formatCurrency(stats.travelStashBalance, 'ALL')}
                     sub={stats.projectedSurplus > 0 ? `+${formatCurrency(stats.projectedSurplus, 'ALL')} at payday` : undefined}
                     negative={stats.travelStashBalance < 0}
-                    showInfo
-                    onClick={() => setInfoModal({ title: 'Travel Stash', description: 'A dedicated savings pot for travel. Any surplus budget at the end of a cycle gets automatically moved here when you start the next cycle.' })}
+                    onClick={() => setIsTravelStashOpen(true)}
                 />
             </div>
 
