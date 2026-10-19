@@ -84,6 +84,47 @@ export function aggregate(expenses: ExpenseRecord[]): Aggregate {
     };
 }
 
+export interface FoodDailyStats {
+    totalFoodSpend: number;
+    daysElapsed: number;
+    dailyAverage: number;
+    costPerMealEstimate: number;
+}
+
+export function calculateFoodDailyStats(
+    expenses: ExpenseRecord[],
+    startDateStr?: string
+): FoodDailyStats | null {
+    const foodExpenses = expenses.filter((e) => !e.debtRelated && e.category === 'Food');
+    const totalFoodSpend = foodExpenses.reduce(
+        (sum, e) => sum + (e.budgetAmountALL ?? e.amountInALL),
+        0
+    );
+
+    if (totalFoodSpend === 0 || foodExpenses.length === 0) return null;
+
+    let start = startDateStr ? new Date(startDateStr).getTime() : 0;
+
+    // If no cycle start date is provided, fallback to the date of the oldest food expense
+    if (!startDateStr) {
+        const timestamps = foodExpenses.map((e) => new Date(e.timestamp).getTime());
+        start = Math.min(...timestamps);
+    }
+
+    const now = new Date().getTime();
+    // Ensure we count at least 1 day to avoid dividing by zero
+    const daysElapsed = Math.max(1, Math.ceil((now - start) / (1000 * 60 * 60 * 24)));
+
+    const dailyAverage = totalFoodSpend / daysElapsed;
+
+    return {
+        totalFoodSpend,
+        daysElapsed,
+        dailyAverage,
+        costPerMealEstimate: dailyAverage / 3,
+    };
+}
+
 export interface CategoryStat {
     category: Category;
     total: number;
@@ -150,11 +191,6 @@ export interface VendorStat {
     percent: number;
 }
 
-/**
- * Sum spending per vendor type. Skips debt settlements (not consumption).
- * Uses budgetAmountALL ?? amountInALL so shared expenses count only your share.
- * Expenses without a vendorType get lumped into "Other".
- */
 export function aggregateByVendor(expenses: ExpenseRecord[]): VendorStat[] {
     const map = new Map<string, { total: number; count: number }>();
     let grandTotal = 0;

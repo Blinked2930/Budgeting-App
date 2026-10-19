@@ -18,6 +18,7 @@ import {
     PieChart,
     History,
     PiggyBank,
+    CalendarDays,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { CATEGORIES, type Category, type ExpenseRecord, type PaymentSource, type DebtRecord } from '../types';
@@ -31,6 +32,7 @@ import {
     aggregateByCategory,
     aggregateByVendor,
     aggregatePaidWith,
+    calculateFoodDailyStats,
     filterExpenses,
     getMonthOptions,
     monthLabel,
@@ -881,12 +883,19 @@ const CycleHistorySection: React.FC = () => {
 
 export const InsightsView: React.FC = () => {
     const { expenses } = useExpenses();
+    const { cycle } = useBudgetCycle();
     const [filters, setFilters] = useState<InsightFilters>(DEFAULT_FILTERS);
 
     const overall = useMemo(() => aggregate(expenses), [expenses]);
     const monthOptions = useMemo(() => getMonthOptions(expenses), [expenses]);
     const filtered = useMemo(() => filterExpenses(expenses, filters), [expenses, filters]);
     const filteredAgg = useMemo(() => aggregate(filtered), [filtered]);
+
+    // Calculate the new daily food average based on the current cycle
+    const dailyFoodStats = useMemo(
+        () => calculateFoodDailyStats(expenses, cycle?.startDate),
+        [expenses, cycle?.startDate]
+    );
 
     const update = (key: keyof InsightFilters) => (value: string) =>
         setFilters((prev) => ({ ...prev, [key]: value }));
@@ -927,29 +936,62 @@ export const InsightsView: React.FC = () => {
                 <SectionTitle icon={<Utensils className="w-3.5 h-3.5 text-slate-400" />}>
                     Cost per meal
                 </SectionTitle>
-                <Card>
-                    {overall.costPerMeal !== null ? (
-                        <div className="flex items-end justify-between gap-3">
-                            <div>
-                                <p className="text-3xl font-mono font-extrabold text-emerald-600 tracking-tight">
-                                    {formatCurrency(overall.costPerMeal, 'ALL')}
-                                </p>
-                                <p className="text-[11px] text-slate-500 mt-1">
-                                    average across all logged meals
+                <Card className="space-y-4 divide-y divide-slate-100">
+                    {/* Metric 1: Tagged Average */}
+                    <div>
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Tagged Average</p>
+                        {overall.costPerMeal !== null ? (
+                            <div className="flex items-end justify-between gap-3">
+                                <div>
+                                    <p className="text-2xl font-mono font-extrabold text-emerald-600 tracking-tight">
+                                        {formatCurrency(overall.costPerMeal, 'ALL')}
+                                    </p>
+                                    <p className="text-[11px] text-slate-500 mt-1">
+                                        based on {overall.meals} manually tagged meals
+                                    </p>
+                                </div>
+                                <p className="text-[11px] font-mono text-slate-400 text-right">
+                                    {formatCurrency(overall.mealSpend, 'ALL')}
+                                    <br />
+                                    total spend
                                 </p>
                             </div>
-                            <p className="text-[11px] font-mono text-slate-400 text-right">
-                                {formatCurrency(overall.mealSpend, 'ALL')}
-                                <br />
-                                for {overall.meals} meal{overall.meals === 1 ? '' : 's'}
+                        ) : (
+                            <p className="text-xs text-slate-500">
+                                Add an estimated meal count in Advanced Entry when you log food, and your
+                                average cost per meal will show up here.
                             </p>
-                        </div>
-                    ) : (
-                        <p className="text-xs text-slate-500">
-                            Add an estimated meal count in Advanced Entry when you log food, and your
-                            average cost per meal will show up here.
+                        )}
+                    </div>
+
+                    {/* Metric 2: Daily Food Burn (3 meals/day) */}
+                    <div className="pt-4">
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                            <CalendarDays className="w-3 h-3" />
+                            Daily Food Burn (est. 3 meals/day)
                         </p>
-                    )}
+                        {dailyFoodStats ? (
+                            <div className="flex items-end justify-between gap-3">
+                                <div>
+                                    <p className="text-2xl font-mono font-extrabold text-amber-600 tracking-tight">
+                                        {formatCurrency(dailyFoodStats.costPerMealEstimate, 'ALL')}
+                                    </p>
+                                    <p className="text-[11px] text-slate-500 mt-1">
+                                        average cost assuming 3 meals a day
+                                    </p>
+                                </div>
+                                <div className="text-[11px] font-mono text-slate-400 text-right">
+                                    {formatCurrency(dailyFoodStats.totalFoodSpend, 'ALL')}
+                                    <br />
+                                    across {dailyFoodStats.daysElapsed} days
+                                </div>
+                            </div>
+                        ) : (
+                            <p className="text-xs text-slate-500">
+                                Start a budget cycle or log some Food expenses to see your daily burn rate.
+                            </p>
+                        )}
+                    </div>
                 </Card>
             </section>
 
