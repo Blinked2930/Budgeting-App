@@ -32,6 +32,7 @@ import {
 } from '../utils/insights';
 import { formatCurrency } from '../utils/currency';
 import { cn } from '../utils/cn';
+import { DebtsPanel } from './DebtsPanel';
 
 const CATEGORY_COLORS: Record<Category, { bar: string; text: string; dot: string }> = {
     Food: { bar: 'bg-emerald-400', text: 'text-emerald-700', dot: 'bg-emerald-400' },
@@ -61,8 +62,15 @@ const SectionTitle: React.FC<{ icon: React.ReactNode; children: React.ReactNode 
     </div>
 );
 
-const Card: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
-    <div className={cn('p-4 rounded-2xl bg-white border border-slate-200 shadow-sm', className)}>
+const Card: React.FC<{ children: React.ReactNode; className?: string; onClick?: () => void }> = ({ children, className, onClick }) => (
+    <div
+        onClick={onClick}
+        className={cn(
+            'p-4 rounded-2xl bg-white border border-slate-200 shadow-sm',
+            onClick && 'cursor-pointer hover:border-emerald-300 transition-colors',
+            className
+        )}
+    >
         {children}
     </div>
 );
@@ -214,7 +222,7 @@ const VendorBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) 
     );
 };
 
-const DebtSummary: React.FC = () => {
+const DebtSummary: React.FC<{ onOpen: () => void }> = ({ onOpen }) => {
     const { openDebts } = useDebts();
 
     const totals = useMemo(() => {
@@ -236,7 +244,11 @@ const DebtSummary: React.FC = () => {
     }
 
     return (
-        <Card className="space-y-3">
+        <Card className="space-y-3" onClick={onOpen}>
+            <div className="flex items-center justify-between">
+                <p className="text-[10px] font-semibold text-indigo-700 uppercase tracking-wider">Debts</p>
+                <span className="text-[10px] text-indigo-500 underline">Manage →</span>
+            </div>
             <div className="grid grid-cols-3 gap-2">
                 <div>
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Owed to you</p>
@@ -257,9 +269,6 @@ const DebtSummary: React.FC = () => {
                     </p>
                 </div>
             </div>
-            <p className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100">
-                Manage debts in the Budget tab.
-            </p>
         </Card>
     );
 };
@@ -328,6 +337,7 @@ export const InsightsView: React.FC = () => {
     const { expenses } = useExpenses();
     const { cycle } = useBudgetCycle();
     const [filters, setFilters] = useState<InsightFilters>(DEFAULT_FILTERS);
+    const [isDebtsOpen, setIsDebtsOpen] = useState(false);
 
     const overall = useMemo(() => aggregate(expenses), [expenses]);
     const monthOptions = useMemo(() => getMonthOptions(expenses), [expenses]);
@@ -346,11 +356,13 @@ export const InsightsView: React.FC = () => {
 
     return (
         <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
+            <DebtsPanel isOpen={isDebtsOpen} onClose={() => setIsDebtsOpen(false)} />
+
             <section>
                 <SectionTitle icon={<HandCoins className="w-3.5 h-3.5 text-slate-400" />}>
                     Debts Overview
                 </SectionTitle>
-                <DebtSummary />
+                <DebtSummary onOpen={() => setIsDebtsOpen(true)} />
             </section>
 
             <section>

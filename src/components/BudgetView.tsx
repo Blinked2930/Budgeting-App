@@ -562,7 +562,7 @@ export const BudgetView: React.FC = () => {
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                         Left to spend today
                     </p>
-                    <button onClick={() => setInfoModal({ title: 'Left to Spend Today', description: 'This is your dynamic daily allowance. It recalculates as your remaining budget changes. It is (Remaining / Days Left). It changes if you underspend or overspend on previous days.' })}>
+                    <button onClick={() => setInfoModal({ title: 'Left to Spend Today', description: 'This is how much of today\'s allowance you have left. Your daily allowance is calculated as (Remaining Budget / Days Left). If you underspend, the leftover goes into your Buffer Pool, increasing your allowance for future days.' })}>
                         <Info className="w-3.5 h-3.5 text-slate-400" />
                     </button>
                 </div>
