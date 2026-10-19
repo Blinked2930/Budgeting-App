@@ -1,31 +1,23 @@
 // src/components/InsightsView.tsx
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-    Landmark,
     ListFilter,
     Store,
-    TriangleAlert,
-    CircleCheck,
     Utensils,
-    Check,
     Banknote,
     CreditCard,
     HandCoins,
-    ArrowUpRight,
-    ArrowDownLeft,
-    X,
-    Trash2,
     PieChart,
     History,
     PiggyBank,
     CalendarDays,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { CATEGORIES, type Category, type ExpenseRecord, type PaymentSource, type DebtRecord } from '../types';
+import { CATEGORIES, type Category, type ExpenseRecord } from '../types';
 import { useExpenses } from '../hooks/useExpenses';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { useDebts } from '../hooks/useDebts';
-import { db, addExpense, settleDebtCash, settleDebtNonCash, writeOffDebt, deleteDebt } from '../db';
+import { db } from '../db';
 import {
     DEFAULT_FILTERS,
     aggregate,
@@ -112,182 +104,6 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
         <p className="mt-0.5 text-base font-mono font-bold text-slate-900 tracking-tight">{value}</p>
     </div>
 );
-
-const ReconcileRow: React.FC<{
-    icon: React.ReactNode;
-    label: string;
-    estimated: number;
-    paidWith: PaymentSource;
-}> = ({ icon, label, estimated, paidWith }) => {
-    const [actualStr, setActualStr] = useState('');
-    const [isReconciling, setIsReconciling] = useState(false);
-    const [showDialog, setShowDialog] = useState(false);
-    const dismissedValueRef = useRef<string | null>(null);
-
-    const actual = parseFloat(actualStr);
-    const hasActual = actualStr.trim() !== '' && !Number.isNaN(actual);
-    const variance = hasActual ? actual - estimated : 0;
-    const matches = hasActual && Math.abs(variance) < 1;
-    const amountToLog = hasActual ? estimated - actual : 0;
-    const hasDiscrepancy = hasActual && !matches && Math.abs(amountToLog) >= 1;
-
-    const handleReconcile = async () => {
-        if (!hasDiscrepancy) return;
-        setIsReconciling(true);
-        await addExpense({
-            amount: amountToLog,
-            currency: 'ALL',
-            category: 'Other',
-            paidWith,
-            itemName: 'Balance Reconciliation',
-        });
-        setActualStr('');
-        setShowDialog(false);
-        dismissedValueRef.current = null;
-        setIsReconciling(false);
-    };
-
-    const handleBlur = () => {
-        if (!hasDiscrepancy) return;
-        if (dismissedValueRef.current === actualStr) return;
-        setShowDialog(true);
-    };
-
-    return (
-        <div className="space-y-2">
-            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                {icon}
-                <span>{label}</span>
-            </div>
-            <div>
-                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">LekFlow expects</p>
-                <p className="text-base font-mono font-bold text-slate-900">{formatCurrency(estimated, 'ALL')}</p>
-            </div>
-            <input
-                type="number"
-                inputMode="decimal"
-                step="any"
-                value={actualStr}
-                onChange={(e) => setActualStr(e.target.value)}
-                onBlur={handleBlur}
-                placeholder="Actual"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
-            />
-
-            {hasActual && matches && (
-                <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-2.5 py-1.5">
-                    <CircleCheck className="w-3.5 h-3.5 shrink-0" />
-                    <span>Matches</span>
-                </div>
-            )}
-
-            {hasActual && !matches && (
-                <div className="flex flex-col gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-2.5 py-1.5">
-                    <div className="flex items-start gap-1.5">
-                        <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                        <span>
-                            {variance < 0
-                                ? `${formatCurrency(Math.abs(variance), 'ALL')} less than expected.`
-                                : `${formatCurrency(variance, 'ALL')} more than expected.`}
-                        </span>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={() => setShowDialog(true)}
-                        className="bg-amber-100 hover:bg-amber-200 text-amber-800 py-1 px-2 rounded-lg font-bold transition-colors text-center cursor-pointer text-[10px]"
-                    >
-                        Log {formatCurrency(Math.abs(amountToLog), 'ALL')}
-                    </button>
-                </div>
-            )}
-
-            {showDialog && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
-                    onClick={() => {
-                        dismissedValueRef.current = actualStr;
-                        setShowDialog(false);
-                    }}
-                >
-                    <div
-                        className="w-full max-w-sm bg-white border border-slate-200 rounded-3xl p-5 shadow-xl space-y-4"
-                        onClick={(e) => e.stopPropagation()}
-                    >
-                        <div className="flex items-start gap-3">
-                            <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
-                                <TriangleAlert className="w-5 h-5 text-amber-500" />
-                            </div>
-                            <div className="min-w-0">
-                                <h3 className="text-base font-bold text-slate-900">Log a {label} discrepancy?</h3>
-                                <p className="text-xs text-slate-500 mt-1">
-                                    LekFlow expects {formatCurrency(estimated, 'ALL')} in {label.toLowerCase()}, but you entered {formatCurrency(actual, 'ALL')}.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
-                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Adjustment</p>
-                            <p className={cn('text-lg font-mono font-bold mt-0.5', amountToLog > 0 ? 'text-rose-600' : 'text-emerald-600')}>
-                                {amountToLog > 0 ? '−' : '+'}
-                                {formatCurrency(Math.abs(amountToLog), 'ALL')}
-                            </p>
-                            <p className="text-[10px] text-slate-500 mt-1">Logs as a {paidWith.toLowerCase()} entry.</p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    dismissedValueRef.current = actualStr;
-                                    setShowDialog(false);
-                                }}
-                                className="py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-600 text-xs font-semibold cursor-pointer hover:bg-slate-50"
-                            >
-                                Not now
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleReconcile}
-                                disabled={isReconciling}
-                                className="py-2.5 rounded-2xl bg-emerald-600 text-white text-xs font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 hover:bg-emerald-700"
-                            >
-                                <Check className="w-3.5 h-3.5" />
-                                {isReconciling ? 'Logging…' : 'Log it'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
-
-const BankCheck: React.FC = () => {
-    const { stats } = useBudgetCycle();
-
-    if (!stats) {
-        return (
-            <Card>
-                <p className="text-xs text-slate-500">Set up a budget cycle in the Budget tab to see your estimated balances.</p>
-            </Card>
-        );
-    }
-
-    return (
-        <Card className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-                <ReconcileRow icon={<Landmark className="w-3 h-3" />} label="Bank" estimated={stats.estimatedBankBalance} paidWith="Card" />
-                <ReconcileRow icon={<Banknote className="w-3 h-3" />} label="Cash" estimated={stats.estimatedCashBalance} paidWith="Cash" />
-            </div>
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Net worth (with debts)</p>
-                <p className={cn('text-base font-mono font-bold', stats.netWorthALL < 0 ? 'text-rose-600' : 'text-slate-900')}>
-                    {formatCurrency(stats.netWorthALL, 'ALL')}
-                </p>
-            </div>
-        </Card>
-    );
-};
 
 const CategoryBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => {
     const stats = useMemo(() => aggregateByCategory(expenses), [expenses]);
@@ -398,330 +214,8 @@ const VendorBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) 
     );
 };
 
-const DebtRowActions: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
-    const [busy, setBusy] = useState<string | null>(null);
-    const [amountStr, setAmountStr] = useState<string>(String(debt.remainingALL));
-
-    useEffect(() => {
-        setAmountStr(String(debt.remainingALL));
-    }, [debt.remainingALL]);
-
-    const owedToMe = debt.direction === 'OwedToMe';
-    const parsed = parseFloat(amountStr);
-    const requested = Number.isNaN(parsed) ? debt.remainingALL : parsed;
-    const clamped = Math.min(Math.max(requested, 0), debt.remainingALL);
-    const isPartial = clamped > 0 && clamped < debt.remainingALL;
-    const isValid = clamped > 0;
-
-    const handleCash = async (paidWith: PaymentSource) => {
-        if (!isValid) return;
-        setBusy('cash-' + paidWith);
-        await settleDebtCash(debt.id, clamped, paidWith);
-        setBusy(null);
-    };
-
-    const handleNonCash = async (paidWith: PaymentSource) => {
-        if (!isValid) return;
-        setBusy('noncash-' + paidWith);
-        await settleDebtNonCash(debt.id, clamped, paidWith);
-        setBusy(null);
-    };
-
-    const handleWriteOff = async () => {
-        setBusy('writeoff');
-        await writeOffDebt(debt.id);
-        setBusy(null);
-    };
-
-    const handleDelete = async () => {
-        setBusy('delete');
-        await deleteDebt(debt.id);
-        setBusy(null);
-    };
-
-    return (
-        <div className="space-y-2 pt-1">
-            <div className="flex items-center justify-between gap-2">
-                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                    Amount to settle
-                </p>
-                <button
-                    type="button"
-                    onClick={handleDelete}
-                    disabled={busy !== null}
-                    className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50"
-                    title="Delete debt (undoes cash/bank effect)"
-                >
-                    <Trash2 className="w-3 h-3" />
-                </button>
-            </div>
-            <div className="flex items-center gap-2">
-                <div className="flex-1 min-w-0">
-                    <input
-                        type="number"
-                        inputMode="decimal"
-                        step="any"
-                        value={amountStr}
-                        onChange={(e) => setAmountStr(e.target.value)}
-                        placeholder="0"
-                        className="w-full min-w-0 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
-                    />
-                </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                    {isPartial ? (
-                        <span className="text-[10px] font-semibold text-amber-600">
-                            Partial · {formatCurrency(clamped, 'ALL')}
-                        </span>
-                    ) : (
-                        <span className="text-[10px] font-semibold text-emerald-600">Full</span>
-                    )}
-                    {requested !== debt.remainingALL && (
-                        <button
-                            type="button"
-                            onClick={() => setAmountStr(String(debt.remainingALL))}
-                            className="text-[10px] text-slate-400 hover:text-slate-600 underline cursor-pointer"
-                        >
-                            Reset
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            {owedToMe ? (
-                <div className="grid grid-cols-2 gap-1.5">
-                    <button
-                        type="button"
-                        onClick={() => handleCash('Cash')}
-                        disabled={busy !== null || !isValid}
-                        className="flex items-center justify-center gap-1 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-teal-200"
-                    >
-                        <Banknote className="w-3 h-3" />
-                        Got cash
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => handleCash('Card')}
-                        disabled={busy !== null || !isValid}
-                        className="flex items-center justify-center gap-1 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-rose-200"
-                    >
-                        <CreditCard className="w-3 h-3" />
-                        Got bank
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => handleNonCash('Cash')}
-                        disabled={busy !== null || !isValid}
-                        className="py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-slate-200"
-                    >
-                        They offset
-                    </button>
-                    <button
-                        type="button"
-                        onClick={handleWriteOff}
-                        disabled={busy !== null}
-                        className="py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-amber-200"
-                    >
-                        Write off
-                    </button>
-                </div>
-            ) : (
-                <div className="space-y-1.5">
-                    <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                            type="button"
-                            onClick={() => handleCash('Cash')}
-                            disabled={busy !== null || !isValid}
-                            className="flex items-center justify-center gap-1 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-rose-200"
-                        >
-                            <Banknote className="w-3 h-3" />
-                            Paid cash
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => handleCash('Card')}
-                            disabled={busy !== null || !isValid}
-                            className="flex items-center justify-center gap-1 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-rose-200"
-                        >
-                            <CreditCard className="w-3 h-3" />
-                            Paid bank
-                        </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-1.5">
-                        <button
-                            type="button"
-                            onClick={() => handleNonCash('Cash')}
-                            disabled={busy !== null || !isValid}
-                            className="py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-slate-200"
-                        >
-                            Offset cash
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => handleNonCash('Card')}
-                            disabled={busy !== null || !isValid}
-                            className="py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-slate-200"
-                        >
-                            Offset card
-                        </button>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={handleWriteOff}
-                        disabled={busy !== null}
-                        className="w-full py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-amber-200"
-                    >
-                        Forgiven
-                    </button>
-                </div>
-            )}
-        </div>
-    );
-};
-
-const DebtDetailModal: React.FC<{
-    counterpartyKey: string | null;
-    onClose: () => void;
-}> = ({ counterpartyKey, onClose }) => {
-    const { debts } = useDebts();
-    const [busyDeleteId, setBusyDeleteId] = useState<string | null>(null);
-
-    const myDebts = useMemo(
-        () => debts.filter((d) => d.counterpartyKey === counterpartyKey),
-        [debts, counterpartyKey]
-    );
-
-    if (!counterpartyKey || myDebts.length === 0) return null;
-
-    const name = myDebts[0].counterparty;
-    const openDebts = myDebts.filter((d) => d.status === 'open');
-    const resolvedDebts = myDebts.filter((d) => d.status === 'resolved');
-
-    const handleDeleteResolved = async (id: string) => {
-        setBusyDeleteId(id);
-        await deleteDebt(id);
-        setBusyDeleteId(null);
-    };
-
-    return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
-            onClick={onClose}
-        >
-            <div
-                className="w-full max-w-md max-h-[85vh] flex flex-col bg-white border border-slate-200 rounded-3xl shadow-xl"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="flex items-center justify-between p-5 border-b border-slate-100">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center">
-                            <HandCoins className="w-4 h-4 text-indigo-500" />
-                        </div>
-                        <div>
-                            <h3 className="text-base font-bold text-slate-900">{name}</h3>
-                            <p className="text-[10px] text-slate-500">
-                                {openDebts.length} open · {resolvedDebts.length} resolved
-                            </p>
-                        </div>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
-                </div>
-
-                <div className="overflow-y-auto p-4 space-y-3">
-                    {openDebts.map((debt) => {
-                        const owedToMe = debt.direction === 'OwedToMe';
-                        return (
-                            <div
-                                key={debt.id}
-                                className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2"
-                            >
-                                <div className="flex items-center justify-between">
-                                    <span
-                                        className={cn(
-                                            'text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1',
-                                            owedToMe ? 'text-emerald-600' : 'text-rose-500'
-                                        )}
-                                    >
-                                        {owedToMe ? (
-                                            <ArrowUpRight className="w-3 h-3" />
-                                        ) : (
-                                            <ArrowDownLeft className="w-3 h-3" />
-                                        )}
-                                        {owedToMe ? 'Owes you' : 'You owe'}
-                                    </span>
-                                    <span className="text-sm font-mono font-bold text-slate-900">
-                                        {formatCurrency(debt.remainingALL, 'ALL')}
-                                    </span>
-                                </div>
-
-                                {debt.note && (
-                                    <p className="text-[11px] text-slate-500 italic">{debt.note}</p>
-                                )}
-
-                                <p className="text-[10px] text-slate-400">
-                                    {new Date(debt.createdAt).toLocaleDateString('en-GB', {
-                                        day: 'numeric',
-                                        month: 'short',
-                                        year: 'numeric',
-                                    })}
-                                </p>
-
-                                <DebtRowActions debt={debt} />
-                            </div>
-                        );
-                    })}
-
-                    {resolvedDebts.length > 0 && (
-                        <>
-                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider pt-2">
-                                Resolved
-                            </p>
-                            {resolvedDebts.map((debt) => (
-                                <div
-                                    key={debt.id}
-                                    className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2"
-                                >
-                                    <div className="min-w-0">
-                                        <p className="text-[11px] font-medium text-slate-500 line-through truncate">
-                                            {debt.direction === 'OwedToMe' ? 'Owes you' : 'You owe'}{' '}
-                                            {formatCurrency(debt.amountALL, 'ALL')}
-                                        </p>
-                                        {debt.note && (
-                                            <p className="text-[10px] text-slate-400 italic truncate line-through">
-                                                {debt.note}
-                                            </p>
-                                        )}
-                                    </div>
-                                    <div className="flex items-center gap-2 shrink-0">
-                                        <Check className="w-3.5 h-3.5 text-slate-400" />
-                                        <button
-                                            type="button"
-                                            onClick={() => handleDeleteResolved(debt.id)}
-                                            disabled={busyDeleteId === debt.id}
-                                            className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50"
-                                            title="Delete resolved debt (undoes all effects)"
-                                        >
-                                            <Trash2 className="w-3 h-3" />
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const DebtsSection: React.FC = () => {
+const DebtsOverview: React.FC = () => {
     const { openDebts } = useDebts();
-    const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
     const groups = useMemo(() => {
         const map = new Map<
@@ -755,72 +249,65 @@ const DebtsSection: React.FC = () => {
         return (
             <Card>
                 <p className="text-xs text-slate-500">
-                    No open debts. Log a shared expense from Advanced Entry, or use Debts on the Log tab.
+                    No open debts.
                 </p>
             </Card>
         );
     }
 
     return (
-        <>
-            <Card className="space-y-2">
-                {groups.map((g) => {
-                    const net = g.receivables - g.payables;
-                    return (
-                        <button
-                            key={g.key}
-                            type="button"
-                            onClick={() => setSelectedKey(g.key)}
-                            className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
-                        >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
-                                    <span className="text-xs font-bold text-indigo-700">
-                                        {g.name.charAt(0).toUpperCase()}
-                                    </span>
-                                </div>
-                                <div className="min-w-0 text-left">
-                                    <p className="text-xs font-semibold text-slate-900 truncate">
-                                        {g.name}
-                                    </p>
-                                    <p className="text-[10px] text-slate-500">
-                                        {g.count} {g.count === 1 ? 'item' : 'items'}
-                                    </p>
-                                </div>
+        <Card className="space-y-2">
+            {groups.map((g) => {
+                const net = g.receivables - g.payables;
+                return (
+                    <div
+                        key={g.key}
+                        className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200"
+                    >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
+                                <span className="text-xs font-bold text-indigo-700">
+                                    {g.name.charAt(0).toUpperCase()}
+                                </span>
                             </div>
-                            <div className="text-right shrink-0 ml-2">
-                                <p
-                                    className={cn(
-                                        'text-sm font-mono font-bold',
-                                        net > 0
-                                            ? 'text-emerald-600'
-                                            : net < 0
-                                                ? 'text-rose-500'
-                                                : 'text-slate-500'
-                                    )}
-                                >
-                                    {net > 0 ? '+' : ''}
-                                    {formatCurrency(Math.abs(net), 'ALL')}
+                            <div className="min-w-0 text-left">
+                                <p className="text-xs font-semibold text-slate-900 truncate">
+                                    {g.name}
                                 </p>
                                 <p className="text-[10px] text-slate-500">
-                                    {net > 0 ? 'owes you' : net < 0 ? 'you owe' : 'settled'}
+                                    {g.count} {g.count === 1 ? 'item' : 'items'}
                                 </p>
                             </div>
-                        </button>
-                    );
-                })}
-            </Card>
-
-            <DebtDetailModal
-                counterpartyKey={selectedKey}
-                onClose={() => setSelectedKey(null)}
-            />
-        </>
+                        </div>
+                        <div className="text-right shrink-0 ml-2">
+                            <p
+                                className={cn(
+                                    'text-sm font-mono font-bold',
+                                    net > 0
+                                        ? 'text-emerald-600'
+                                        : net < 0
+                                            ? 'text-rose-500'
+                                            : 'text-slate-500'
+                                )}
+                            >
+                                {net > 0 ? '+' : ''}
+                                {formatCurrency(Math.abs(net), 'ALL')}
+                            </p>
+                            <p className="text-[10px] text-slate-500">
+                                {net > 0 ? 'owes you' : net < 0 ? 'you owe' : 'settled'}
+                            </p>
+                        </div>
+                    </div>
+                );
+            })}
+            <p className="text-[10px] text-slate-400 text-center pt-2">
+                Manage and settle debts in the Budget tab.
+            </p>
+        </Card>
     );
 };
 
 const CycleHistorySection: React.FC = () => {
-    // Fetch all non-deleted cycles sorted by newest first
     const allCycles = useLiveQuery(
         () => db.budgetCycles.orderBy('startDate').reverse().filter((c) => !c.deleted).toArray(),
         []
@@ -836,7 +323,6 @@ const CycleHistorySection: React.FC = () => {
         );
     }
 
-    // Skip index 0 (that's the current active cycle)
     const pastCycles = allCycles.slice(1);
 
     return (
@@ -891,7 +377,6 @@ export const InsightsView: React.FC = () => {
     const filtered = useMemo(() => filterExpenses(expenses, filters), [expenses, filters]);
     const filteredAgg = useMemo(() => aggregate(filtered), [filtered]);
 
-    // Calculate the new daily food average based on the current cycle
     const dailyFoodStats = useMemo(
         () => calculateFoodDailyStats(expenses, cycle?.startDate),
         [expenses, cycle?.startDate]
@@ -905,17 +390,10 @@ export const InsightsView: React.FC = () => {
     return (
         <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
             <section>
-                <SectionTitle icon={<Landmark className="w-3.5 h-3.5 text-slate-400" />}>
-                    Reconcile bank & cash
-                </SectionTitle>
-                <BankCheck />
-            </section>
-
-            <section>
                 <SectionTitle icon={<HandCoins className="w-3.5 h-3.5 text-slate-400" />}>
-                    Debts
+                    Debts Overview
                 </SectionTitle>
-                <DebtsSection />
+                <DebtsOverview />
             </section>
 
             <section>

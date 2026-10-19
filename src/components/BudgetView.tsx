@@ -1,5 +1,5 @@
 // src/components/BudgetView.tsx
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
     CalendarDays,
     Landmark,
@@ -11,9 +11,12 @@ import {
     X,
     HandCoins,
     Info,
+    TriangleAlert,
+    CircleCheck,
+    Check,
 } from 'lucide-react';
-import type { BudgetCycle } from '../types';
-import { saveBudgetCycle } from '../db';
+import type { BudgetCycle, PaymentSource } from '../types';
+import { addExpense, saveBudgetCycle } from '../db';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { addDays, toDateInputValue } from '../utils/budget';
 import { formatCurrency } from '../utils/currency';
@@ -51,6 +54,155 @@ const Field: React.FC<{
         {hint && <span className="block text-[10px] text-slate-400 mt-1">{hint}</span>}
     </label>
 );
+
+const ReconcileRow: React.FC<{
+    icon: React.ReactNode;
+    label: string;
+    estimated: number;
+    paidWith: PaymentSource;
+}> = ({ icon, label, estimated, paidWith }) => {
+    const [actualStr, setActualStr] = useState('');
+    const [isReconciling, setIsReconciling] = useState(false);
+    const [showDialog, setShowDialog] = useState(false);
+    const dismissedValueRef = useRef<string | null>(null);
+
+    const actual = parseFloat(actualStr);
+    const hasActual = actualStr.trim() !== '' && !Number.isNaN(actual);
+    const variance = hasActual ? actual - estimated : 0;
+    const matches = hasActual && Math.abs(variance) < 1;
+    const amountToLog = hasActual ? estimated - actual : 0;
+    const hasDiscrepancy = hasActual && !matches && Math.abs(amountToLog) >= 1;
+
+    const handleReconcile = async () => {
+        if (!hasDiscrepancy) return;
+        setIsReconciling(true);
+        await addExpense({
+            amount: amountToLog,
+            currency: 'ALL',
+            category: 'Other',
+            paidWith,
+            itemName: 'Balance Reconciliation',
+        });
+        setActualStr('');
+        setShowDialog(false);
+        dismissedValueRef.current = null;
+        setIsReconciling(false);
+    };
+
+    const handleBlur = () => {
+        if (!hasDiscrepancy) return;
+        if (dismissedValueRef.current === actualStr) return;
+        setShowDialog(true);
+    };
+
+    return (
+        <div className="space-y-2">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                {icon}
+                <span>{label}</span>
+            </div>
+            <div>
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">LekFlow expects</p>
+                <p className="text-base font-mono font-bold text-slate-900">{formatCurrency(estimated, 'ALL')}</p>
+            </div>
+            <input
+                type="number"
+                inputMode="decimal"
+                step="any"
+                value={actualStr}
+                onChange={(e) => setActualStr(e.target.value)}
+                onBlur={handleBlur}
+                placeholder="Actual"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white"
+            />
+
+            {hasActual && matches && (
+                <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-2.5 py-1.5">
+                    <CircleCheck className="w-3.5 h-3.5 shrink-0" />
+                    <span>Matches</span>
+                </div>
+            )}
+
+            {hasActual && !matches && (
+                <div className="flex flex-col gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-2.5 py-1.5">
+                    <div className="flex items-start gap-1.5">
+                        <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <span>
+                            {variance < 0
+                                ? `${formatCurrency(Math.abs(variance), 'ALL')} less than expected.`
+                                : `${formatCurrency(variance, 'ALL')} more than expected.`}
+                        </span>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setShowDialog(true)}
+                        className="bg-amber-100 hover:bg-amber-200 text-amber-800 py-1 px-2 rounded-lg font-bold transition-colors text-center cursor-pointer text-[10px]"
+                    >
+                        Log {formatCurrency(Math.abs(amountToLog), 'ALL')}
+                    </button>
+                </div>
+            )}
+
+            {showDialog && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm"
+                    onClick={() => {
+                        dismissedValueRef.current = actualStr;
+                        setShowDialog(false);
+                    }}
+                >
+                    <div
+                        className="w-full max-w-sm bg-white border border-slate-200 rounded-3xl p-5 shadow-xl space-y-4"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-start gap-3">
+                            <div className="w-10 h-10 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
+                                <TriangleAlert className="w-5 h-5 text-amber-500" />
+                            </div>
+                            <div className="min-w-0">
+                                <h3 className="text-base font-bold text-slate-900">Log a {label} discrepancy?</h3>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    LekFlow expects {formatCurrency(estimated, 'ALL')} in {label.toLowerCase()}, but you entered {formatCurrency(actual, 'ALL')}.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
+                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Adjustment</p>
+                            <p className={cn('text-lg font-mono font-bold mt-0.5', amountToLog > 0 ? 'text-rose-600' : 'text-emerald-600')}>
+                                {amountToLog > 0 ? '−' : '+'}
+                                {formatCurrency(Math.abs(amountToLog), 'ALL')}
+                            </p>
+                            <p className="text-[10px] text-slate-500 mt-1">Logs as a {paidWith.toLowerCase()} entry.</p>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    dismissedValueRef.current = actualStr;
+                                    setShowDialog(false);
+                                }}
+                                className="py-2.5 rounded-2xl bg-white border border-slate-200 text-slate-600 text-xs font-semibold cursor-pointer hover:bg-slate-50"
+                            >
+                                Not now
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleReconcile}
+                                disabled={isReconciling}
+                                className="py-2.5 rounded-2xl bg-emerald-600 text-white text-xs font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5 hover:bg-emerald-700"
+                            >
+                                <Check className="w-3.5 h-3.5" />
+                                {isReconciling ? 'Logging…' : 'Log it'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
 
 interface CycleFormProps {
     title: string;
@@ -421,25 +573,17 @@ export const BudgetView: React.FC = () => {
                 </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5">
-                <StatTile
-                    icon={<Landmark className="w-3.5 h-3.5 text-cyan-600" />}
-                    label="Bank"
-                    value={formatCurrency(stats.estimatedBankBalance, 'ALL')}
-                    sub="Raiffeisen estimate"
-                    negative={stats.estimatedBankBalance < 0}
-                    showInfo
-                    onClick={() => setInfoModal({ title: 'Bank Balance', description: 'Your estimated Raiffeisen account balance. Calculated as: Starting Bank + Stipend - Card Expenses - Transfers to Cash + Transfers from Cash.' })}
-                />
-                <StatTile
-                    icon={<Banknote className="w-3.5 h-3.5 text-teal-600" />}
-                    label="Cash"
-                    value={formatCurrency(stats.estimatedCashBalance, 'ALL')}
-                    sub="pocket estimate"
-                    negative={stats.estimatedCashBalance < 0}
-                    showInfo
-                    onClick={() => setInfoModal({ title: 'Cash Balance', description: 'Your estimated physical cash in hand. Calculated as: Starting Cash - Cash Expenses - Transfers to Bank + Transfers from Bank.' })}
-                />
+            <div className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                    <ReconcileRow icon={<Landmark className="w-3 h-3" />} label="Bank" estimated={stats.estimatedBankBalance} paidWith="Card" />
+                    <ReconcileRow icon={<Banknote className="w-3 h-3" />} label="Cash" estimated={stats.estimatedCashBalance} paidWith="Cash" />
+                </div>
+                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Net worth (with debts)</p>
+                    <p className={cn('text-base font-mono font-bold', stats.netWorthALL < 0 ? 'text-rose-600' : 'text-slate-900')}>
+                        {formatCurrency(stats.netWorthALL, 'ALL')}
+                    </p>
+                </div>
             </div>
 
             {hasDebts && (
