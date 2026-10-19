@@ -562,7 +562,7 @@ export const BudgetView: React.FC = () => {
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                         Left to spend today
                     </p>
-                    <button onClick={() => setInfoModal({ title: 'Left to Spend Today', description: 'This is how much of today\'s allowance you have left. Your daily allowance is calculated as (Remaining Budget / Days Left). If you underspend, the leftover goes into your Buffer Pool, increasing your allowance for future days.' })}>
+                    <button onClick={() => setInfoModal({ title: 'Left to Spend Today', description: 'Your daily allowance is capped at your total budget divided by the total cycle days. If you overspend, this number shrinks to help you stay on track. If you underspend, the extra money goes into your Buffer Pool and is saved for the end of the cycle rather than increasing your future daily allowance.' })}>
                         <Info className="w-3.5 h-3.5 text-slate-400" />
                     </button>
                 </div>
@@ -693,7 +693,7 @@ export const BudgetView: React.FC = () => {
                     value={formatCurrency(stats.bufferPool, 'ALL')}
                     sub="unspent from logged days"
                     showInfo
-                    onClick={() => setInfoModal({ title: 'Buffer Pool', description: 'Money you saved on days you logged spending less than your base daily allowance. This rolls over to increase your allowance for future days. It rewards you for eating cheap!' })}
+                    onClick={() => setInfoModal({ title: 'Buffer Pool', description: 'Money you saved by spending less than the expected daily burn rate. This is automatically added to your budget for the next cycle (or rolls into your Travel Stash). It does not increase your daily allowance.' })}
                 />
                 <StatTile
                     icon={<PiggyBank className="w-3.5 h-3.5 text-rose-600" />}
