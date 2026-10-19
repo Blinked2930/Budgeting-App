@@ -1,5 +1,5 @@
 // src/components/BudgetView.tsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import {
     CalendarDays,
     Landmark,
@@ -18,6 +18,7 @@ import {
 import type { BudgetCycle, PaymentSource } from '../types';
 import { addExpense, saveBudgetCycle } from '../db';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
+import { useDebts } from '../hooks/useDebts';
 import { addDays, toDateInputValue } from '../utils/budget';
 import { formatCurrency } from '../utils/currency';
 import { cn } from '../utils/cn';
@@ -420,9 +421,28 @@ const StatTile: React.FC<{
 
 export const BudgetView: React.FC = () => {
     const { cycle, stats, isLoading } = useBudgetCycle();
+    const { openDebts } = useDebts();
     const [formMode, setFormMode] = useState<FormMode | null>(null);
     const [isDebtsOpen, setIsDebtsOpen] = useState(false);
     const [infoModal, setInfoModal] = useState<{ title: string; description: string } | null>(null);
+
+    const debtGroups = useMemo(() => {
+        const map = new Map<string, { key: string; name: string; receivables: number; payables: number }>();
+        for (const d of openDebts) {
+            let g = map.get(d.counterpartyKey);
+            if (!g) {
+                g = { key: d.counterpartyKey, name: d.counterparty, receivables: 0, payables: 0 };
+                map.set(d.counterpartyKey, g);
+            }
+            if (d.direction === 'OwedToMe') g.receivables += d.remainingALL;
+            else g.payables += d.remainingALL;
+        }
+        return Array.from(map.values()).sort((a, b) => {
+            const aTotal = a.receivables + a.payables;
+            const bTotal = b.receivables + b.payables;
+            return bTotal - aTotal;
+        });
+    }, [openDebts]);
 
     if (isLoading) return <div className="w-full max-w-md mx-auto px-4 py-10 text-center text-xs text-slate-500">Loading…</div>;
 
@@ -587,14 +607,21 @@ export const BudgetView: React.FC = () => {
             </div>
 
             {hasDebts && (
-                <div onClick={() => setIsDebtsOpen(true)} className="p-3.5 rounded-2xl bg-white border border-indigo-200 shadow-sm space-y-2.5 cursor-pointer hover:bg-slate-50 transition-colors">
+                <div className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-3">
                     <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
                             <HandCoins className="w-3.5 h-3.5 text-indigo-600" />
                             <p className="text-[10px] font-semibold text-indigo-700 uppercase tracking-wider">Debts</p>
                         </div>
-                        <span className="text-[10px] text-indigo-500 underline">Manage →</span>
+                        <button
+                            type="button"
+                            onClick={() => setIsDebtsOpen(true)}
+                            className="text-[10px] text-indigo-500 hover:underline cursor-pointer"
+                        >
+                            Manage →
+                        </button>
                     </div>
+
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Owed to you</p>
@@ -605,7 +632,34 @@ export const BudgetView: React.FC = () => {
                             <p className="text-sm font-mono font-bold text-rose-600">{formatCurrency(stats.payablesALL, 'ALL')}</p>
                         </div>
                     </div>
-                    <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between">
+
+                    {debtGroups.length > 0 && (
+                        <div className="pt-3 border-t border-slate-100 space-y-1.5">
+                            {debtGroups.map((g) => {
+                                const net = g.receivables - g.payables;
+                                return (
+                                    <button
+                                        key={g.key}
+                                        type="button"
+                                        onClick={() => setIsDebtsOpen(true)}
+                                        className="w-full flex items-center justify-between p-2 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer"
+                                    >
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <div className="w-6 h-6 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
+                                                <span className="text-[10px] font-bold text-indigo-700">{g.name.charAt(0).toUpperCase()}</span>
+                                            </div>
+                                            <p className="text-xs font-semibold text-slate-900 truncate">{g.name}</p>
+                                        </div>
+                                        <p className={cn('text-xs font-mono font-bold shrink-0', net > 0 ? 'text-emerald-600' : net < 0 ? 'text-rose-600' : 'text-slate-500')}>
+                                            {net > 0 ? '+' : ''}{formatCurrency(Math.abs(net), 'ALL')}
+                                        </p>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Net</p>
                         <p className={cn('text-sm font-mono font-bold', stats.netOfDebtsALL > 0 ? 'text-emerald-600' : stats.netOfDebtsALL < 0 ? 'text-rose-600' : 'text-slate-500')}>
                             {stats.netOfDebtsALL > 0 ? '+' : ''}

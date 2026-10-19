@@ -214,94 +214,51 @@ const VendorBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) 
     );
 };
 
-const DebtsOverview: React.FC = () => {
+const DebtSummary: React.FC = () => {
     const { openDebts } = useDebts();
 
-    const groups = useMemo(() => {
-        const map = new Map<
-            string,
-            { key: string; name: string; receivables: number; payables: number; count: number }
-        >();
+    const totals = useMemo(() => {
+        let receivables = 0;
+        let payables = 0;
         for (const d of openDebts) {
-            let g = map.get(d.counterpartyKey);
-            if (!g) {
-                g = {
-                    key: d.counterpartyKey,
-                    name: d.counterparty,
-                    receivables: 0,
-                    payables: 0,
-                    count: 0,
-                };
-                map.set(d.counterpartyKey, g);
-            }
-            if (d.direction === 'OwedToMe') g.receivables += d.remainingALL;
-            else g.payables += d.remainingALL;
-            g.count += 1;
+            if (d.direction === 'OwedToMe') receivables += d.remainingALL;
+            else payables += d.remainingALL;
         }
-        return Array.from(map.values()).sort((a, b) => {
-            const aTotal = a.receivables + a.payables;
-            const bTotal = b.receivables + b.payables;
-            return bTotal - aTotal;
-        });
+        return { receivables, payables, net: receivables - payables };
     }, [openDebts]);
 
-    if (groups.length === 0) {
+    if (openDebts.length === 0) {
         return (
             <Card>
-                <p className="text-xs text-slate-500">
-                    No open debts.
-                </p>
+                <p className="text-xs text-slate-500">No open debts.</p>
             </Card>
         );
     }
 
     return (
-        <Card className="space-y-2">
-            {groups.map((g) => {
-                const net = g.receivables - g.payables;
-                return (
-                    <div
-                        key={g.key}
-                        className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200"
-                    >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
-                                <span className="text-xs font-bold text-indigo-700">
-                                    {g.name.charAt(0).toUpperCase()}
-                                </span>
-                            </div>
-                            <div className="min-w-0 text-left">
-                                <p className="text-xs font-semibold text-slate-900 truncate">
-                                    {g.name}
-                                </p>
-                                <p className="text-[10px] text-slate-500">
-                                    {g.count} {g.count === 1 ? 'item' : 'items'}
-                                </p>
-                            </div>
-                        </div>
-                        <div className="text-right shrink-0 ml-2">
-                            <p
-                                className={cn(
-                                    'text-sm font-mono font-bold',
-                                    net > 0
-                                        ? 'text-emerald-600'
-                                        : net < 0
-                                            ? 'text-rose-500'
-                                            : 'text-slate-500'
-                                )}
-                            >
-                                {net > 0 ? '+' : ''}
-                                {formatCurrency(Math.abs(net), 'ALL')}
-                            </p>
-                            <p className="text-[10px] text-slate-500">
-                                {net > 0 ? 'owes you' : net < 0 ? 'you owe' : 'settled'}
-                            </p>
-                        </div>
-                    </div>
-                );
-            })}
-            <p className="text-[10px] text-slate-400 text-center pt-2">
-                Manage and settle debts in the Budget tab.
+        <Card className="space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+                <div>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Owed to you</p>
+                    <p className="text-sm font-mono font-bold text-emerald-600 mt-0.5">
+                        {formatCurrency(totals.receivables, 'ALL')}
+                    </p>
+                </div>
+                <div>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">You owe</p>
+                    <p className="text-sm font-mono font-bold text-rose-600 mt-0.5">
+                        {formatCurrency(totals.payables, 'ALL')}
+                    </p>
+                </div>
+                <div>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Net</p>
+                    <p className={cn('text-sm font-mono font-bold mt-0.5', totals.net > 0 ? 'text-emerald-600' : totals.net < 0 ? 'text-rose-600' : 'text-slate-500')}>
+                        {totals.net > 0 ? '+' : ''}{formatCurrency(Math.abs(totals.net), 'ALL')}
+                    </p>
+                </div>
+            </div>
+            <p className="text-[10px] text-slate-400 text-center pt-2 border-t border-slate-100">
+                Manage debts in the Budget tab.
             </p>
         </Card>
     );
@@ -393,7 +350,7 @@ export const InsightsView: React.FC = () => {
                 <SectionTitle icon={<HandCoins className="w-3.5 h-3.5 text-slate-400" />}>
                     Debts Overview
                 </SectionTitle>
-                <DebtsOverview />
+                <DebtSummary />
             </section>
 
             <section>
@@ -415,7 +372,6 @@ export const InsightsView: React.FC = () => {
                     Cost per meal
                 </SectionTitle>
                 <Card className="space-y-4 divide-y divide-slate-100">
-                    {/* Metric 1: Tagged Average */}
                     <div>
                         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Tagged Average</p>
                         {overall.costPerMeal !== null ? (
@@ -442,7 +398,6 @@ export const InsightsView: React.FC = () => {
                         )}
                     </div>
 
-                    {/* Metric 2: Daily Food Burn (3 meals/day) */}
                     <div className="pt-4">
                         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                             <CalendarDays className="w-3 h-3" />
