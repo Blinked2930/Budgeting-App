@@ -17,7 +17,6 @@ import {
     Trash2,
     PieChart,
     History,
-    TrendingUp,
     PiggyBank,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
