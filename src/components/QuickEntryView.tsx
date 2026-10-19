@@ -36,7 +36,6 @@ import {
   type DebtDirection,
   type ExpenseRecord,
 } from '../types';
-import { CurrencyToggle } from './CurrencyToggle';
 import { AdvancedDrawer } from './AdvancedDrawer';
 import { RecentTransactions } from './RecentTransactions';
 import { DebtsPanel } from './DebtsPanel';
@@ -80,7 +79,7 @@ export const QuickEntryView: React.FC = () => {
   const { openDebts, debts } = useDebts();
 
   const [amountStr, setAmountStr] = useState<string>('');
-  const [currency, setCurrency] = useState<Currency>(() => {
+  const [currency] = useState<Currency>(() => {
     const saved = localStorage.getItem('lekflow:currency');
     return (saved as Currency) || 'ALL';
   });
@@ -114,7 +113,23 @@ export const QuickEntryView: React.FC = () => {
     return Array.from(names).sort();
   }, [debts]);
 
-  const [settleDebtId, setSettleDebtId] = useState<string | null>(null);
+  // Group open debts by person for the Settle tab
+  const debtGroups = useMemo(() => {
+    const map = new Map<string, { key: string; name: string; net: number; count: number }>();
+    for (const d of openDebts) {
+      let g = map.get(d.counterpartyKey);
+      if (!g) {
+        g = { key: d.counterpartyKey, name: d.counterparty, net: 0, count: 0 };
+        map.set(d.counterpartyKey, g);
+      }
+      if (d.direction === 'OwedToMe') g.net += d.remainingALL;
+      else g.net -= d.remainingALL;
+      g.count++;
+    }
+    return Array.from(map.values()).sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+  }, [openDebts]);
+
+  const [settleGroupKey, setSettleGroupKey] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingIsDebt, setEditingIsDebt] = useState<boolean>(false);
@@ -141,13 +156,13 @@ export const QuickEntryView: React.FC = () => {
     itemName.trim() || subcategory || vendorType || foodType || estimatedMeals || hasShare
   );
 
-  const selectedDebt = openDebts.find((d) => d.id === settleDebtId);
+  const selectedGroup = debtGroups.find((g) => g.key === settleGroupKey);
 
   const isValid =
     parsedAmount > 0 &&
     (mode !== 'expense' || payMethod !== 'SomeoneElse' || payerName.trim().length > 0) &&
     (mode !== 'lend' || lendPerson.trim().length > 0) &&
-    (mode !== 'settle' || selectedDebt !== undefined);
+    (mode !== 'settle' || selectedGroup !== undefined);
 
   const saveLabel = editingId
     ? 'Update Expense'
@@ -210,7 +225,7 @@ export const QuickEntryView: React.FC = () => {
     handleClearAdvanced();
     setLendPerson('');
     setLendNote('');
-    setSettleDebtId(null);
+    setSettleGroupKey(null);
     setPayerName('');
     inputRef.current?.focus();
   };
@@ -220,7 +235,6 @@ export const QuickEntryView: React.FC = () => {
     setEditingId(expense.id);
     setEditingIsDebt(Boolean(expense.debtId));
     setAmountStr(String(expense.amount));
-    setCurrency(expense.currency);
     setCategory(expense.category);
     setPayMethod((expense.paidWith as PayMethod) ?? 'Card');
     setItemName(expense.itemName ?? '');
@@ -249,11 +263,11 @@ export const QuickEntryView: React.FC = () => {
     handleResetForm();
   };
 
-  const handleSelectDebt = (debtId: string) => {
-    setSettleDebtId(debtId);
-    const d = openDebts.find((x) => x.id === debtId);
-    if (d && (!amountStr || parseFloat(amountStr) === 0)) {
-      setAmountStr(String(d.remainingALL));
+  const handleSelectGroup = (key: string) => {
+    setSettleGroupKey(key);
+    const g = debtGroups.find(x => x.key === key);
+    if (g && (!amountStr || parseFloat(amountStr) === 0)) {
+      setAmountStr(String(Math.abs(g.net)));
     }
   };
 
@@ -370,14 +384,20 @@ export const QuickEntryView: React.FC = () => {
             ? `Lent ${formatCurrency(parsedAmount, 'ALL')} to ${lendPerson}`
             : `Borrowed ${formatCurrency(parsedAmount, 'ALL')} from ${lendPerson}`
         );
-      } else if (mode === 'settle' && selectedDebt) {
-        const settleAmount = Math.min(parsedAmount, selectedDebt.remainingALL);
-        await settleDebtCash(selectedDebt.id, settleAmount, payMethod === 'SomeoneElse' ? 'Cash' : (payMethod as PaymentSource));
-        setFeedback(
-          selectedDebt.direction === 'OwedToMe'
-            ? `Received ${formatCurrency(settleAmount, 'ALL')} from ${selectedDebt.counterparty}`
-            : `Paid ${formatCurrency(settleAmount, 'ALL')} to ${selectedDebt.counterparty}`
-        );
+      } else if (mode === 'settle' && settleGroupKey) {
+        // Settle grouped debts: pay oldest first
+        const personDebts = openDebts.filter(d => d.counterpartyKey === settleGroupKey);
+        personDebts.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+        let remaining = parsedAmount;
+        for (const d of personDebts) {
+          if (remaining <= 0) break;
+          const amt = Math.min(d.remainingALL, remaining);
+          await settleDebtCash(d.id, amt, payMethod === 'SomeoneElse' ? 'Cash' : (payMethod as PaymentSource));
+          remaining -= amt;
+        }
+
+        setFeedback(`Settled ${formatCurrency(parsedAmount, 'ALL')} with ${selectedGroup?.name}`);
       }
 
       setTimeout(() => setFeedback(null), 2500);
@@ -444,10 +464,6 @@ export const QuickEntryView: React.FC = () => {
             )}
           </div>
         )}
-
-        <div className="flex justify-center">
-          <CurrencyToggle selected={currency} onChange={setCurrency} />
-        </div>
 
         <div className="text-center py-1">
           <div className="inline-flex items-baseline justify-center gap-2 max-w-full">
@@ -619,8 +635,14 @@ export const QuickEntryView: React.FC = () => {
                     value={payerName}
                     onChange={(e) => setPayerName(e.target.value)}
                     placeholder="Who paid?"
+                    list="lekflow-payer-names"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
                   />
+                  <datalist id="lekflow-payer-names">
+                    {lendSuggestions.map((p) => (
+                      <option key={p} value={p} />
+                    ))}
+                  </datalist>
                 </div>
               )}
             </div>
@@ -818,23 +840,23 @@ export const QuickEntryView: React.FC = () => {
 
         {mode === 'settle' && (
           <div className="space-y-3">
-            {openDebts.length === 0 ? (
+            {debtGroups.length === 0 ? (
               <div className="text-center py-4 px-3 text-xs text-slate-500 rounded-xl bg-slate-50 border border-slate-200">
-                No open debts. Use the Lend tab to create one first.
+                No open debts. Use the Lend or Expense tab to create one first.
               </div>
             ) : (
               <>
                 <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                  Pick a debt
+                  Who are you settling with?
                 </p>
                 <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                  {openDebts.map((d) => {
-                    const selected = settleDebtId === d.id;
+                  {debtGroups.map((g) => {
+                    const selected = settleGroupKey === g.key;
                     return (
                       <button
-                        key={d.id}
+                        key={g.key}
                         type="button"
-                        onClick={() => handleSelectDebt(d.id)}
+                        onClick={() => handleSelectGroup(g.key)}
                         className={cn(
                           'w-full flex items-center justify-between p-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer',
                           selected
@@ -844,28 +866,24 @@ export const QuickEntryView: React.FC = () => {
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="w-6 h-6 rounded-lg bg-indigo-100 border border-indigo-200 flex items-center justify-center shrink-0">
-                            {d.direction === 'OwedToMe' ? (
-                              <ArrowUpRight className="w-3 h-3 text-indigo-600" />
-                            ) : (
-                              <ArrowDownLeft className="w-3 h-3 text-indigo-600" />
-                            )}
+                            <span className="text-[10px] font-bold text-indigo-600">{g.name.charAt(0).toUpperCase()}</span>
                           </div>
                           <div className="text-left min-w-0">
-                            <p className="text-xs truncate">{d.counterparty}</p>
+                            <p className="text-xs truncate">{g.name}</p>
                             <p className="text-[10px] text-slate-400">
-                              {d.direction === 'OwedToMe' ? 'owes you' : 'you owe'}
+                              {g.net > 0 ? 'owes you' : g.net < 0 ? 'you owe' : 'even'}
                             </p>
                           </div>
                         </div>
-                        <p className="text-sm font-mono shrink-0">
-                          {formatCurrency(d.remainingALL, 'ALL')}
+                        <p className={cn("text-sm font-mono shrink-0", g.net > 0 ? "text-emerald-600" : g.net < 0 ? "text-rose-600" : "text-slate-400")}>
+                          {formatCurrency(Math.abs(g.net), 'ALL')}
                         </p>
                       </button>
                     );
                   })}
                 </div>
 
-                {selectedDebt && (
+                {selectedGroup && (
                   <>
                     <div>
                       <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
@@ -901,15 +919,15 @@ export const QuickEntryView: React.FC = () => {
                       </div>
                     </div>
 
-                    {parsedAmount > selectedDebt.remainingALL && (
+                    {parsedAmount > Math.abs(selectedGroup.net) && (
                       <p className="text-[10px] text-amber-600 px-1">
-                        Capped at remaining ({formatCurrency(selectedDebt.remainingALL, 'ALL')})
+                        Capped at balance ({formatCurrency(Math.abs(selectedGroup.net), 'ALL')})
                       </p>
                     )}
-                    {parsedAmount > 0 && parsedAmount < selectedDebt.remainingALL && (
+                    {parsedAmount > 0 && parsedAmount < Math.abs(selectedGroup.net) && (
                       <p className="text-[10px] text-amber-600 px-1">
                         Partial: {formatCurrency(parsedAmount, 'ALL')} of{' '}
-                        {formatCurrency(selectedDebt.remainingALL, 'ALL')}
+                        {formatCurrency(Math.abs(selectedGroup.net), 'ALL')}
                       </p>
                     )}
                   </>
