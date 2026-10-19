@@ -79,7 +79,7 @@ export const QuickEntryView: React.FC = () => {
   const { openDebts, debts } = useDebts();
 
   const [amountStr, setAmountStr] = useState<string>('');
-  const [currency] = useState<Currency>(() => {
+  const [currency, setCurrency] = useState<Currency>(() => {
     const saved = localStorage.getItem('lekflow:currency');
     return (saved as Currency) || 'ALL';
   });
@@ -144,6 +144,16 @@ export const QuickEntryView: React.FC = () => {
 
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  // Listen for currency changes from Settings
+  useEffect(() => {
+    const handleCurrencyChange = () => {
+      const saved = localStorage.getItem('lekflow:currency');
+      if (saved) setCurrency(saved as Currency);
+    };
+    window.addEventListener('lekflow:currency-changed', handleCurrencyChange);
+    return () => window.removeEventListener('lekflow:currency-changed', handleCurrencyChange);
   }, []);
 
   const parsedAmount = parseFloat(amountStr) || 0;
@@ -542,16 +552,6 @@ export const QuickEntryView: React.FC = () => {
         {mode === 'expense' && (
           <>
             <div>
-              <input
-                type="text"
-                value={itemName}
-                onChange={(e) => setItemName(e.target.value)}
-                placeholder="What was this for? (optional)"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
-              />
-            </div>
-
-            <div>
               <div className="flex items-center justify-between mb-2 px-1">
                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   Category
@@ -583,53 +583,61 @@ export const QuickEntryView: React.FC = () => {
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex justify-center">
-                <div className="inline-flex p-1 rounded-2xl bg-slate-100 border border-slate-200">
-                  <button
-                    type="button"
-                    onClick={() => setPayMethod('Cash')}
-                    className={cn(
-                      'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
-                      payMethod === 'Cash'
-                        ? 'bg-white text-teal-700 shadow-sm'
-                        : 'text-slate-400'
-                    )}
-                  >
-                    <Banknote className="w-3.5 h-3.5" />
-                    Cash
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPayMethod('Card')}
-                    className={cn(
-                      'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
-                      payMethod === 'Card'
-                        ? 'bg-white text-rose-700 shadow-sm'
-                        : 'text-slate-400'
-                    )}
-                  >
-                    <CreditCard className="w-3.5 h-3.5" />
-                    Card
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPayMethod('SomeoneElse')}
-                    className={cn(
-                      'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
-                      payMethod === 'SomeoneElse'
-                        ? 'bg-white text-indigo-700 shadow-sm'
-                        : 'text-slate-400'
-                    )}
-                  >
-                    <Handshake className="w-3.5 h-3.5" />
-                    Someone else
-                  </button>
-                </div>
+            <div>
+              <input
+                type="text"
+                value={itemName}
+                onChange={(e) => setItemName(e.target.value)}
+                placeholder="What was this for? (optional)"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
+              />
+            </div>
+
+            <div className="flex flex-col items-center justify-center">
+              <div className="inline-flex p-1 rounded-2xl bg-slate-100 border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setPayMethod('Cash')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                    payMethod === 'Cash'
+                      ? 'bg-white text-teal-700 shadow-sm'
+                      : 'text-slate-400'
+                  )}
+                >
+                  <Banknote className="w-3.5 h-3.5" />
+                  Cash
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayMethod('Card')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                    payMethod === 'Card'
+                      ? 'bg-white text-rose-700 shadow-sm'
+                      : 'text-slate-400'
+                  )}
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  Card
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPayMethod('SomeoneElse')}
+                  className={cn(
+                    'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                    payMethod === 'SomeoneElse'
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-slate-400'
+                  )}
+                >
+                  <Handshake className="w-3.5 h-3.5" />
+                  Someone else
+                </button>
               </div>
 
               {payMethod === 'SomeoneElse' && (
-                <div>
+                <div className="w-full mt-2">
                   <input
                     type="text"
                     value={payerName}

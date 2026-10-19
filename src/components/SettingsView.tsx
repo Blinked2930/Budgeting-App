@@ -31,6 +31,7 @@ export const SettingsView: React.FC = () => {
     const saveCurrency = (cur: Currency) => {
         setDefaultCurrency(cur);
         localStorage.setItem('lekflow:currency', cur);
+        window.dispatchEvent(new Event('lekflow:currency-changed'));
         showToast(`Default currency set to ${cur}`);
     };
 
