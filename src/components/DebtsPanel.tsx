@@ -75,7 +75,7 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
     };
 
     return (
-        <div className="p-3.5 rounded-2xl bg-slate-950/70 border border-purple-500/30 space-y-3">
+        <div className="p-3.5 rounded-2xl bg-slate-50 border border-indigo-200 space-y-3">
             <div className="grid grid-cols-2 gap-2">
                 <button
                     type="button"
@@ -83,8 +83,8 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
                     className={cn(
                         'flex items-center justify-center gap-1.5 py-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer',
                         direction === 'OwedToMe'
-                            ? 'bg-emerald-500/15 border-emerald-500 text-emerald-300'
-                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                            ? 'bg-indigo-50 border-indigo-500 text-indigo-700'
+                            : 'bg-white border-slate-200 text-slate-500'
                     )}
                 >
                     <ArrowUpRight className="w-3.5 h-3.5" />
@@ -96,8 +96,8 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
                     className={cn(
                         'flex items-center justify-center gap-1.5 py-2 rounded-xl border text-xs font-semibold transition-colors cursor-pointer',
                         direction === 'iOwe'
-                            ? 'bg-rose-500/15 border-rose-500 text-rose-300'
-                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200'
+                            ? 'bg-rose-50 border-rose-500 text-rose-700'
+                            : 'bg-white border-slate-200 text-slate-500'
                     )}
                 >
                     <ArrowDownLeft className="w-3.5 h-3.5" />
@@ -112,7 +112,7 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
                     onChange={(e) => setCounterparty(e.target.value)}
                     placeholder="Person"
                     list="lekflow-counterparties-panel"
-                    className="w-full min-w-0 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+                    className="w-full min-w-0 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
                 />
                 <datalist id="lekflow-counterparties-panel">
                     {suggestions.map((s) => (
@@ -126,7 +126,7 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
                     value={amountStr}
                     onChange={(e) => setAmountStr(e.target.value)}
                     placeholder="Amount (L)"
-                    className="w-full min-w-0 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+                    className="w-full min-w-0 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
                 />
             </div>
 
@@ -134,15 +134,15 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
                 <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
                     Money moved via
                 </p>
-                <div className="inline-flex w-full p-1 rounded-2xl bg-slate-900 border border-slate-800">
+                <div className="inline-flex w-full p-1 rounded-2xl bg-white border border-slate-200">
                     <button
                         type="button"
                         onClick={() => setPaidWith('Cash')}
                         className={cn(
                             'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer',
                             paidWith === 'Cash'
-                                ? 'bg-emerald-500/20 text-emerald-300'
-                                : 'text-slate-400 hover:text-slate-200'
+                                ? 'bg-teal-50 text-teal-700'
+                                : 'text-slate-400'
                         )}
                     >
                         <Banknote className="w-3 h-3" />
@@ -154,8 +154,8 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
                         className={cn(
                             'flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer',
                             paidWith === 'Card'
-                                ? 'bg-cyan-500/20 text-cyan-300'
-                                : 'text-slate-400 hover:text-slate-200'
+                                ? 'bg-rose-50 text-rose-700'
+                                : 'text-slate-400'
                         )}
                     >
                         <Wallet className="w-3 h-3" />
@@ -169,14 +169,14 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 placeholder="Note (optional)"
-                className="w-full min-w-0 bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+                className="w-full min-w-0 bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
             />
 
             <button
                 type="button"
                 onClick={handleSave}
                 disabled={!valid || isSaving}
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-purple-500 to-pink-400 text-slate-950 text-xs font-bold cursor-pointer disabled:opacity-50"
+                className="w-full py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-bold cursor-pointer disabled:opacity-50 hover:bg-indigo-700 transition-colors"
             >
                 {isSaving ? 'Saving…' : 'Save debt'}
             </button>
@@ -226,26 +226,26 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
     };
 
     return (
-        <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 space-y-2">
+        <div className="p-2.5 rounded-xl bg-white border border-slate-200 space-y-2">
             <div className="flex items-center justify-between">
                 <span
                     className={cn(
                         'text-[10px] font-semibold uppercase tracking-wider flex items-center gap-1',
-                        owedToMe ? 'text-emerald-400' : 'text-rose-400'
+                        owedToMe ? 'text-emerald-600' : 'text-rose-500'
                     )}
                 >
                     {owedToMe ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownLeft className="w-3 h-3" />}
                     {owedToMe ? 'Owes you' : 'You owe'}
                 </span>
                 <div className="flex items-center gap-2">
-                    <span className="text-sm font-mono font-bold text-white">
+                    <span className="text-sm font-mono font-bold text-slate-900">
                         {formatCurrency(debt.remainingALL, 'ALL')}
                     </span>
                     <button
                         type="button"
                         onClick={handleDelete}
                         disabled={busyAction !== null}
-                        className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-50"
+                        className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50"
                         title="Delete debt (undoes cash/bank effect)"
                     >
                         <Trash2 className="w-3 h-3" />
@@ -253,7 +253,7 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                 </div>
             </div>
 
-            {debt.note && <p className="text-[11px] text-slate-400 italic">{debt.note}</p>}
+            {debt.note && <p className="text-[11px] text-slate-500 italic">{debt.note}</p>}
 
             <div className="flex items-center gap-2">
                 <div className="flex-1 min-w-0">
@@ -267,16 +267,16 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                         value={amountStr}
                         onChange={(e) => setAmountStr(e.target.value)}
                         placeholder="0"
-                        className="w-full min-w-0 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-sm font-mono text-white placeholder-slate-700 focus:outline-none focus:border-emerald-500/70"
+                        className="w-full min-w-0 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
                     />
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0 pt-4">
                     {isPartial ? (
-                        <span className="text-[10px] font-semibold text-amber-400">
+                        <span className="text-[10px] font-semibold text-amber-600">
                             Partial · {formatCurrency(clamped, 'ALL')}
                         </span>
                     ) : (
-                        <span className="text-[10px] font-semibold text-emerald-400">
+                        <span className="text-[10px] font-semibold text-emerald-600">
                             Full settlement
                         </span>
                     )}
@@ -284,7 +284,7 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                         <button
                             type="button"
                             onClick={() => setAmountStr(String(debt.remainingALL))}
-                            className="text-[10px] text-slate-500 hover:text-slate-300 underline cursor-pointer"
+                            className="text-[10px] text-slate-400 hover:text-slate-600 underline cursor-pointer"
                         >
                             Reset
                         </button>
@@ -298,7 +298,7 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                         type="button"
                         onClick={() => handleCash('Cash')}
                         disabled={busyAction !== null || !isValid}
-                        className="py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
+                        className="py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1 border border-teal-200"
                     >
                         <Banknote className="w-3 h-3" />
                         Got cash
@@ -307,7 +307,7 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                         type="button"
                         onClick={() => handleCash('Card')}
                         disabled={busyAction !== null || !isValid}
-                        className="py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
+                        className="py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1 border border-rose-200"
                     >
                         <Wallet className="w-3 h-3" />
                         Got bank
@@ -316,7 +316,7 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                         type="button"
                         onClick={() => handleNonCash('Cash')}
                         disabled={busyAction !== null || !isValid}
-                        className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                        className="py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-slate-200"
                         title="They gave me something instead of cash. Hits budget, no wallet change."
                     >
                         They offset
@@ -325,7 +325,7 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                         type="button"
                         onClick={handleWriteOff}
                         disabled={busyAction !== null}
-                        className="py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                        className="py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-amber-200"
                         title="Forgive the debt — becomes a gift you gave"
                     >
                         Write off
@@ -338,7 +338,7 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                             type="button"
                             onClick={() => handleCash('Cash')}
                             disabled={busyAction !== null || !isValid}
-                            className="py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
+                            className="py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1 border border-rose-200"
                         >
                             <Banknote className="w-3 h-3" />
                             Paid cash
@@ -347,7 +347,7 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                             type="button"
                             onClick={() => handleCash('Card')}
                             disabled={busyAction !== null || !isValid}
-                            className="py-1.5 rounded-lg bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1"
+                            className="py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1 border border-rose-200"
                         >
                             <Wallet className="w-3 h-3" />
                             Paid bank
@@ -358,8 +358,8 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                             type="button"
                             onClick={() => handleNonCash('Cash')}
                             disabled={busyAction !== null || !isValid}
-                            className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                            title="I bought them something with cash instead of paying cash directly. Hits wallet only."
+                            className="py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-slate-200"
+                            title="I bought them something with cash. Hits wallet only."
                         >
                             Offset cash
                         </button>
@@ -367,8 +367,8 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                             type="button"
                             onClick={() => handleNonCash('Card')}
                             disabled={busyAction !== null || !isValid}
-                            className="py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
-                            title="I bought them something with card instead of paying cash directly. Hits wallet only."
+                            className="py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-slate-200"
+                            title="I bought them something with card. Hits wallet only."
                         >
                             Offset card
                         </button>
@@ -377,7 +377,7 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                         type="button"
                         onClick={handleWriteOff}
                         disabled={busyAction !== null}
-                        className="w-full py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-[10px] font-bold cursor-pointer disabled:opacity-50"
+                        className="w-full py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-amber-200"
                         title="They forgave me — clears the debt, nothing moves"
                     >
                         Forgiven
@@ -399,29 +399,29 @@ const ResolvedDebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
     };
 
     return (
-        <div className="p-2.5 rounded-xl bg-slate-900/30 border border-slate-800/50 flex items-center justify-between gap-2">
+        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
             <div className="min-w-0">
                 <p
                     className={cn(
                         'text-[11px] font-medium truncate line-through',
-                        owedToMe ? 'text-emerald-400/60' : 'text-rose-400/60'
+                        owedToMe ? 'text-emerald-600/60' : 'text-rose-500/60'
                     )}
                 >
                     {owedToMe ? 'Owes you' : 'You owe'} {formatCurrency(debt.amountALL, 'ALL')}
                 </p>
                 {debt.note && (
-                    <p className="text-[10px] text-slate-600 italic truncate line-through">
+                    <p className="text-[10px] text-slate-400 italic truncate line-through">
                         {debt.note}
                     </p>
                 )}
             </div>
             <div className="flex items-center gap-2 shrink-0">
-                <Check className="w-3.5 h-3.5 text-slate-600" />
+                <Check className="w-3.5 h-3.5 text-slate-400" />
                 <button
                     type="button"
                     onClick={handleDelete}
                     disabled={busy}
-                    className="p-1 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-50"
+                    className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50"
                     title="Delete resolved debt (undoes all effects)"
                 >
                     <Trash2 className="w-3 h-3" />
@@ -471,24 +471,24 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
 
     return (
         <div
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/40 backdrop-blur-sm"
             onClick={onClose}
         >
             <div
-                className="w-full max-w-md max-h-[90vh] flex flex-col bg-slate-900 border-t sm:border border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl"
+                className="w-full max-w-md max-h-[90vh] flex flex-col bg-white border-t sm:border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
             >
-                <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-800/80">
+                <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-200">
                     <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-500/40 flex items-center justify-center">
-                            <HandCoins className="w-4 h-4 text-purple-400" />
+                        <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center">
+                            <HandCoins className="w-4 h-4 text-indigo-600" />
                         </div>
-                        <h2 className="text-base font-bold text-white">Debts</h2>
+                        <h2 className="text-base font-bold text-slate-900">Debts</h2>
                     </div>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer transition-colors"
                     >
                         <X className="w-4 h-4" />
                     </button>
@@ -501,8 +501,8 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                         className={cn(
                             'w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl border text-xs font-bold transition-colors cursor-pointer',
                             showNewForm
-                                ? 'bg-slate-950 border-slate-800 text-slate-400'
-                                : 'bg-purple-500/10 hover:bg-purple-500/20 border-purple-500/40 text-purple-300'
+                                ? 'bg-slate-50 border-slate-200 text-slate-500'
+                                : 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700'
                         )}
                     >
                         {showNewForm ? (
@@ -538,28 +538,28 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                                         className={cn(
                                             'rounded-2xl border transition-colors overflow-hidden',
                                             hasOpen
-                                                ? 'bg-slate-950/70 border-slate-800'
-                                                : 'bg-slate-950/40 border-slate-800/50'
+                                                ? 'bg-white border-slate-200'
+                                                : 'bg-slate-50 border-slate-200'
                                         )}
                                     >
                                         <button
                                             type="button"
                                             onClick={() => setExpandedKey(isExpanded ? null : g.key)}
-                                            className="w-full flex items-center justify-between p-3 cursor-pointer hover:bg-slate-900/60 transition-colors"
+                                            className="w-full flex items-center justify-between p-3 cursor-pointer hover:bg-slate-50 transition-colors"
                                         >
                                             <div className="flex items-center gap-2.5 min-w-0">
                                                 <div
                                                     className={cn(
                                                         'w-8 h-8 rounded-xl flex items-center justify-center shrink-0',
                                                         hasOpen
-                                                            ? 'bg-purple-500/15 border border-purple-500/40'
-                                                            : 'bg-slate-800/60 border border-slate-700/50'
+                                                            ? 'bg-indigo-50 border border-indigo-200'
+                                                            : 'bg-slate-100 border border-slate-200'
                                                     )}
                                                 >
                                                     <span
                                                         className={cn(
                                                             'text-xs font-bold',
-                                                            hasOpen ? 'text-purple-300' : 'text-slate-500'
+                                                            hasOpen ? 'text-indigo-700' : 'text-slate-500'
                                                         )}
                                                     >
                                                         {g.name.charAt(0).toUpperCase()}
@@ -569,7 +569,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                                                     <p
                                                         className={cn(
                                                             'text-xs font-semibold truncate',
-                                                            hasOpen ? 'text-slate-200' : 'text-slate-500'
+                                                            hasOpen ? 'text-slate-900' : 'text-slate-500'
                                                         )}
                                                     >
                                                         {g.name}
@@ -587,12 +587,12 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                                                         className={cn(
                                                             'text-sm font-mono font-bold',
                                                             !hasOpen
-                                                                ? 'text-slate-600'
+                                                                ? 'text-slate-400'
                                                                 : net > 0
-                                                                    ? 'text-emerald-400'
+                                                                    ? 'text-emerald-600'
                                                                     : net < 0
-                                                                        ? 'text-rose-400'
-                                                                        : 'text-slate-400'
+                                                                        ? 'text-rose-500'
+                                                                        : 'text-slate-500'
                                                         )}
                                                     >
                                                         {hasOpen && net > 0 ? '+' : ''}
@@ -610,7 +610,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                                                 </div>
                                                 <ChevronDown
                                                     className={cn(
-                                                        'w-4 h-4 text-slate-500 transition-transform',
+                                                        'w-4 h-4 text-slate-400 transition-transform',
                                                         isExpanded && 'rotate-180'
                                                     )}
                                                 />
@@ -618,7 +618,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                                         </button>
 
                                         {isExpanded && (
-                                            <div className="px-3 pb-3 space-y-2 border-t border-slate-800/60 pt-3">
+                                            <div className="px-3 pb-3 space-y-2 border-t border-slate-200 pt-3">
                                                 {g.openDebts.map((d) => (
                                                     <DebtRow key={d.id} debt={d} />
                                                 ))}

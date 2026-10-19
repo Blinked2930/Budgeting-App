@@ -4,23 +4,34 @@ import { FileSpreadsheet, FileJson, Lock, CheckCircle2, Trash2 } from 'lucide-re
 import { db, exportToCSV, exportToJSON } from '../db';
 import { downloadFile } from '../utils/export';
 import { useLock } from '../hooks/useLock';
-import { DEFAULT_EXCHANGE_RATES } from '../types';
+import { DEFAULT_EXCHANGE_RATES, type Currency } from '../types';
+import { cn } from '../utils/cn';
 
 export const SettingsView: React.FC = () => {
     const { lock } = useLock();
     const [toast, setToast] = useState<string | null>(null);
     const [rates, setRates] = useState({ EUR: 100, USD: 90 });
+    const [defaultCurrency, setDefaultCurrency] = useState<Currency>('ALL');
 
     useEffect(() => {
-        const saved = localStorage.getItem('lekflow:rates');
-        if (saved) setRates(JSON.parse(saved));
+        const savedRates = localStorage.getItem('lekflow:rates');
+        if (savedRates) setRates(JSON.parse(savedRates));
         else setRates(DEFAULT_EXCHANGE_RATES);
+
+        const savedCurrency = localStorage.getItem('lekflow:currency') as Currency;
+        if (savedCurrency) setDefaultCurrency(savedCurrency);
     }, []);
 
     const saveRates = (newRates: typeof rates) => {
         setRates(newRates);
         localStorage.setItem('lekflow:rates', JSON.stringify(newRates));
         showToast('Exchange rates updated');
+    };
+
+    const saveCurrency = (cur: Currency) => {
+        setDefaultCurrency(cur);
+        localStorage.setItem('lekflow:currency', cur);
+        showToast(`Default currency set to ${cur}`);
     };
 
     const showToast = (msg: string) => {
@@ -60,6 +71,30 @@ export const SettingsView: React.FC = () => {
                 <h2 className="text-xl font-bold text-slate-900 mb-1">Settings</h2>
                 <p className="text-xs text-slate-500">Manage your data, security, and preferences.</p>
             </div>
+
+            <section className="space-y-2">
+                <h3 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1">Preferences</h3>
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-4">
+                    <div>
+                        <p className="text-sm font-medium text-slate-700 mb-2">Default Currency</p>
+                        <div className="inline-flex w-full p-1 rounded-2xl bg-slate-100 border border-slate-200">
+                            {(['ALL', 'EUR', 'USD'] as Currency[]).map((c) => (
+                                <button
+                                    key={c}
+                                    type="button"
+                                    onClick={() => saveCurrency(c)}
+                                    className={cn(
+                                        'flex-1 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                                        defaultCurrency === c ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                                    )}
+                                >
+                                    {c === 'ALL' ? 'Lekë' : c}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </section>
 
             <section className="space-y-2">
                 <h3 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1">Data Portability</h3>
