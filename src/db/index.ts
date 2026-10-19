@@ -363,6 +363,7 @@ export async function addDebt(data: {
   sourceExpenseId?: string;
   timestamp?: string;
   moveWalletWith?: PaymentSource;
+  purchaseDetails?: { category: Category; itemName?: string };
 }): Promise<DebtRecord> {
   const now = new Date().toISOString();
   const record: DebtRecord = {
@@ -382,6 +383,7 @@ export async function addDebt(data: {
   await db.debts.add(record);
 
   if (data.moveWalletWith && !data.sourceExpenseId) {
+    // Cash loan: money physically moved.
     const signedAmount = data.direction === 'iOwe' ? -data.amountALL : data.amountALL;
     await addExpense({
       amount: signedAmount,
@@ -395,6 +397,16 @@ export async function addDebt(data: {
       debtId: record.id,
       debtRelated: true,
       isDebtOrigin: true,
+    });
+  } else if (data.purchaseDetails) {
+    // Someone bought something for me.
+    await addExpense({
+      amount: data.amountALL, // Positive expense
+      currency: 'ALL',
+      category: data.purchaseDetails.category,
+      itemName: data.purchaseDetails.itemName || `Bought by ${record.counterparty}`,
+      walletNeutral: true, // Does not touch cash/bank
+      debtId: record.id,
     });
   }
 
@@ -418,6 +430,9 @@ export async function getDebt(id: string): Promise<DebtRecord | undefined> {
   return d && !d.deleted ? d : undefined;
 }
 
+/**
+ * Delete a debt AND every wallet movement created by it.
+ */
 export async function deleteDebt(id: string): Promise<void> {
   const debt = await db.debts.get(id);
   if (!debt || debt.deleted) return;

@@ -23,6 +23,7 @@ import {
   ArrowUpRight,
   Check,
   TriangleAlert,
+  Handshake,
 } from 'lucide-react';
 import {
   type Currency,
@@ -55,6 +56,7 @@ import { getVendorOptions, showFoodDetails } from '../utils/categoryConfig';
 import { cn } from '../utils/cn';
 
 type EntryMode = 'expense' | 'withdraw' | 'lend' | 'settle';
+type PayMethod = 'Cash' | 'Card' | 'SomeoneElse';
 
 const MODES: { id: EntryMode; label: string; icon: React.ReactNode }[] = [
   { id: 'expense', label: 'Expense', icon: <Zap className="w-3.5 h-3.5" /> },
@@ -85,7 +87,9 @@ export const QuickEntryView: React.FC = () => {
   const [mode, setMode] = useState<EntryMode>('expense');
 
   const [category, setCategory] = useState<Category>('Food');
-  const [paidWith, setPaidWith] = useState<PaymentSource>('Cash');
+  const [payMethod, setPayMethod] = useState<PayMethod>('Cash');
+  const [payerName, setPayerName] = useState<string>('');
+
   const [dateOverride, setDateOverride] = useState<string | null>(null);
   const todayStr = toDateInputValue(new Date());
 
@@ -141,6 +145,7 @@ export const QuickEntryView: React.FC = () => {
 
   const isValid =
     parsedAmount > 0 &&
+    (mode !== 'expense' || payMethod !== 'SomeoneElse' || payerName.trim().length > 0) &&
     (mode !== 'lend' || lendPerson.trim().length > 0) &&
     (mode !== 'settle' || selectedDebt !== undefined);
 
@@ -206,6 +211,7 @@ export const QuickEntryView: React.FC = () => {
     setLendPerson('');
     setLendNote('');
     setSettleDebtId(null);
+    setPayerName('');
     inputRef.current?.focus();
   };
 
@@ -216,7 +222,7 @@ export const QuickEntryView: React.FC = () => {
     setAmountStr(String(expense.amount));
     setCurrency(expense.currency);
     setCategory(expense.category);
-    setPaidWith(expense.paidWith ?? 'Card');
+    setPayMethod((expense.paidWith as PayMethod) ?? 'Card');
     setItemName(expense.itemName ?? '');
     setSubcategory(expense.subcategory);
     setVendorType(expense.vendorType);
@@ -263,21 +269,10 @@ export const QuickEntryView: React.FC = () => {
       const startTime = performance.now();
 
       if (mode === 'expense') {
-        const baseData: Partial<ExpenseRecord> & {
-          amount: number;
-          currency: Currency;
-          category: Category;
-          paidWith: PaymentSource;
-          itemName?: string;
-          subcategory?: string;
-          vendorType?: VendorType;
-          foodType?: FoodType;
-          estimatedMeals?: number;
-        } = {
+        const baseData = {
           amount: parsedAmount,
           currency,
           category,
-          paidWith,
           itemName: itemName.trim() || undefined,
           subcategory,
           vendorType,
@@ -286,7 +281,10 @@ export const QuickEntryView: React.FC = () => {
         };
 
         if (editingId) {
-          const updates: Partial<Omit<ExpenseRecord, 'id'>> = { ...baseData };
+          const updates: Partial<Omit<ExpenseRecord, 'id'>> = {
+            ...baseData,
+            paidWith: payMethod === 'SomeoneElse' ? 'Cash' : payMethod
+          };
           const dateChanged = dateOverride !== originalDateOverride;
           if (dateChanged) {
             updates.timestamp = dateOverride
@@ -299,9 +297,25 @@ export const QuickEntryView: React.FC = () => {
         } else {
           const timestamp = dateOverride ? dateToNoonISO(dateOverride) : undefined;
 
-          if (hasShare && shareAmount < normalizedALL) {
+          if (payMethod === 'SomeoneElse') {
+            // Someone bought it for me
+            await addDebt({
+              counterparty: payerName,
+              direction: 'iOwe',
+              amountALL: parsedAmount,
+              purchaseDetails: {
+                category,
+                itemName: itemName.trim() || undefined,
+              },
+              timestamp,
+            });
+            const latencyMs = Math.round(performance.now() - startTime);
+            setFeedback(`Logged ${formatCurrency(parsedAmount, currency)} paid by ${payerName} in ${latencyMs}ms ⚡`);
+          } else if (hasShare && shareAmount < normalizedALL) {
+            // I bought it, but someone owes me
             const saved = await addExpense({
               ...baseData,
+              paidWith: payMethod as PaymentSource,
               budgetAmountALL: normalizedALL - shareAmount,
               timestamp,
             });
@@ -313,11 +327,14 @@ export const QuickEntryView: React.FC = () => {
               note: itemName.trim() || undefined,
             });
             const latencyMs = Math.round(performance.now() - startTime);
-            setFeedback(
-              `Logged with ${formatCurrency(shareAmount, 'ALL')} owed to you in ${latencyMs}ms ⚡`
-            );
+            setFeedback(`Logged with ${formatCurrency(shareAmount, 'ALL')} owed to you in ${latencyMs}ms ⚡`);
           } else {
-            await addExpense({ ...baseData, timestamp });
+            // Normal expense
+            await addExpense({
+              ...baseData,
+              paidWith: payMethod as PaymentSource,
+              timestamp
+            });
             const latencyMs = Math.round(performance.now() - startTime);
             setFeedback(
               dateOverride
@@ -346,7 +363,7 @@ export const QuickEntryView: React.FC = () => {
           direction: lendDirection,
           amountALL: parsedAmount,
           note: lendNote.trim() || undefined,
-          moveWalletWith: paidWith,
+          moveWalletWith: payMethod === 'SomeoneElse' ? 'Cash' : (payMethod as PaymentSource),
         });
         setFeedback(
           lendDirection === 'OwedToMe'
@@ -355,7 +372,7 @@ export const QuickEntryView: React.FC = () => {
         );
       } else if (mode === 'settle' && selectedDebt) {
         const settleAmount = Math.min(parsedAmount, selectedDebt.remainingALL);
-        await settleDebtCash(selectedDebt.id, settleAmount, paidWith);
+        await settleDebtCash(selectedDebt.id, settleAmount, payMethod === 'SomeoneElse' ? 'Cash' : (payMethod as PaymentSource));
         setFeedback(
           selectedDebt.direction === 'OwedToMe'
             ? `Received ${formatCurrency(settleAmount, 'ALL')} from ${selectedDebt.counterparty}`
@@ -550,35 +567,62 @@ export const QuickEntryView: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex justify-center">
-              <div className="inline-flex p-1 rounded-2xl bg-slate-100 border border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setPaidWith('Cash')}
-                  className={cn(
-                    'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
-                    paidWith === 'Cash'
-                      ? 'bg-white text-teal-700 shadow-sm'
-                      : 'text-slate-400'
-                  )}
-                >
-                  <Banknote className="w-3.5 h-3.5" />
-                  Cash
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPaidWith('Card')}
-                  className={cn(
-                    'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
-                    paidWith === 'Card'
-                      ? 'bg-white text-rose-700 shadow-sm'
-                      : 'text-slate-400'
-                  )}
-                >
-                  <CreditCard className="w-3.5 h-3.5" />
-                  Card
-                </button>
+            <div className="space-y-2">
+              <div className="flex justify-center">
+                <div className="inline-flex p-1 rounded-2xl bg-slate-100 border border-slate-200">
+                  <button
+                    type="button"
+                    onClick={() => setPayMethod('Cash')}
+                    className={cn(
+                      'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                      payMethod === 'Cash'
+                        ? 'bg-white text-teal-700 shadow-sm'
+                        : 'text-slate-400'
+                    )}
+                  >
+                    <Banknote className="w-3.5 h-3.5" />
+                    Cash
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPayMethod('Card')}
+                    className={cn(
+                      'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                      payMethod === 'Card'
+                        ? 'bg-white text-rose-700 shadow-sm'
+                        : 'text-slate-400'
+                    )}
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    Card
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPayMethod('SomeoneElse')}
+                    className={cn(
+                      'flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
+                      payMethod === 'SomeoneElse'
+                        ? 'bg-white text-indigo-700 shadow-sm'
+                        : 'text-slate-400'
+                    )}
+                  >
+                    <Handshake className="w-3.5 h-3.5" />
+                    Someone else
+                  </button>
+                </div>
               </div>
+
+              {payMethod === 'SomeoneElse' && (
+                <div>
+                  <input
+                    type="text"
+                    value={payerName}
+                    onChange={(e) => setPayerName(e.target.value)}
+                    placeholder="Who paid?"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  />
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between gap-3 px-1">
@@ -730,10 +774,10 @@ export const QuickEntryView: React.FC = () => {
               <div className="inline-flex w-full p-1 rounded-2xl bg-slate-100 border border-slate-200">
                 <button
                   type="button"
-                  onClick={() => setPaidWith('Cash')}
+                  onClick={() => setPayMethod('Cash')}
                   className={cn(
                     'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
-                    paidWith === 'Cash'
+                    payMethod === 'Cash'
                       ? 'bg-white text-teal-700 shadow-sm'
                       : 'text-slate-400'
                   )}
@@ -743,10 +787,10 @@ export const QuickEntryView: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPaidWith('Card')}
+                  onClick={() => setPayMethod('Card')}
                   className={cn(
                     'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
-                    paidWith === 'Card'
+                    payMethod === 'Card'
                       ? 'bg-white text-rose-700 shadow-sm'
                       : 'text-slate-400'
                   )}
@@ -830,10 +874,10 @@ export const QuickEntryView: React.FC = () => {
                       <div className="inline-flex w-full p-1 rounded-2xl bg-slate-100 border border-slate-200">
                         <button
                           type="button"
-                          onClick={() => setPaidWith('Cash')}
+                          onClick={() => setPayMethod('Cash')}
                           className={cn(
                             'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
-                            paidWith === 'Cash'
+                            payMethod === 'Cash'
                               ? 'bg-white text-teal-700 shadow-sm'
                               : 'text-slate-400'
                           )}
@@ -843,10 +887,10 @@ export const QuickEntryView: React.FC = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setPaidWith('Card')}
+                          onClick={() => setPayMethod('Card')}
                           className={cn(
                             'flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer',
-                            paidWith === 'Card'
+                            payMethod === 'Card'
                               ? 'bg-white text-rose-700 shadow-sm'
                               : 'text-slate-400'
                           )}
