@@ -16,12 +16,16 @@ import {
     X,
     Trash2,
     PieChart,
+    History,
+    TrendingUp,
+    PiggyBank,
 } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { CATEGORIES, type Category, type ExpenseRecord, type PaymentSource, type DebtRecord } from '../types';
 import { useExpenses } from '../hooks/useExpenses';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { useDebts } from '../hooks/useDebts';
-import { addExpense, settleDebtCash, settleDebtNonCash, writeOffDebt, deleteDebt } from '../db';
+import { db, addExpense, settleDebtCash, settleDebtNonCash, writeOffDebt, deleteDebt } from '../db';
 import {
     DEFAULT_FILTERS,
     aggregate,
@@ -814,6 +818,68 @@ const DebtsSection: React.FC = () => {
     );
 };
 
+const CycleHistorySection: React.FC = () => {
+    // Fetch all non-deleted cycles sorted by newest first
+    const allCycles = useLiveQuery(
+        () => db.budgetCycles.orderBy('startDate').reverse().filter((c) => !c.deleted).toArray(),
+        []
+    );
+
+    if (!allCycles || allCycles.length <= 1) {
+        return (
+            <Card>
+                <p className="text-xs text-slate-500">
+                    No past cycles yet. Once you start your next cycle, your surplus and rollovers will appear here.
+                </p>
+            </Card>
+        );
+    }
+
+    // Skip index 0 (that's the current active cycle)
+    const pastCycles = allCycles.slice(1);
+
+    return (
+        <Card className="p-0 overflow-hidden divide-y divide-slate-100">
+            {pastCycles.map((cycle) => {
+                const surplus = cycle.bufferPoolALL + cycle.travelStashALL;
+                return (
+                    <div key={cycle.id} className="p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-bold text-slate-900">
+                                    {new Date(cycle.startDate).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+                                </p>
+                                <p className="text-[10px] text-slate-500 mt-0.5">
+                                    {new Date(cycle.startDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })} – {new Date(cycle.targetEndDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                                </p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Stipend</p>
+                                <p className="text-sm font-mono font-bold text-slate-900">{formatCurrency(cycle.stipendAmountALL, 'ALL')}</p>
+                            </div>
+                        </div>
+
+                        {surplus > 0 && (
+                            <div className="flex items-center gap-2 bg-emerald-50 rounded-xl p-2.5 border border-emerald-100">
+                                <PiggyBank className="w-4 h-4 text-emerald-600 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-[11px] font-bold text-emerald-800">
+                                        Saved {formatCurrency(surplus, 'ALL')}
+                                    </p>
+                                    <div className="flex items-center gap-3 mt-1 text-[10px] text-emerald-700 font-mono">
+                                        <span>Buffer: {formatCurrency(cycle.bufferPoolALL, 'ALL')}</span>
+                                        <span>Travel Stash: {formatCurrency(cycle.travelStashALL, 'ALL')}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
+        </Card>
+    );
+};
+
 export const InsightsView: React.FC = () => {
     const { expenses } = useExpenses();
     const [filters, setFilters] = useState<InsightFilters>(DEFAULT_FILTERS);
@@ -957,6 +1023,13 @@ export const InsightsView: React.FC = () => {
                 <p className="text-[10px] text-slate-400 px-1 mt-2">
                     Totals use each expense's value converted to Lek.
                 </p>
+            </section>
+
+            <section>
+                <SectionTitle icon={<History className="w-3.5 h-3.5 text-slate-400" />}>
+                    Past Cycles
+                </SectionTitle>
+                <CycleHistorySection />
             </section>
         </div>
     );

@@ -1,11 +1,10 @@
 // src/components/SettingsView.tsx
 import React, { useState, useEffect } from 'react';
-import { FileSpreadsheet, FileJson, Lock, CheckCircle2, Trash2, CalendarDays, Cloud } from 'lucide-react';
-import { db, exportToCSV, exportToJSON, getAllBudgetCycles } from '../db';
+import { FileSpreadsheet, FileJson, Lock, CheckCircle2, Trash2, Cloud } from 'lucide-react';
+import { db, exportToCSV, exportToJSON } from '../db';
 import { downloadFile } from '../utils/export';
 import { useLock } from '../hooks/useLock';
-import { DEFAULT_EXCHANGE_RATES, type Currency, type BudgetCycle } from '../types';
-import { formatCurrency } from '../utils/currency';
+import { DEFAULT_EXCHANGE_RATES, type Currency } from '../types';
 import { cn } from '../utils/cn';
 
 // Clerk is only available when the publishable key is set. Importing these
@@ -69,7 +68,6 @@ export const SettingsView: React.FC = () => {
     const [toast, setToast] = useState<string | null>(null);
     const [rates, setRates] = useState({ EUR: 100, USD: 90 });
     const [defaultCurrency, setDefaultCurrency] = useState<Currency>('ALL');
-    const [history, setHistory] = useState<BudgetCycle[]>([]);
 
     useEffect(() => {
         const savedRates = localStorage.getItem('lekflow:rates');
@@ -78,8 +76,6 @@ export const SettingsView: React.FC = () => {
 
         const savedCurrency = localStorage.getItem('lekflow:currency') as Currency;
         if (savedCurrency) setDefaultCurrency(savedCurrency);
-
-        getAllBudgetCycles().then(setHistory);
     }, []);
 
     const saveRates = (newRates: typeof rates) => {
@@ -161,31 +157,6 @@ export const SettingsView: React.FC = () => {
                             ))}
                         </div>
                     </div>
-                </div>
-            </section>
-
-            <section className="space-y-2">
-                <h3 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1">Cycle History</h3>
-                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm divide-y divide-slate-100">
-                    {history.length <= 1 ? (
-                        <div className="p-4 text-xs text-slate-500">No past cycles yet. They will appear here once you start your next cycle.</div>
-                    ) : (
-                        history.slice(1).map((cycle) => (
-                            <div key={cycle.id} className="p-4 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center"><CalendarDays className="w-4 h-4 text-slate-500" /></div>
-                                    <div>
-                                        <p className="text-sm font-semibold text-slate-900">{new Date(cycle.startDate).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}</p>
-                                        <p className="text-[10px] text-slate-500">{cycle.startDate} to {cycle.targetEndDate}</p>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-mono font-bold text-slate-900">{formatCurrency(cycle.stipendAmountALL, 'ALL')}</p>
-                                    <p className="text-[10px] text-slate-500">Stipend</p>
-                                </div>
-                            </div>
-                        ))
-                    )}
                 </div>
             </section>
 
