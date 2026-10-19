@@ -51,7 +51,7 @@ import { useTransfers } from '../hooks/useTransfers';
 import { useDebts } from '../hooks/useDebts';
 import { convertToALL, formatCurrency } from '../utils/currency';
 import { dateToNoonISO, toDateInputValue } from '../utils/budget';
-import { getVendorOptions, showFoodDetails } from '../utils/categoryConfig';
+import { getVendorOptions, showFoodDetails, CATEGORY_CONFIG } from '../utils/categoryConfig';
 import { cn } from '../utils/cn';
 
 type EntryMode = 'expense' | 'withdraw' | 'lend' | 'settle';
@@ -72,6 +72,42 @@ const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
   Travel: <Plane className="w-4 h-4 text-slate-600" />,
   Other: <MoreHorizontal className="w-4 h-4 text-slate-600" />,
 };
+
+interface Suggestion {
+  name: string;
+  count: number;
+  latest: ExpenseRecord;
+}
+
+function buildSuggestions(
+  expenses: ExpenseRecord[],
+  category: Category,
+  query: string
+): Suggestion[] {
+  const byName = new Map<string, Suggestion>();
+
+  for (const e of expenses) {
+    if (e.category !== category || !e.itemName) continue;
+    const name = e.itemName.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    const existing = byName.get(key);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      byName.set(key, { name, count: 1, latest: e });
+    }
+  }
+
+  const q = query.trim().toLowerCase();
+  return Array.from(byName.values())
+    .filter((s) => {
+      const lower = s.name.toLowerCase();
+      return q ? lower.includes(q) && lower !== q : true;
+    })
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6);
+}
 
 export const QuickEntryView: React.FC = () => {
   const { expenses, totalSpentALL } = useExpenses();
@@ -94,6 +130,7 @@ export const QuickEntryView: React.FC = () => {
 
   const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [itemName, setItemName] = useState<string>('');
+  const [isItemFocused, setIsItemFocused] = useState(false);
   const [subcategory, setSubcategory] = useState<string | undefined>(undefined);
   const [vendorType, setVendorType] = useState<VendorType | undefined>(undefined);
   const [foodType, setFoodType] = useState<FoodType | undefined>(undefined);
@@ -163,7 +200,7 @@ export const QuickEntryView: React.FC = () => {
   const hasShare = shareAmount > 0 && shareCounterparty.trim().length > 0;
 
   const hasAdvancedData = Boolean(
-    itemName.trim() || subcategory || vendorType || foodType || estimatedMeals || hasShare
+    subcategory || vendorType || foodType || estimatedMeals || hasShare
   );
 
   const selectedGroup = debtGroups.find((g) => g.key === settleGroupKey);
@@ -184,6 +221,19 @@ export const QuickEntryView: React.FC = () => {
           ? 'Save Loan'
           : 'Settle Debt';
 
+  const itemSuggestions = useMemo(
+    () => buildSuggestions(expenses, category, itemName),
+    [expenses, category, itemName]
+  );
+
+  const applySuggestion = (s: Suggestion) => {
+    setItemName(s.name);
+    setSubcategory(s.latest.subcategory);
+    setVendorType(s.latest.vendorType);
+    setFoodType(s.latest.foodType);
+    setEstimatedMeals(s.latest.estimatedMeals);
+  };
+
   const handleModeChange = (next: EntryMode) => {
     if (editingId) return;
     setMode(next);
@@ -199,14 +249,6 @@ export const QuickEntryView: React.FC = () => {
     }
 
     const allowedVendors = getVendorOptions(next, undefined);
-    if (vendorType && !allowedVendors.includes(vendorType)) {
-      setVendorType(undefined);
-    }
-  };
-
-  const handleSubcategoryChange = (next: string | undefined) => {
-    setSubcategory(next);
-    const allowedVendors = getVendorOptions(category, next);
     if (vendorType && !allowedVendors.includes(vendorType)) {
       setVendorType(undefined);
     }
@@ -588,9 +630,33 @@ export const QuickEntryView: React.FC = () => {
                 type="text"
                 value={itemName}
                 onChange={(e) => setItemName(e.target.value)}
-                placeholder="What was this for? (optional)"
+                onFocus={() => setIsItemFocused(true)}
+                onBlur={() => setIsItemFocused(false)}
+                placeholder={CATEGORY_CONFIG[category].itemPlaceholder}
+                list="lekflow-item-names"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
               />
+              <datalist id="lekflow-item-names">
+                {itemSuggestions.map((s) => (
+                  <option key={s.name} value={s.name} />
+                ))}
+              </datalist>
+              {itemSuggestions.length > 0 && (isItemFocused || itemName.length === 0) && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {itemSuggestions.map((s) => (
+                    <button
+                      key={s.name}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => applySuggestion(s)}
+                      className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-[11px] font-medium text-slate-600 hover:text-slate-900 cursor-pointer transition-colors"
+                      title={`Used ${s.count} time${s.count === 1 ? '' : 's'}. Tap to reuse its details.`}
+                    >
+                      {s.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <div className="flex justify-center">
@@ -693,7 +759,7 @@ export const QuickEntryView: React.FC = () => {
                 <div className="flex items-center gap-1.5 truncate text-slate-600 font-medium">
                   <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                   <span className="truncate">
-                    {itemName || subcategory || 'Item'}{' '}
+                    {subcategory || 'Item'}{' '}
                     {vendorType ? `• ${vendorType}` : ''}{' '}
                     {estimatedMeals ? `• ${estimatedMeals} meal(s)` : ''}
                     {hasShare
@@ -992,12 +1058,7 @@ export const QuickEntryView: React.FC = () => {
       <AdvancedDrawer
         isOpen={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        itemName={itemName}
-        setItemName={setItemName}
         category={category}
-        setCategory={handleCategoryChange}
-        subcategory={subcategory}
-        setSubcategory={handleSubcategoryChange}
         vendorType={vendorType}
         setVendorType={setVendorType}
         foodType={foodType}

@@ -1,44 +1,25 @@
 // src/components/AdvancedDrawer.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Bus,
-  Lightbulb,
   Minus,
-  MoreHorizontal,
-  Plane,
   Plus,
-  Users,
-  Utensils,
   X,
   HandCoins,
 } from 'lucide-react';
 import {
-  CATEGORIES,
   FOOD_TYPES,
   type Category,
-  type ExpenseRecord,
   type FoodType,
   type VendorType,
 } from '../types';
-import { useExpenses } from '../hooks/useExpenses';
-import {
-  CATEGORY_CONFIG,
-  getSubcategories,
-  getVendorOptions,
-  showFoodDetails,
-} from '../utils/categoryConfig';
+import { getVendorOptions, showFoodDetails } from '../utils/categoryConfig';
 import { getCounterparties } from '../db';
 import { cn } from '../utils/cn';
 
 interface AdvancedDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  itemName: string;
-  setItemName: (value: string) => void;
   category: Category;
-  setCategory: (value: Category) => void;
-  subcategory: string | undefined;
-  setSubcategory: (value: string | undefined) => void;
   vendorType: VendorType | undefined;
   setVendorType: (value: VendorType | undefined) => void;
   foodType: FoodType | undefined;
@@ -53,52 +34,7 @@ interface AdvancedDrawerProps {
   onClear: () => void;
 }
 
-const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
-  Food: <Utensils className="w-3.5 h-3.5 text-slate-600" />,
-  Utilities: <Lightbulb className="w-3.5 h-3.5 text-slate-600" />,
-  Transport: <Bus className="w-3.5 h-3.5 text-slate-600" />,
-  Social: <Users className="w-3.5 h-3.5 text-slate-600" />,
-  Travel: <Plane className="w-3.5 h-3.5 text-slate-600" />,
-  Other: <MoreHorizontal className="w-3.5 h-3.5 text-slate-600" />,
-};
-
 const MEAL_PRESETS = [1, 2, 3, 5, 7, 10, 14];
-
-interface Suggestion {
-  name: string;
-  count: number;
-  latest: ExpenseRecord;
-}
-
-function buildSuggestions(
-  expenses: ExpenseRecord[],
-  category: Category,
-  query: string
-): Suggestion[] {
-  const byName = new Map<string, Suggestion>();
-
-  for (const e of expenses) {
-    if (e.category !== category || !e.itemName) continue;
-    const name = e.itemName.trim();
-    if (!name) continue;
-    const key = name.toLowerCase();
-    const existing = byName.get(key);
-    if (existing) {
-      existing.count += 1;
-    } else {
-      byName.set(key, { name, count: 1, latest: e });
-    }
-  }
-
-  const q = query.trim().toLowerCase();
-  return Array.from(byName.values())
-    .filter((s) => {
-      const lower = s.name.toLowerCase();
-      return q ? lower.includes(q) && lower !== q : true;
-    })
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 6);
-}
 
 const SectionLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
@@ -128,12 +64,7 @@ const Chip: React.FC<{
 export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
   isOpen,
   onClose,
-  itemName,
-  setItemName,
   category,
-  setCategory,
-  subcategory,
-  setSubcategory,
   vendorType,
   setVendorType,
   foodType,
@@ -147,8 +78,6 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
   onApplyAndClose,
   onClear,
 }) => {
-  const { expenses } = useExpenses();
-  const [isFocused, setIsFocused] = useState(false);
   const [counterparties, setCounterparties] = useState<string[]>([]);
 
   useEffect(() => {
@@ -156,23 +85,8 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
     getCounterparties().then(setCounterparties);
   }, [isOpen]);
 
-  const config = CATEGORY_CONFIG[category];
-  const subcategories = getSubcategories(category);
-  const vendorOptions = getVendorOptions(category, subcategory);
+  const vendorOptions = getVendorOptions(category, undefined);
   const isFood = showFoodDetails(category);
-
-  const suggestions = useMemo(
-    () => buildSuggestions(expenses, category, itemName),
-    [expenses, category, itemName]
-  );
-
-  const applySuggestion = (s: Suggestion) => {
-    setItemName(s.name);
-    setSubcategory(s.latest.subcategory);
-    setVendorType(s.latest.vendorType);
-    setFoodType(s.latest.foodType);
-    setEstimatedMeals(s.latest.estimatedMeals);
-  };
 
   const toggle = <T,>(current: T | undefined, value: T, set: (v: T | undefined) => void) =>
     set(current === value ? undefined : value);
@@ -209,64 +123,6 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
         </div>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-5">
-          <div>
-            <SectionLabel>Category</SectionLabel>
-            <div className="flex flex-wrap gap-1.5">
-              {CATEGORIES.map((cat) => (
-                <Chip key={cat} selected={category === cat} onClick={() => setCategory(cat)}>
-                  {CATEGORY_ICONS[cat]}
-                  {cat}
-                </Chip>
-              ))}
-            </div>
-          </div>
-
-          {subcategories.length > 0 && (
-            <div>
-              <SectionLabel>Type of {category.toLowerCase()}</SectionLabel>
-              <div className="flex flex-wrap gap-1.5">
-                {subcategories.map((sub: string) => (
-                  <Chip
-                    key={sub}
-                    selected={subcategory === sub}
-                    onClick={() => toggle(subcategory, sub, setSubcategory)}
-                  >
-                    {sub}
-                  </Chip>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <SectionLabel>{config.itemLabel}</SectionLabel>
-            <input
-              type="text"
-              value={itemName}
-              onChange={(e) => setItemName(e.target.value)}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
-              placeholder={config.itemPlaceholder}
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
-            />
-            {suggestions.length > 0 && (isFocused || itemName.length === 0) && (
-              <div className="flex flex-wrap gap-1.5 mt-2">
-                {suggestions.map((s) => (
-                  <button
-                    key={s.name}
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => applySuggestion(s)}
-                    className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-[11px] font-medium text-slate-600 hover:text-slate-900 cursor-pointer transition-colors"
-                    title={`Used ${s.count} time${s.count === 1 ? '' : 's'}. Tap to reuse its details.`}
-                  >
-                    {s.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
           {vendorOptions.length > 0 && (
             <div>
               <SectionLabel>Where?</SectionLabel>
