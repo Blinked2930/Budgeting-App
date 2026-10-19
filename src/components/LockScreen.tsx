@@ -29,10 +29,6 @@ export const LockScreen = ({ onUnlock }: LockScreenProps) => {
                 .map((x) => x.toString(16).padStart(2, '0'))
                 .join('');
 
-            console.log('[LockScreen] env hash    :', PIN_HASH);
-            console.log('[LockScreen] entered hash:', hex);
-            console.log('[LockScreen] match       :', hex === PIN_HASH);
-
             if (cancelled) return;
 
             if (hex === PIN_HASH) {
@@ -56,9 +52,9 @@ export const LockScreen = ({ onUnlock }: LockScreenProps) => {
 
     if (!PIN_HASH) {
         return (
-            <div className="min-h-dvh bg-slate-950 text-slate-100 flex items-center justify-center px-6">
+            <div className="min-h-dvh bg-slate-50 text-slate-900 flex items-center justify-center px-6">
                 <div className="max-w-xs text-center space-y-2">
-                    <p className="text-sm font-semibold text-rose-400">Configuration error</p>
+                    <p className="text-sm font-semibold text-rose-500">Configuration error</p>
                     <p className="text-xs text-slate-500">
                         VITE_PIN_HASH is not set. Add it in Vercel and redeploy.
                     </p>
@@ -74,14 +70,14 @@ export const LockScreen = ({ onUnlock }: LockScreenProps) => {
     const handleDelete = () => setEntered((p) => p.slice(0, -1));
 
     return (
-        <div className="min-h-dvh bg-slate-950 text-slate-100 flex flex-col items-center justify-center px-6 font-sans select-none">
+        <div className="min-h-dvh bg-slate-50 text-slate-900 flex flex-col items-center justify-center px-6 font-sans select-none">
             <div className="w-full max-w-xs flex flex-col items-center gap-8">
                 <div className="flex flex-col items-center gap-3">
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center">
-                        <Lock className="w-6 h-6 text-emerald-400" />
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center shadow-sm">
+                        <Lock className="w-6 h-6 text-emerald-600" />
                     </div>
                     <div className="text-center">
-                        <h1 className="text-lg font-bold text-white">LekFlow is locked</h1>
+                        <h1 className="text-xl font-bold text-slate-900">LekFlow is locked</h1>
                         <p className="text-xs text-slate-500 mt-1">Enter your PIN to continue</p>
                     </div>
                 </div>
@@ -100,8 +96,8 @@ export const LockScreen = ({ onUnlock }: LockScreenProps) => {
                                 error
                                     ? 'bg-rose-500 border-rose-500'
                                     : i < entered.length
-                                        ? 'bg-emerald-400 border-emerald-400 scale-110'
-                                        : 'bg-transparent border-slate-700'
+                                        ? 'bg-emerald-500 border-emerald-500 scale-110'
+                                        : 'bg-transparent border-slate-300'
                             )}
                         />
                     ))}
@@ -113,7 +109,7 @@ export const LockScreen = ({ onUnlock }: LockScreenProps) => {
                             key={d}
                             type="button"
                             onClick={() => handleDigit(d)}
-                            className="aspect-square rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-2xl font-mono font-semibold text-white transition-colors cursor-pointer active:scale-95"
+                            className="aspect-square rounded-2xl bg-white hover:bg-slate-100 border border-slate-200 shadow-sm text-2xl font-mono font-semibold text-slate-900 transition-colors cursor-pointer active:scale-95"
                         >
                             {d}
                         </button>
@@ -122,7 +118,7 @@ export const LockScreen = ({ onUnlock }: LockScreenProps) => {
                     <button
                         type="button"
                         onClick={() => handleDigit('0')}
-                        className="aspect-square rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-2xl font-mono font-semibold text-white transition-colors cursor-pointer active:scale-95"
+                        className="aspect-square rounded-2xl bg-white hover:bg-slate-100 border border-slate-200 shadow-sm text-2xl font-mono font-semibold text-slate-900 transition-colors cursor-pointer active:scale-95"
                     >
                         0
                     </button>
@@ -130,7 +126,7 @@ export const LockScreen = ({ onUnlock }: LockScreenProps) => {
                         type="button"
                         onClick={handleDelete}
                         disabled={entered.length === 0}
-                        className="aspect-square rounded-2xl bg-slate-900 hover:bg-slate-800 border border-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="aspect-square rounded-2xl bg-white hover:bg-slate-100 border border-slate-200 shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-900 transition-colors cursor-pointer active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed"
                         aria-label="Delete"
                     >
                         <Delete className="w-5 h-5" />
