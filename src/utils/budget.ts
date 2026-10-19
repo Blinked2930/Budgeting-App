@@ -46,13 +46,9 @@ export interface BudgetStats {
     estimatedBankBalance: number;
     estimatedCashBalance: number;
     estimatedTotalBalance: number;
-    /** Open debts where the counterparty owes you, summed. */
     receivablesALL: number;
-    /** Open debts where you owe the counterparty, summed. */
     payablesALL: number;
-    /** receivables − payables. Positive means you are net positive. */
     netOfDebtsALL: number;
-    /** Bank + Cash + receivables − payables. */
     netWorthALL: number;
 }
 
@@ -86,6 +82,7 @@ export function computeBudgetStats(
     let spent = 0;
     let travelSpent = 0;
     let spentToday = 0;
+    let spentBeforeToday = 0;
     let cardSpent = 0;
     let cashSpent = 0;
 
@@ -97,17 +94,11 @@ export function computeBudgetStats(
         const whenMs = when.getTime();
         if (whenMs < startMs) continue;
 
-        // Wallet impact — everything that physically moved money,
-        // except entries explicitly marked walletNeutral (gift writeoffs).
         if (!e.walletNeutral) {
-            if (e.paidWith === 'Cash') {
-                cashSpent += e.amountInALL;
-            } else {
-                cardSpent += e.amountInALL;
-            }
+            if (e.paidWith === 'Cash') cashSpent += e.amountInALL;
+            else cardSpent += e.amountInALL;
         }
 
-        // Budget impact — settlement expenses are excluded entirely.
         if (e.debtRelated) continue;
 
         const budgetImpact = e.budgetAmountALL ?? e.amountInALL;
@@ -122,6 +113,7 @@ export function computeBudgetStats(
         if (whenMs >= todayMs) {
             spentToday += budgetImpact;
         } else {
+            spentBeforeToday += budgetImpact;
             const key = dayKey(when);
             spentByDay.set(key, (spentByDay.get(key) ?? 0) + budgetImpact);
         }
@@ -134,24 +126,21 @@ export function computeBudgetStats(
         const whenMs = new Date(t.timestamp).getTime();
         if (whenMs < startMs) continue;
 
-        if (t.direction === 'BankToCash') {
-            bankToCash += t.amountALL;
-        } else {
-            cashToBank += t.amountALL;
-        }
+        if (t.direction === 'BankToCash') bankToCash += t.amountALL;
+        else cashToBank += t.amountALL;
     }
 
     const cycleBudget = cycle.stipendAmountALL + cycle.bufferPoolALL;
     const remaining = cycleBudget - spent;
-    const dailyAllowance = (remaining + spentToday) / daysLeft;
+
+    // Daily allowance: caps at base daily, shrinks if deficit, never grows.
+    const baseDaily = cycleBudget / totalDays;
+    const rawAllowance = (remaining + spentToday) / daysLeft;
+    const dailyAllowance = Math.min(baseDaily, rawAllowance);
     const leftToday = dailyAllowance - spentToday;
 
-    const baseDaily = cycleBudget / totalDays;
-    let bufferPool = 0;
-    for (const daySpend of spentByDay.values()) {
-        const diff = baseDaily - daySpend;
-        if (diff > 0) bufferPool += diff;
-    }
+    // Buffer pool: how much we *should* have spent by now vs what we actually spent.
+    const bufferPool = Math.max(0, baseDaily * daysElapsed - spentBeforeToday);
 
     const startingCash = cycle.startingCashALL ?? 0;
     const estimatedBankBalance =

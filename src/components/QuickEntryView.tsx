@@ -175,12 +175,21 @@ export const QuickEntryView: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isDebtsPanelOpen, setIsDebtsPanelOpen] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
   }, []);
 
   // Listen for currency changes from Settings
@@ -465,8 +474,8 @@ export const QuickEntryView: React.FC = () => {
     <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
       <div className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 shadow-sm">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-xs text-slate-500 font-medium">Logged Total</span>
+          <div className={cn('w-2 h-2 rounded-full', isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500')} />
+          <span className="text-xs text-slate-500 font-medium">{isOnline ? 'Logged Total' : 'Offline Mode'}</span>
         </div>
         <div className="text-right">
           <span className="text-sm font-mono font-bold text-slate-900 tracking-tight">

@@ -383,7 +383,6 @@ export async function addDebt(data: {
   await db.debts.add(record);
 
   if (data.moveWalletWith && !data.sourceExpenseId) {
-    // Cash loan: money physically moved.
     const signedAmount = data.direction === 'iOwe' ? -data.amountALL : data.amountALL;
 
     const baseName = data.direction === 'iOwe'
@@ -402,13 +401,12 @@ export async function addDebt(data: {
       isDebtOrigin: true,
     });
   } else if (data.purchaseDetails) {
-    // Someone bought something for me.
     await addExpense({
-      amount: data.amountALL, // Positive expense
+      amount: data.amountALL,
       currency: 'ALL',
       category: data.purchaseDetails.category,
       itemName: data.purchaseDetails.itemName || `Bought by ${record.counterparty}`,
-      walletNeutral: true, // Does not touch cash/bank
+      walletNeutral: true,
       debtId: record.id,
     });
   }
@@ -433,9 +431,35 @@ export async function getDebt(id: string): Promise<DebtRecord | undefined> {
   return d && !d.deleted ? d : undefined;
 }
 
-/**
- * Delete a debt AND every wallet movement created by it.
- */
+export async function updateDebt(id: string, updates: Partial<DebtRecord>): Promise<void> {
+  const existing = await db.debts.get(id);
+  if (!existing || existing.deleted) return;
+
+  const newCounterparty = updates.counterparty ?? existing.counterparty;
+  const newKey = normalizeKey(newCounterparty);
+
+  await db.debts.update(id, {
+    ...updates,
+    counterparty: newCounterparty,
+    counterpartyKey: newKey,
+    isSynced: false,
+    updatedAt: new Date().toISOString(),
+  });
+
+  if (updates.amountALL !== undefined && updates.amountALL !== existing.amountALL) {
+    const linkedExps = await db.expenses.filter(e => e.debtId === id && !e.deleted).toArray();
+    for (const e of linkedExps) {
+      if (e.isDebtOrigin || e.walletNeutral) {
+        const newAmount = existing.direction === 'iOwe' ? -updates.amountALL : updates.amountALL;
+        await updateExpense(e.id, {
+          amount: e.walletNeutral ? updates.amountALL : newAmount,
+          amountInALL: updates.amountALL,
+        });
+      }
+    }
+  }
+}
+
 export async function deleteDebt(id: string): Promise<void> {
   const debt = await db.debts.get(id);
   if (!debt || debt.deleted) return;
@@ -684,6 +708,10 @@ export async function getCurrentBudgetCycle(): Promise<BudgetCycle | undefined> 
     .reverse()
     .filter((c) => !c.deleted)
     .first();
+}
+
+export async function getAllBudgetCycles(): Promise<BudgetCycle[]> {
+  return db.budgetCycles.orderBy('startDate').reverse().filter((c) => !c.deleted).toArray();
 }
 
 export async function getUnsyncedBudgetCycles(): Promise<BudgetCycle[]> {
