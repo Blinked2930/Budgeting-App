@@ -593,7 +593,7 @@ export const QuickEntryView: React.FC = () => {
               />
             </div>
 
-            <div className="flex flex-col items-center justify-center">
+            <div className="flex justify-center">
               <div className="inline-flex p-1 rounded-2xl bg-slate-100 border border-slate-200">
                 <button
                   type="button"
@@ -635,25 +635,25 @@ export const QuickEntryView: React.FC = () => {
                   Someone else
                 </button>
               </div>
-
-              {payMethod === 'SomeoneElse' && (
-                <div className="w-full mt-2">
-                  <input
-                    type="text"
-                    value={payerName}
-                    onChange={(e) => setPayerName(e.target.value)}
-                    placeholder="Who paid?"
-                    list="lekflow-payer-names"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                  />
-                  <datalist id="lekflow-payer-names">
-                    {lendSuggestions.map((p) => (
-                      <option key={p} value={p} />
-                    ))}
-                  </datalist>
-                </div>
-              )}
             </div>
+
+            {payMethod === 'SomeoneElse' && (
+              <div>
+                <input
+                  type="text"
+                  value={payerName}
+                  onChange={(e) => setPayerName(e.target.value)}
+                  placeholder="Who paid?"
+                  list="lekflow-payer-names"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                />
+                <datalist id="lekflow-payer-names">
+                  {lendSuggestions.map((p) => (
+                    <option key={p} value={p} />
+                  ))}
+                </datalist>
+              </div>
+            )}
 
             <div className="flex items-center justify-between gap-3 px-1">
               <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
