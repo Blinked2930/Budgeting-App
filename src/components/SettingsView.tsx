@@ -1,12 +1,68 @@
 // src/components/SettingsView.tsx
 import React, { useState, useEffect } from 'react';
-import { FileSpreadsheet, FileJson, Lock, CheckCircle2, Trash2, CalendarDays } from 'lucide-react';
+import { FileSpreadsheet, FileJson, Lock, CheckCircle2, Trash2, CalendarDays, Cloud } from 'lucide-react';
 import { db, exportToCSV, exportToJSON, getAllBudgetCycles } from '../db';
 import { downloadFile } from '../utils/export';
 import { useLock } from '../hooks/useLock';
 import { DEFAULT_EXCHANGE_RATES, type Currency, type BudgetCycle } from '../types';
 import { formatCurrency } from '../utils/currency';
 import { cn } from '../utils/cn';
+
+// Clerk is only available when the publishable key is set. Importing these
+// unconditionally is safe (the package must be installed regardless), but
+// the component itself only renders when ClerkProvider is mounted upstream.
+import { SignInButton, UserButton, useAuth, useUser } from '@clerk/clerk-react';
+
+const clerkEnabled = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
+
+const ClerkAccountSection: React.FC = () => {
+    const { isSignedIn, user } = useUser();
+    const { signOut } = useAuth();
+
+    if (isSignedIn) {
+        return (
+            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+                <div className="flex items-center gap-3">
+                    <UserButton />
+                    <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-slate-900 truncate">
+                            {user?.primaryEmailAddress?.emailAddress || user?.fullName || 'Signed in'}
+                        </p>
+                        <p className="text-[11px] text-slate-500 flex items-center gap-1">
+                            <Cloud className="w-3 h-3" /> Cloud sync enabled
+                        </p>
+                    </div>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => signOut()}
+                    className="w-full py-2 rounded-xl bg-slate-100 text-slate-700 text-xs font-semibold hover:bg-slate-200 transition-colors cursor-pointer"
+                >
+                    Sign Out
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+            <div>
+                <p className="text-sm font-semibold text-slate-900">Cloud Sync</p>
+                <p className="text-[11px] text-slate-500 mt-1">
+                    Sign in to back up and sync your data across devices. Your PIN stays the same.
+                </p>
+            </div>
+            <SignInButton mode="modal">
+                <button
+                    type="button"
+                    className="w-full py-2 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition-colors cursor-pointer"
+                >
+                    Sign In
+                </button>
+            </SignInButton>
+        </div>
+    );
+};
 
 export const SettingsView: React.FC = () => {
     const { lock } = useLock();
@@ -76,6 +132,13 @@ export const SettingsView: React.FC = () => {
                 <h2 className="text-xl font-bold text-slate-900 mb-1">Settings</h2>
                 <p className="text-xs text-slate-500">Manage your data, security, and preferences.</p>
             </div>
+
+            {clerkEnabled && (
+                <section className="space-y-2">
+                    <h3 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1">Account</h3>
+                    <ClerkAccountSection />
+                </section>
+            )}
 
             <section className="space-y-2">
                 <h3 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider px-1">Preferences</h3>

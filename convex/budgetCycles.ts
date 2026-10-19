@@ -16,25 +16,38 @@ export const upsertBudgetCycle = mutation({
         deleted: v.optional(v.boolean()),
     },
     handler: async (ctx, args) => {
+        const identity = await ctx.auth.getUserIdentity();
+        if (!identity) return null;
+        const userId = identity.subject;
+
         const existing = await ctx.db
             .query("budgetCycles")
             .withIndex("by_localId", (q) => q.eq("localId", args.localId))
             .first();
 
+        if (existing?.userId && existing.userId !== userId) {
+            throw new Error('Forbidden: record belongs to another user');
+        }
+
         if (existing) {
             const existingUpdatedAt = existing.updatedAt ?? existing.startDate;
             if (args.updatedAt >= existingUpdatedAt) {
-                await ctx.db.replace(existing._id, args);
+                await ctx.db.replace(existing._id, { ...args, userId });
             }
             return existing._id;
         }
 
-        return await ctx.db.insert("budgetCycles", args);
+        return await ctx.db.insert("budgetCycles", { ...args, userId });
     },
 });
 
 export const getRemoteBudgetCycles = query({
     handler: async (ctx) => {
-        return await ctx.db.query("budgetCycles").collect();
+        const identity = await ctx.auth.getUserIdentity();
+        if (!identity) return [];
+        return await ctx.db
+            .query("budgetCycles")
+            .withIndex("by_userId", (q) => q.eq("userId", identity.subject))
+            .collect();
     },
 });

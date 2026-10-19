@@ -5,6 +5,7 @@ import { v } from "convex/values";
 export default defineSchema({
     expenses: defineTable({
         localId: v.string(),
+        userId: v.optional(v.string()),
         amount: v.number(),
         currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
         amountInALL: v.number(),
@@ -22,10 +23,13 @@ export default defineSchema({
         timestamp: v.string(),
         updatedAt: v.optional(v.string()),
         deleted: v.optional(v.boolean()),
-    }).index("by_localId", ["localId"]),
+    })
+        .index("by_localId", ["localId"])
+        .index("by_userId", ["userId"]),
 
     budgetCycles: defineTable({
         localId: v.string(),
+        userId: v.optional(v.string()),
         startDate: v.string(),
         targetEndDate: v.string(),
         stipendAmountALL: v.number(),
@@ -35,19 +39,25 @@ export default defineSchema({
         travelStashALL: v.number(),
         updatedAt: v.optional(v.string()),
         deleted: v.optional(v.boolean()),
-    }).index("by_localId", ["localId"]),
+    })
+        .index("by_localId", ["localId"])
+        .index("by_userId", ["userId"]),
 
     transfers: defineTable({
         localId: v.string(),
+        userId: v.optional(v.string()),
         amountALL: v.number(),
         direction: v.string(),
         timestamp: v.string(),
         updatedAt: v.optional(v.string()),
         deleted: v.optional(v.boolean()),
-    }).index("by_localId", ["localId"]),
+    })
+        .index("by_localId", ["localId"])
+        .index("by_userId", ["userId"]),
 
     debts: defineTable({
         localId: v.string(),
+        userId: v.optional(v.string()),
         counterparty: v.string(),
         counterpartyKey: v.string(),
         direction: v.string(),
@@ -60,5 +70,7 @@ export default defineSchema({
         resolvedAt: v.optional(v.string()),
         updatedAt: v.optional(v.string()),
         deleted: v.optional(v.boolean()),
-    }).index("by_localId", ["localId"]),
+    })
+        .index("by_localId", ["localId"])
+        .index("by_userId", ["userId"]),
 });
