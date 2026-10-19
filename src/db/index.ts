@@ -385,14 +385,17 @@ export async function addDebt(data: {
   if (data.moveWalletWith && !data.sourceExpenseId) {
     // Cash loan: money physically moved.
     const signedAmount = data.direction === 'iOwe' ? -data.amountALL : data.amountALL;
+
+    const baseName = data.direction === 'iOwe'
+      ? `Borrowed from ${record.counterparty}`
+      : `Lent to ${record.counterparty}`;
+    const itemName = data.note ? `${baseName} (${data.note})` : baseName;
+
     await addExpense({
       amount: signedAmount,
       currency: 'ALL',
       category: 'Other',
-      itemName:
-        data.direction === 'iOwe'
-          ? `Borrowed from ${record.counterparty}`
-          : `Lent to ${record.counterparty}`,
+      itemName: itemName,
       paidWith: data.moveWalletWith,
       debtId: record.id,
       debtRelated: true,
@@ -464,14 +467,16 @@ export async function settleDebtCash(
 
   const signedAmount = debt.direction === 'OwedToMe' ? -clamped : clamped;
 
+  const baseName = debt.direction === 'OwedToMe'
+    ? `Repaid by ${debt.counterparty}`
+    : `Repaid to ${debt.counterparty}`;
+  const itemName = debt.note ? `${baseName} (${debt.note})` : baseName;
+
   await addExpense({
     amount: signedAmount,
     currency: 'ALL',
     category: 'Other',
-    itemName:
-      debt.direction === 'OwedToMe'
-        ? `Repaid by ${debt.counterparty}`
-        : `Repaid to ${debt.counterparty}`,
+    itemName: itemName,
     paidWith,
     debtId: debt.id,
     debtRelated: true,
@@ -500,21 +505,25 @@ export async function settleDebtNonCash(
   if (clamped <= 0) return;
 
   if (debt.direction === 'OwedToMe') {
+    const baseName = `Offset from ${debt.counterparty}`;
+    const itemName = debt.note ? `${baseName} (${debt.note})` : baseName;
     await addExpense({
       amount: clamped,
       currency: 'ALL',
       category: 'Other',
-      itemName: `Offset from ${debt.counterparty}`,
+      itemName: itemName,
       walletNeutral: true,
       debtId: debt.id,
       debtRelated: false,
     });
   } else {
+    const baseName = `Offset to ${debt.counterparty}`;
+    const itemName = debt.note ? `${baseName} (${debt.note})` : baseName;
     await addExpense({
       amount: clamped,
       currency: 'ALL',
       category: 'Other',
-      itemName: `Offset to ${debt.counterparty}`,
+      itemName: itemName,
       paidWith,
       debtId: debt.id,
       debtRelated: true,
@@ -559,11 +568,13 @@ export async function writeOffDebt(debtId: string): Promise<void> {
       await updateExpense(source.id, { budgetAmountALL: newBudget });
     }
   } else {
+    const baseName = `Gift to ${debt.counterparty}`;
+    const itemName = debt.note ? `${baseName} (${debt.note})` : baseName;
     await addExpense({
       amount,
       currency: 'ALL',
       category: 'Other',
-      itemName: `Gift to ${debt.counterparty}`,
+      itemName: itemName,
       walletNeutral: true,
       debtId: debt.id,
     });
