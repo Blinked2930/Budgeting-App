@@ -6,15 +6,25 @@
     --font-mono: 'JetBrains Mono', monospace;
   }
 
+  html,
+  body {
+    background-color: #f8fafc;
+    /* slate-50 */
+    overscroll-behavior-y: none;
+    /* prevents pull-to-refresh bounce */
+    -webkit-overflow-scrolling: touch;
+  }
+
   body {
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -webkit-tap-highlight-color: transparent;
     user-select: none;
-    background-color: #f8fafc;
-    /* slate-50 */
     color: #0f172a;
     /* slate-900 */
+    /* Push content down slightly so notch doesn't overlap */
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   input,
@@ -22,6 +32,17 @@
   button,
   select {
     user-select: auto;
+    /* Prevent iOS Safari from auto-zooming when tapping an input */
+    font-size: 16px;
+  }
+
+  /* On mobile, dropdown/select elements need explicit font-size to avoid zoom */
+  input[type="number"],
+  input[type="text"],
+  input[type="date"],
+  select,
+  textarea {
+    font-size: 16px;
   }
 }
 

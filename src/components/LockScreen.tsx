@@ -52,7 +52,7 @@ export const LockScreen = ({ onUnlock }: LockScreenProps) => {
 
     if (!PIN_HASH) {
         return (
-            <div className="min-h-dvh bg-slate-50 text-slate-900 flex items-center justify-center px-6">
+            <div className="h-full bg-slate-50 text-slate-900 flex items-center justify-center px-6">
                 <div className="max-w-xs text-center space-y-2">
                     <p className="text-sm font-semibold text-rose-500">Configuration error</p>
                     <p className="text-xs text-slate-500">
@@ -70,8 +70,8 @@ export const LockScreen = ({ onUnlock }: LockScreenProps) => {
     const handleDelete = () => setEntered((p) => p.slice(0, -1));
 
     return (
-        <div className="min-h-dvh bg-slate-50 text-slate-900 flex flex-col items-center justify-center px-6 font-sans select-none">
-            <div className="w-full max-w-xs flex flex-col items-center gap-8">
+        <div className="h-full bg-slate-50 text-slate-900 flex flex-col items-center justify-center px-6 font-sans select-none overflow-y-auto">
+            <div className="w-full max-w-xs flex flex-col items-center gap-8 py-6">
                 <div className="flex flex-col items-center gap-3">
                     <div className="w-14 h-14 rounded-2xl bg-emerald-100 border border-emerald-200 flex items-center justify-center shadow-sm">
                         <Lock className="w-6 h-6 text-emerald-600" />
