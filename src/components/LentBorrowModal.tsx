@@ -11,6 +11,38 @@ interface LentBorrowModalProps {
     onSaved: () => void;
 }
 
+const SuggestionChips: React.FC<{
+    options: string[];
+    value: string;
+    onSelect: (value: string) => void;
+}> = ({ options, value, onSelect }) => {
+    const q = value.trim().toLowerCase();
+    const filtered = options
+        .filter((opt) => {
+            const lower = opt.toLowerCase();
+            return q ? lower.includes(q) && lower !== q : true;
+        })
+        .slice(0, 6);
+
+    if (filtered.length === 0) return null;
+
+    return (
+        <div className="flex flex-wrap gap-1.5 mt-2">
+            {filtered.map((opt) => (
+                <button
+                    key={opt}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => onSelect(opt)}
+                    className="px-2.5 py-1 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] font-medium text-slate-300 hover:text-white cursor-pointer transition-colors"
+                >
+                    {opt}
+                </button>
+            ))}
+        </div>
+    );
+};
+
 export const LentBorrowModal: React.FC<LentBorrowModalProps> = ({
     isOpen,
     onClose,
@@ -125,6 +157,11 @@ export const LentBorrowModal: React.FC<LentBorrowModalProps> = ({
                             <option key={s} value={s} />
                         ))}
                     </datalist>
+                    <SuggestionChips
+                        options={suggestions}
+                        value={counterparty}
+                        onSelect={setCounterparty}
+                    />
                 </div>
 
                 <div>

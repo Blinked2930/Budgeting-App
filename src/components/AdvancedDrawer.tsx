@@ -61,6 +61,42 @@ const Chip: React.FC<{
   </button>
 );
 
+/**
+ * Visible tappable suggestion chips that render below a text input.
+ * Works on mobile — unlike <datalist>, which iOS/Android often ignore.
+ */
+const SuggestionChips: React.FC<{
+  options: string[];
+  value: string;
+  onSelect: (value: string) => void;
+}> = ({ options, value, onSelect }) => {
+  const q = value.trim().toLowerCase();
+  const filtered = options
+    .filter((opt) => {
+      const lower = opt.toLowerCase();
+      return q ? lower.includes(q) && lower !== q : true;
+    })
+    .slice(0, 6);
+
+  if (filtered.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      {filtered.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onSelect(opt)}
+          className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-[11px] font-medium text-slate-600 hover:text-slate-900 cursor-pointer transition-colors"
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  );
+};
+
 export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
   isOpen,
   onClose,
@@ -240,6 +276,11 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-colors"
               />
             </div>
+            <SuggestionChips
+              options={counterparties}
+              value={shareCounterparty}
+              onSelect={setShareCounterparty}
+            />
           </div>
         </div>
 

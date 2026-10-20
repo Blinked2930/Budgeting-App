@@ -109,6 +109,42 @@ function buildSuggestions(
     .slice(0, 6);
 }
 
+/**
+ * Visible tappable suggestion chips that render below a text input.
+ * Works on mobile — unlike <datalist>, which iOS/Android often ignore.
+ */
+const SuggestionChips: React.FC<{
+  options: string[];
+  value: string;
+  onSelect: (value: string) => void;
+}> = ({ options, value, onSelect }) => {
+  const q = value.trim().toLowerCase();
+  const filtered = options
+    .filter((opt) => {
+      const lower = opt.toLowerCase();
+      return q ? lower.includes(q) && lower !== q : true;
+    })
+    .slice(0, 6);
+
+  if (filtered.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-1.5 mt-2">
+      {filtered.map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => onSelect(opt)}
+          className="px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-[11px] font-medium text-slate-600 hover:text-slate-900 cursor-pointer transition-colors"
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  );
+};
+
 export const QuickEntryView: React.FC = () => {
   const { expenses, totalSpentALL } = useExpenses();
   const { transfers } = useTransfers();
@@ -144,7 +180,7 @@ export const QuickEntryView: React.FC = () => {
   const [lendDirection, setLendDirection] = useState<DebtDirection>('OwedToMe');
   const [lendNote, setLendNote] = useState<string>('');
 
-  // Pull unique counterparties directly from live debts for the datalist
+  // Pull unique counterparties directly from live debts
   const lendSuggestions = useMemo(() => {
     const names = new Set(debts.map((d) => d.counterparty));
     return Array.from(names).sort();
@@ -727,6 +763,11 @@ export const QuickEntryView: React.FC = () => {
                     <option key={p} value={p} />
                   ))}
                 </datalist>
+                <SuggestionChips
+                  options={lendSuggestions}
+                  value={payerName}
+                  onSelect={setPayerName}
+                />
               </div>
             )}
 
@@ -841,6 +882,11 @@ export const QuickEntryView: React.FC = () => {
                   <option key={p} value={p} />
                 ))}
               </datalist>
+              <SuggestionChips
+                options={lendSuggestions}
+                value={lendPerson}
+                onSelect={setLendPerson}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-2">
