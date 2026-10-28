@@ -20,6 +20,7 @@ export default defineSchema({
         debtRelated: v.optional(v.boolean()),
         walletNeutral: v.optional(v.boolean()),
         isDebtOrigin: v.optional(v.boolean()),
+        isBigExpense: v.optional(v.boolean()),
         timestamp: v.string(),
         updatedAt: v.optional(v.string()),
         deleted: v.optional(v.boolean()),
@@ -37,6 +38,7 @@ export default defineSchema({
         startingCashALL: v.optional(v.number()),
         bufferPoolALL: v.number(),
         travelStashALL: v.number(),
+        plannedBigExpensesALL: v.optional(v.number()),
         updatedAt: v.optional(v.string()),
         deleted: v.optional(v.boolean()),
     })
@@ -66,6 +68,7 @@ export default defineSchema({
         note: v.optional(v.string()),
         status: v.string(),
         sourceExpenseId: v.optional(v.string()),
+        myShareAmountALL: v.optional(v.number()),
         createdAt: v.string(),
         resolvedAt: v.optional(v.string()),
         updatedAt: v.optional(v.string()),

@@ -12,6 +12,7 @@ export const upsertBudgetCycle = mutation({
         startingCashALL: v.optional(v.number()),
         bufferPoolALL: v.number(),
         travelStashALL: v.number(),
+        plannedBigExpensesALL: v.optional(v.number()),
         updatedAt: v.string(),
         deleted: v.optional(v.boolean()),
     },

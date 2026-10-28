@@ -13,6 +13,7 @@ export const upsertDebt = mutation({
         note: v.optional(v.string()),
         status: v.string(),
         sourceExpenseId: v.optional(v.string()),
+        myShareAmountALL: v.optional(v.number()),
         createdAt: v.string(),
         resolvedAt: v.optional(v.string()),
         updatedAt: v.string(),

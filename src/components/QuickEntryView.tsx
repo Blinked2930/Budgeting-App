@@ -172,6 +172,7 @@ export const QuickEntryView: React.FC = () => {
   const [estimatedMeals, setEstimatedMeals] = useState<number | undefined>(undefined);
   const [shareCounterparty, setShareCounterparty] = useState<string>('');
   const [shareAmountStr, setShareAmountStr] = useState<string>('');
+  const [isBigExpense, setIsBigExpense] = useState<boolean>(false);
 
   const [withdrawDirection, setWithdrawDirection] = useState<TransferDirection>('BankToCash');
 
@@ -251,7 +252,7 @@ export const QuickEntryView: React.FC = () => {
   const hasShare = shareAmount > 0;
 
   const hasAdvancedData = Boolean(
-    subcategory || vendorType || foodType || estimatedMeals
+    subcategory || vendorType || foodType || estimatedMeals || isBigExpense
   );
 
   const selectedGroup = debtGroups.find((g) => g.key === settleGroupKey);
@@ -320,6 +321,7 @@ export const QuickEntryView: React.FC = () => {
     setEstimatedMeals(undefined);
     setShareCounterparty('');
     setShareAmountStr('');
+    setIsBigExpense(false);
   };
 
   const handleResetForm = () => {
@@ -346,6 +348,7 @@ export const QuickEntryView: React.FC = () => {
     setEstimatedMeals(expense.estimatedMeals);
     setShareCounterparty('');
     setShareAmountStr('');
+    setIsBigExpense(Boolean(expense.isBigExpense));
 
     const expenseDate = toDateInputValue(new Date(expense.timestamp));
     const override = expenseDate === todayStr ? null : expenseDate;
@@ -394,6 +397,7 @@ export const QuickEntryView: React.FC = () => {
           vendorType,
           foodType,
           estimatedMeals,
+          isBigExpense: isBigExpense || undefined,
         };
 
         if (editingId) {
@@ -517,7 +521,6 @@ export const QuickEntryView: React.FC = () => {
   return (
     <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
       
-      {/* Unified Header */}
       <div className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 shadow-sm">
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
@@ -871,6 +874,7 @@ export const QuickEntryView: React.FC = () => {
                     {subcategory || 'Item'}{' '}
                     {vendorType ? `• ${vendorType}` : ''}{' '}
                     {estimatedMeals ? `• ${estimatedMeals} meal(s)` : ''}
+                    {isBigExpense ? `• Big expense` : ''}
                   </span>
                 </div>
                 <button
@@ -1180,6 +1184,8 @@ export const QuickEntryView: React.FC = () => {
         setShareCounterparty={setShareCounterparty}
         shareAmountStr={shareAmountStr}
         setShareAmountStr={setShareAmountStr}
+        isBigExpense={isBigExpense}
+        setIsBigExpense={setIsBigExpense}
         onApplyAndClose={() => setIsDrawerOpen(false)}
         onClear={handleClearAdvanced}
       />

@@ -68,6 +68,13 @@ export interface ExpenseRecord {
    */
   isDebtOrigin?: boolean;
 
+  /**
+   * True for one-time big hits (rent, utilities, insurance) that were
+   * already pre-budgeted via the cycle's planned big expenses.
+   * Excluded from the daily allowance math, but still hits the wallet/remaining.
+   */
+  isBigExpense?: boolean;
+
   isSynced: boolean;
   updatedAt?: string;
   deleted?: boolean;
@@ -120,6 +127,14 @@ export interface BudgetCycle {
   startingCashALL?: number;
   bufferPoolALL: number;
   travelStashALL: number;
+
+  /**
+   * Total planned big expenses for the cycle (rent, bills, etc).
+   * Subtracted from the cycle budget up front so the daily allowance
+   * reflects reality from day one.
+   */
+  plannedBigExpensesALL?: number;
+
   isSynced?: boolean;
   updatedAt?: string;
   deleted?: boolean;

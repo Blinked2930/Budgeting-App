@@ -108,7 +108,14 @@ export function computeBudgetStats(
             continue;
         }
 
+        // Big expenses always reduce `remaining` because they're real outflows,
+        // but they don't count against the daily-allowance math (already
+        // pre-budgeted via plannedBigExpensesALL).
         spent += budgetImpact;
+
+        if (e.isBigExpense) {
+            continue;
+        }
 
         if (whenMs >= todayMs) {
             spentToday += budgetImpact;
@@ -130,16 +137,16 @@ export function computeBudgetStats(
         else cashToBank += t.amountALL;
     }
 
-    const cycleBudget = cycle.stipendAmountALL + cycle.bufferPoolALL;
+    // Cycle budget subtracts the *planned* big expenses up front.
+    const planned = cycle.plannedBigExpensesALL ?? 0;
+    const cycleBudget = cycle.stipendAmountALL + cycle.bufferPoolALL - planned;
     const remaining = cycleBudget - spent;
 
-    // Daily allowance: caps at base daily, shrinks if deficit, never grows.
     const baseDaily = cycleBudget / totalDays;
     const rawAllowance = (remaining + spentToday) / daysLeft;
     const dailyAllowance = Math.min(baseDaily, rawAllowance);
     const leftToday = dailyAllowance - spentToday;
 
-    // Buffer pool: how much we *should* have spent by now vs what we actually spent.
     const bufferPool = Math.max(0, baseDaily * daysElapsed - spentBeforeToday);
 
     const startingCash = cycle.startingCashALL ?? 0;

@@ -19,6 +19,7 @@ export const upsertExpense = mutation({
         debtRelated: v.optional(v.boolean()),
         walletNeutral: v.optional(v.boolean()),
         isDebtOrigin: v.optional(v.boolean()),
+        isBigExpense: v.optional(v.boolean()),
         timestamp: v.string(),
         updatedAt: v.string(),
         deleted: v.optional(v.boolean()),

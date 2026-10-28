@@ -35,6 +35,7 @@ interface FormValues {
     startingCash: string;
     extraCash: string;
     travelStash: string;
+    plannedBig: string;
 }
 
 const inputClass =
@@ -359,6 +360,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
                 startingCashALL: parseFloat(values.startingCash) || 0,
                 bufferPoolALL: parseFloat(values.extraCash) || 0,
                 travelStashALL: parseFloat(values.travelStash) || 0,
+                plannedBigExpensesALL: parseFloat(values.plannedBig) || 0,
             });
         } catch (err) {
             console.error('Failed to save budget cycle:', err);
@@ -461,6 +463,21 @@ const CycleForm: React.FC<CycleFormProps> = ({
                     />
                 </Field>
             </div>
+
+            <Field
+                label="Planned big expenses (L)"
+                hint="Rent, utilities, insurance — total for the whole cycle. Pre-budgeted so your daily allowance stays honest from day one."
+            >
+                <input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    value={values.plannedBig}
+                    onChange={update('plannedBig')}
+                    placeholder="0"
+                    className={inputClass}
+                />
+            </Field>
 
             {error && <p className="text-xs text-rose-600 font-medium">{error}</p>}
 
@@ -567,6 +584,7 @@ export const BudgetView: React.FC = () => {
                         startingCash: '',
                         extraCash: '0',
                         travelStash: '0',
+                        plannedBig: '0',
                     }}
                     onSubmit={saveCycle('first')}
                 />
@@ -589,6 +607,7 @@ export const BudgetView: React.FC = () => {
                         startingCash: String(cycle.startingCashALL ?? 0),
                         extraCash: String(cycle.bufferPoolALL),
                         travelStash: String(cycle.travelStashALL),
+                        plannedBig: String(cycle.plannedBigExpensesALL ?? 0),
                     }}
                     onSubmit={saveCycle('edit')}
                     onCancel={() => setFormMode(null)}
@@ -619,6 +638,7 @@ export const BudgetView: React.FC = () => {
                         startingCash: String(Math.round(stats.estimatedCashBalance)),
                         extraCash: '0',
                         travelStash: String(newStash),
+                        plannedBig: String(cycle.plannedBigExpensesALL ?? 0),
                     }}
                     onSubmit={saveCycle('next')}
                     onCancel={() => setFormMode(null)}
@@ -660,7 +680,7 @@ export const BudgetView: React.FC = () => {
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                         Left to spend today
                     </p>
-                    <button onClick={() => setInfoModal({ title: 'Left to Spend Today', description: 'Your daily allowance is capped at your total budget divided by the total cycle days. If you overspend, this number shrinks to help you stay on track. If you underspend, the extra money goes into your Buffer Pool and is saved for the end of the cycle rather than increasing your future daily allowance.' })}>
+                    <button onClick={() => setInfoModal({ title: 'Left to Spend Today', description: 'Your daily allowance is capped at your total budget divided by the total cycle days. If you overspend, this number shrinks to help you stay on track. If you underspend, the extra money goes into your Buffer Pool and is saved for the end of the cycle rather than increasing your future daily allowance. Big expenses (like rent) are subtracted upfront so they don\'t spike or crash this number.' })}>
                         <Info className="w-3.5 h-3.5 text-slate-400" />
                     </button>
                 </div>

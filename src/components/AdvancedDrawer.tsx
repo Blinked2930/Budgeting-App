@@ -5,6 +5,7 @@ import {
   Plus,
   X,
   HandCoins,
+  CalendarRange,
 } from 'lucide-react';
 import {
   FOOD_TYPES,
@@ -30,6 +31,8 @@ interface AdvancedDrawerProps {
   setShareCounterparty: (value: string) => void;
   shareAmountStr: string;
   setShareAmountStr: (value: string) => void;
+  isBigExpense: boolean;
+  setIsBigExpense: (value: boolean) => void;
   onApplyAndClose: () => void;
   onClear: () => void;
 }
@@ -61,10 +64,6 @@ const Chip: React.FC<{
   </button>
 );
 
-/**
- * Visible tappable suggestion chips that render below a text input.
- * Works on mobile — unlike <datalist>, which iOS/Android often ignore.
- */
 const SuggestionChips: React.FC<{
   options: string[];
   value: string;
@@ -111,6 +110,8 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
   setShareCounterparty,
   shareAmountStr,
   setShareAmountStr,
+  isBigExpense,
+  setIsBigExpense,
   onApplyAndClose,
   onClear,
 }) => {
@@ -241,6 +242,26 @@ export const AdvancedDrawer: React.FC<AdvancedDrawerProps> = ({
               </div>
             </>
           )}
+
+          <div className="pt-2 border-t border-slate-200">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isBigExpense}
+                onChange={(e) => setIsBigExpense(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+              />
+              <div>
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                  <CalendarRange className="w-3.5 h-3.5 text-slate-500" />
+                  Big Expense (Rent, Bills, etc.)
+                </div>
+                <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
+                  This hits your wallet and remaining budget normally, but doesn't spike your daily allowance, since it was already pre-budgeted when you set up the cycle.
+                </p>
+              </div>
+            </label>
+          </div>
 
           <div className="pt-2 border-t border-slate-200">
             <div className="flex items-center gap-1.5 mb-2">
