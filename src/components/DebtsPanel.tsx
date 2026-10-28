@@ -246,9 +246,12 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
 
     const handleSaveEdit = async () => {
         setBusyAction('save');
+        const newAmount = parseFloat(editAmount) || debt.amountALL;
+        const newRemaining = newAmount - (debt.myShareAmountALL ?? 0);
         await updateDebt(debt.id, {
             counterparty: editName,
-            amountALL: parseFloat(editAmount) || debt.amountALL,
+            amountALL: newAmount,
+            remainingALL: newRemaining,
             note: editNote.trim() || undefined,
         });
         setBusyAction(null);
@@ -314,11 +317,6 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                 <span>Opened {formatDebtDate(debt.createdAt)}</span>
                 {debt.resolvedAt && (
                     <span>· Resolved {formatDebtDate(debt.resolvedAt)}</span>
-                )}
-                {debt.myShareAmountALL !== undefined && (
-                    <span className="text-indigo-500 font-medium">
-                        · Your share {formatCurrency(debt.myShareAmountALL, 'ALL')}
-                    </span>
                 )}
             </div>
 

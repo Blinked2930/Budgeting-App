@@ -365,11 +365,6 @@ export async function addDebt(data: {
   timestamp?: string;
   moveWalletWith?: PaymentSource;
   purchaseDetails?: { category: Category; itemName?: string };
-  /**
-   * When someone else paid for a shared expense: the portion that belongs
-   * to *you*. Undefined means the entire amount is the debt (regular
-   * lend/borrow).
-   */
   myShareAmountALL?: number;
 }): Promise<DebtRecord> {
   const now = new Date().toISOString();
@@ -379,7 +374,7 @@ export async function addDebt(data: {
     counterpartyKey: normalizeKey(data.counterparty),
     direction: data.direction,
     amountALL: data.amountALL,
-    remainingALL: data.amountALL,
+    remainingALL: data.amountALL - (data.myShareAmountALL ?? 0),
     note: data.note,
     status: 'open',
     sourceExpenseId: data.sourceExpenseId,
@@ -391,7 +386,6 @@ export async function addDebt(data: {
   await db.debts.add(record);
 
   if (data.moveWalletWith && !data.sourceExpenseId) {
-    // Lend / borrow origin: one wallet-changing expense entry.
     const signedAmount = data.direction === 'iOwe' ? -data.amountALL : data.amountALL;
 
     const baseName = data.direction === 'iOwe'
@@ -410,15 +404,12 @@ export async function addDebt(data: {
       isDebtOrigin: true,
     });
   } else if (data.purchaseDetails) {
-    // Someone else paid for a shared expense.
     const myShare = data.myShareAmountALL ?? data.amountALL;
     const theirShare = data.amountALL - myShare;
 
     const fullItemName =
       data.purchaseDetails.itemName || `Bought by ${record.counterparty}`;
 
-    // Their share → wallet-neutral, skipped by the budget math.
-    // Budget still sees the expense so the item shows up in Recent Activity.
     await addExpense({
       amount: theirShare,
       currency: 'ALL',
@@ -429,7 +420,6 @@ export async function addDebt(data: {
       debtId: record.id,
     });
 
-    // Your share → normal expense that hits the budget.
     await addExpense({
       amount: myShare,
       currency: 'ALL',
