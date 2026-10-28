@@ -25,7 +25,6 @@ import {
   CalendarRange,
 } from 'lucide-react';
 import {
-  type Currency,
   type Category,
   CATEGORIES,
   type PaymentSource,
@@ -46,6 +45,7 @@ import { useExpenses } from '../hooks/useExpenses';
 import { useTransfers } from '../hooks/useTransfers';
 import { useDebts } from '../hooks/useDebts';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
+import { useCurrency } from '../hooks/useCurrency';
 import { convertToALL, formatCurrency, evaluateAmountExpression } from '../utils/currency';
 import { dateToNoonISO, toDateInputValue } from '../utils/budget';
 import { CATEGORY_CONFIG } from '../utils/categoryConfig';
@@ -143,12 +143,9 @@ export const QuickEntryView: React.FC = () => {
   const { transfers } = useTransfers();
   const { openDebts, debts } = useDebts();
   const { stats } = useBudgetCycle();
+  const { currency, format } = useCurrency();
 
   const [amountStr, setAmountStr] = useState<string>('');
-  const [currency, setCurrency] = useState<Currency>(() => {
-    const saved = localStorage.getItem('lekflow:currency');
-    return (saved as Currency) || 'ALL';
-  });
   const [mode, setMode] = useState<EntryMode>('expense');
 
   const [category, setCategory] = useState<Category>('Food');
@@ -216,15 +213,6 @@ export const QuickEntryView: React.FC = () => {
     return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
   }, []);
 
-  useEffect(() => {
-    const handleCurrencyChange = () => {
-      const saved = localStorage.getItem('lekflow:currency');
-      if (saved) setCurrency(saved as Currency);
-    };
-    window.addEventListener('lekflow:currency-changed', handleCurrencyChange);
-    return () => window.removeEventListener('lekflow:currency-changed', handleCurrencyChange);
-  }, []);
-
   const parsedAmount = useMemo(() => {
     if (!amountStr.trim()) return 0;
     if (/[+\-*/()]/.test(amountStr)) {
@@ -239,6 +227,8 @@ export const QuickEntryView: React.FC = () => {
   const normalizedALL = convertToALL(parsedAmount, currency);
 
   const shareAmount = parseFloat(shareAmountStr) || 0;
+  const normalizedShareALL = convertToALL(shareAmount, currency);
+
   const hasShare = shareAmount > 0;
 
   const selectedGroup = debtGroups.find((g) => g.key === settleGroupKey);
@@ -371,13 +361,14 @@ export const QuickEntryView: React.FC = () => {
           const timestamp = dateOverride ? dateToNoonISO(dateOverride) : undefined;
 
           if (payMethod === 'SomeoneElse') {
-            const myShareALL = hasShare ? shareAmount : undefined;
+            // Log ONLY your share as the expense and the debt.
+            const myShareALL = hasShare ? normalizedShareALL : normalizedALL;
+            const myShareDisplay = hasShare ? shareAmount : parsedAmount;
 
             await addDebt({
               counterparty: payerName.trim(),
               direction: 'iOwe',
-              amountALL: normalizedALL,
-              myShareAmountALL: myShareALL,
+              amountALL: myShareALL, // The debt is ONLY your share
               purchaseDetails: {
                 category,
                 itemName: itemName.trim() || undefined,
@@ -386,9 +377,7 @@ export const QuickEntryView: React.FC = () => {
             });
             const latencyMs = Math.round(performance.now() - startTime);
             setFeedback(
-              hasShare
-                ? `Logged ${formatCurrency(shareAmount, 'ALL')} for you + ${formatCurrency(normalizedALL - shareAmount, 'ALL')} owed to ${payerName} in ${latencyMs}ms ⚡`
-                : `Logged ${formatCurrency(parsedAmount, currency)} paid by ${payerName} in ${latencyMs}ms ⚡`
+              `Logged ${formatCurrency(myShareDisplay, currency)} for you owed to ${payerName} in ${latencyMs}ms ⚡`
             );
           } else {
             await addExpense({
@@ -413,10 +402,7 @@ export const QuickEntryView: React.FC = () => {
           direction: withdrawDirection,
         });
         setFeedback(
-          `${withdrawDirection === 'BankToCash' ? 'Withdrew' : 'Deposited'} ${formatCurrency(
-            parsedAmount,
-            'ALL'
-          )}`
+          `${withdrawDirection === 'BankToCash' ? 'Withdrew' : 'Deposited'} ${formatCurrency(parsedAmount, currency)}`
         );
       } else if (mode === 'lend') {
         await addDebt({
@@ -428,8 +414,8 @@ export const QuickEntryView: React.FC = () => {
         });
         setFeedback(
           lendDirection === 'OwedToMe'
-            ? `Lent ${formatCurrency(parsedAmount, 'ALL')} to ${lendPerson}`
-            : `Borrowed ${formatCurrency(parsedAmount, 'ALL')} from ${lendPerson}`
+            ? `Lent ${formatCurrency(parsedAmount, currency)} to ${lendPerson}`
+            : `Borrowed ${formatCurrency(parsedAmount, currency)} from ${lendPerson}`
         );
       } else if (mode === 'settle' && settleGroupKey) {
         const personDebts = openDebts.filter(d => d.counterpartyKey === settleGroupKey);
@@ -443,7 +429,7 @@ export const QuickEntryView: React.FC = () => {
           remaining -= amt;
         }
 
-        setFeedback(`Settled ${formatCurrency(parsedAmount, 'ALL')} with ${selectedGroup?.name}`);
+        setFeedback(`Settled ${formatCurrency(parsedAmount, currency)} with ${selectedGroup?.name}`);
       }
 
       setTimeout(() => setFeedback(null), 2500);
@@ -471,9 +457,9 @@ export const QuickEntryView: React.FC = () => {
               "text-sm font-mono font-bold tracking-tight",
               stats && stats.spentToday > stats.dailyAllowance ? 'text-rose-600' : 'text-emerald-600'
             )}>
-              {stats ? formatCurrency(stats.spentToday, 'ALL') : '—'}
+              {stats ? format(stats.spentToday) : '—'}
             </span>
-            <span className="text-[10px] text-slate-400">/ {stats ? formatCurrency(stats.dailyAllowance, 'ALL') : '—'}</span>
+            <span className="text-[10px] text-slate-400">/ {stats ? format(stats.dailyAllowance) : '—'}</span>
           </div>
         </div>
         
@@ -483,7 +469,7 @@ export const QuickEntryView: React.FC = () => {
           </p>
           <div className="text-right mt-0.5">
             <span className="text-sm font-mono font-bold text-slate-900 tracking-tight">
-              {formatCurrency(totalSpentALL, 'ALL')}
+              {format(totalSpentALL)}
             </span>
             <span className="text-[10px] text-slate-400 ml-1.5 font-medium">
               ({expenses.length})
@@ -552,7 +538,7 @@ export const QuickEntryView: React.FC = () => {
 
           {isExpression && parsedAmount > 0 && (
             <p className="text-xs font-mono text-emerald-600 mt-1 font-semibold flex items-center justify-center gap-1">
-              <Calculator className="w-3 h-3" />= {formatCurrency(parsedAmount, currency)}
+              <Calculator className="w-3 h-3" />= {format(convertToALL(parsedAmount, currency))}
             </p>
           )}
 
@@ -720,14 +706,14 @@ export const QuickEntryView: React.FC = () => {
             </div>
 
             {payMethod === 'SomeoneElse' && (
-              <div className="bg-indigo-50/50 p-3 rounded-2xl border border-indigo-100 space-y-2">
+              <div className="pt-2 space-y-2">
                 <input
                   type="text"
                   value={payerName}
                   onChange={(e) => setPayerName(e.target.value)}
                   placeholder="Who paid?"
                   list="lekflow-payer-names"
-                  className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
                 />
                 <datalist id="lekflow-payer-names">
                   {lendSuggestions.map((p) => (
@@ -740,23 +726,27 @@ export const QuickEntryView: React.FC = () => {
                   onSelect={setPayerName}
                 />
                 
-                <div className="flex items-center gap-2 pt-1">
-                  <span className="text-xs font-medium text-indigo-900 whitespace-nowrap">Your share:</span>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="any"
-                    value={shareAmountStr}
-                    onChange={(e) => setShareAmountStr(e.target.value)}
-                    placeholder="250"
-                    className="w-24 bg-white border border-indigo-200 rounded-xl px-3 py-1.5 text-sm font-mono text-indigo-900 placeholder-indigo-300 focus:outline-none focus:border-indigo-500"
-                  />
-                  <span className="text-xs font-medium text-indigo-900">L</span>
+                <div className="flex items-center justify-between gap-2 pt-1">
+                  <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                    Your share:
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      value={shareAmountStr}
+                      onChange={(e) => setShareAmountStr(e.target.value)}
+                      placeholder="0"
+                      className="w-24 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                    />
+                    <span className="text-xs font-medium text-slate-500">L</span>
+                  </div>
                 </div>
 
                 {hasShare && (
-                  <p className="text-[10px] text-indigo-600/80 leading-relaxed px-1 pt-0.5">
-                    {payerName || 'They'} paid the rest ({formatCurrency(Math.max(0, normalizedALL - shareAmount), 'ALL')}) and you owe it to them.
+                  <p className="text-[10px] text-slate-500 leading-relaxed px-1 pt-0.5">
+                    {payerName || 'They'} paid {formatCurrency(normalizedALL, 'ALL')} total. You owe them {formatCurrency(Math.max(0, normalizedALL - shareAmount), 'ALL')}.
                   </p>
                 )}
               </div>
@@ -984,7 +974,7 @@ export const QuickEntryView: React.FC = () => {
                           </div>
                         </div>
                         <p className={cn("text-sm font-mono shrink-0", g.net > 0 ? "text-emerald-600" : g.net < 0 ? "text-rose-600" : "text-slate-400")}>
-                          {formatCurrency(Math.abs(g.net), 'ALL')}
+                          {format(Math.abs(g.net))}
                         </p>
                       </button>
                     );
@@ -1029,13 +1019,13 @@ export const QuickEntryView: React.FC = () => {
 
                     {parsedAmount > Math.abs(selectedGroup.net) && (
                       <p className="text-[10px] text-amber-600 px-1">
-                        Capped at balance ({formatCurrency(Math.abs(selectedGroup.net), 'ALL')})
+                        Capped at balance ({format(Math.abs(selectedGroup.net))})
                       </p>
                     )}
                     {parsedAmount > 0 && parsedAmount < Math.abs(selectedGroup.net) && (
                       <p className="text-[10px] text-amber-600 px-1">
                         Partial: {formatCurrency(parsedAmount, 'ALL')} of{' '}
-                        {formatCurrency(Math.abs(selectedGroup.net), 'ALL')}
+                        {format(Math.abs(selectedGroup.net))}
                       </p>
                     )}
                   </>

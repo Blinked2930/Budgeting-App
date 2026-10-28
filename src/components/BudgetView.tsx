@@ -20,8 +20,8 @@ import type { BudgetStats } from '../utils/budget';
 import { addExpense, saveBudgetCycle } from '../db';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { useDebts } from '../hooks/useDebts';
+import { useCurrency } from '../hooks/useCurrency';
 import { addDays, toDateInputValue } from '../utils/budget';
-import { formatCurrency } from '../utils/currency';
 import { cn } from '../utils/cn';
 import { DebtsPanel } from './DebtsPanel';
 
@@ -66,6 +66,7 @@ const TravelStashModal: React.FC<{
 }> = ({ isOpen, onClose, cycle, stats }) => {
     const [amountStr, setAmountStr] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+    const { format } = useCurrency();
 
     if (!isOpen) return null;
 
@@ -108,7 +109,7 @@ const TravelStashModal: React.FC<{
                         </div>
                         <div>
                             <h3 className="text-base font-bold text-slate-900">Travel Stash</h3>
-                            <p className="text-[10px] text-slate-500">Current: {formatCurrency(stats.travelStashBalance, 'ALL')}</p>
+                            <p className="text-[10px] text-slate-500">Current: {format(stats.travelStashBalance)}</p>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100"><X className="w-4 h-4" /></button>
@@ -163,6 +164,7 @@ const ReconcileRow: React.FC<{
     const [isReconciling, setIsReconciling] = useState(false);
     const [showDialog, setShowDialog] = useState(false);
     const dismissedValueRef = useRef<string | null>(null);
+    const { format } = useCurrency();
 
     const actual = parseFloat(actualStr);
     const hasActual = actualStr.trim() !== '' && !Number.isNaN(actual);
@@ -201,7 +203,7 @@ const ReconcileRow: React.FC<{
             </div>
             <div>
                 <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">LekFlow expects</p>
-                <p className="text-base font-mono font-bold text-slate-900">{formatCurrency(estimated, 'ALL')}</p>
+                <p className="text-base font-mono font-bold text-slate-900">{format(estimated)}</p>
             </div>
             <input
                 type="number"
@@ -227,8 +229,8 @@ const ReconcileRow: React.FC<{
                         <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                         <span>
                             {variance < 0
-                                ? `${formatCurrency(Math.abs(variance), 'ALL')} less than expected.`
-                                : `${formatCurrency(variance, 'ALL')} more than expected.`}
+                                ? `${format(Math.abs(variance))} less than expected.`
+                                : `${format(variance)} more than expected.`}
                         </span>
                     </div>
                     <button
@@ -236,7 +238,7 @@ const ReconcileRow: React.FC<{
                         onClick={() => setShowDialog(true)}
                         className="bg-amber-100 hover:bg-amber-200 text-amber-800 py-1 px-2 rounded-lg font-bold transition-colors text-center cursor-pointer text-[10px]"
                     >
-                        Log {formatCurrency(Math.abs(amountToLog), 'ALL')}
+                        Log {format(Math.abs(amountToLog))}
                     </button>
                 </div>
             )}
@@ -260,7 +262,7 @@ const ReconcileRow: React.FC<{
                             <div className="min-w-0">
                                 <h3 className="text-base font-bold text-slate-900">Log a {label} discrepancy?</h3>
                                 <p className="text-xs text-slate-500 mt-1">
-                                    LekFlow expects {formatCurrency(estimated, 'ALL')} in {label.toLowerCase()}, but you entered {formatCurrency(actual, 'ALL')}.
+                                    LekFlow expects {format(estimated)} in {label.toLowerCase()}, but you entered {format(actual)}.
                                 </p>
                             </div>
                         </div>
@@ -269,7 +271,7 @@ const ReconcileRow: React.FC<{
                             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Adjustment</p>
                             <p className={cn('text-lg font-mono font-bold mt-0.5', amountToLog > 0 ? 'text-rose-600' : 'text-emerald-600')}>
                                 {amountToLog > 0 ? '−' : '+'}
-                                {formatCurrency(Math.abs(amountToLog), 'ALL')}
+                                {format(Math.abs(amountToLog))}
                             </p>
                             <p className="text-[10px] text-slate-500 mt-1">Logs as a {paidWith.toLowerCase()} entry.</p>
                         </div>
@@ -535,6 +537,8 @@ const StatTile: React.FC<{
 export const BudgetView: React.FC = () => {
     const { cycle, stats, isLoading } = useBudgetCycle();
     const { openDebts } = useDebts();
+    const { format } = useCurrency();
+
     const [formMode, setFormMode] = useState<FormMode | null>(null);
     const [isDebtsOpen, setIsDebtsOpen] = useState(false);
     const [isTravelStashOpen, setIsTravelStashOpen] = useState(false);
@@ -626,7 +630,7 @@ export const BudgetView: React.FC = () => {
                     submitLabel="Start new cycle"
                     notice={
                         stats.projectedSurplus > 0
-                            ? `${formatCurrency(stats.projectedSurplus, 'ALL')} left over from this cycle moves into your travel stash.`
+                            ? `${format(stats.projectedSurplus)} left over from this cycle moves into your travel stash.`
                             : 'No surplus this cycle, so nothing moves into your travel stash.'
                     }
                     mustStartAfter={cycle.startDate}
@@ -680,7 +684,7 @@ export const BudgetView: React.FC = () => {
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                         Left to spend today
                     </p>
-                    <button onClick={() => setInfoModal({ title: 'Left to Spend Today', description: 'Your daily allowance is capped at your total budget divided by the total cycle days. If you overspend, this number shrinks to help you stay on track. If you underspend, the extra money goes into your Buffer Pool and is saved for the end of the cycle rather than increasing your future daily allowance. Big expenses (like rent) are subtracted upfront so they don\'t spike or crash this number.' })}>
+                    <button onClick={() => setInfoModal({ title: 'Left to Spend Today', description: 'Your daily allowance is capped at your total budget divided by the total cycle days. If you overspend, this number shrinks to help you stay on track. If you underspend, the extra money goes into your Buffer Pool and is saved for the end of the cycle rather than increasing your future daily allowance. Big expenses (like rent) are subtracted upfront so they do not spike or crash this number.' })}>
                         <Info className="w-3.5 h-3.5 text-slate-400" />
                     </button>
                 </div>
@@ -690,11 +694,11 @@ export const BudgetView: React.FC = () => {
                         stats.leftToday < 0 ? 'text-rose-600' : 'text-emerald-600'
                     )}
                 >
-                    {formatCurrency(stats.leftToday, 'ALL')}
+                    {format(stats.leftToday)}
                 </p>
                 <p className="text-[11px] text-slate-400 mt-1">
-                    of {formatCurrency(stats.dailyAllowance, 'ALL')} today ·{' '}
-                    {formatCurrency(stats.spentToday, 'ALL')} spent
+                    of {format(stats.dailyAllowance)} today ·{' '}
+                    {format(stats.spentToday)} spent
                 </p>
 
                 <div className="mt-3.5">
@@ -705,8 +709,8 @@ export const BudgetView: React.FC = () => {
                         />
                     </div>
                     <div className="flex justify-between mt-1.5 text-[10px] font-mono text-slate-400">
-                        <span>{formatCurrency(stats.spent, 'ALL')} spent</span>
-                        <span>{formatCurrency(stats.cycleBudget, 'ALL')} budget</span>
+                        <span>{format(stats.spent)} spent</span>
+                        <span>{format(stats.cycleBudget)} budget</span>
                     </div>
                 </div>
             </div>
@@ -719,7 +723,7 @@ export const BudgetView: React.FC = () => {
                 <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Net worth (with debts)</p>
                     <p className={cn('text-base font-mono font-bold', stats.netWorthALL < 0 ? 'text-rose-600' : 'text-slate-900')}>
-                        {formatCurrency(stats.netWorthALL, 'ALL')}
+                        {format(stats.netWorthALL)}
                     </p>
                 </div>
             </div>
@@ -743,11 +747,11 @@ export const BudgetView: React.FC = () => {
                     <div className="grid grid-cols-2 gap-3">
                         <div>
                             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Owed to you</p>
-                            <p className="text-sm font-mono font-bold text-emerald-600">{formatCurrency(stats.receivablesALL, 'ALL')}</p>
+                            <p className="text-sm font-mono font-bold text-emerald-600">{format(stats.receivablesALL)}</p>
                         </div>
                         <div>
                             <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">You owe</p>
-                            <p className="text-sm font-mono font-bold text-rose-600">{formatCurrency(stats.payablesALL, 'ALL')}</p>
+                            <p className="text-sm font-mono font-bold text-rose-600">{format(stats.payablesALL)}</p>
                         </div>
                     </div>
 
@@ -769,7 +773,7 @@ export const BudgetView: React.FC = () => {
                                             <p className="text-xs font-semibold text-slate-900 truncate">{g.name}</p>
                                         </div>
                                         <p className={cn('text-xs font-mono font-bold shrink-0', net > 0 ? 'text-emerald-600' : net < 0 ? 'text-rose-600' : 'text-slate-500')}>
-                                            {net > 0 ? '+' : ''}{formatCurrency(Math.abs(net), 'ALL')}
+                                            {net > 0 ? '+' : ''}{format(Math.abs(net))}
                                         </p>
                                     </button>
                                 );
@@ -781,7 +785,7 @@ export const BudgetView: React.FC = () => {
                         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Net</p>
                         <p className={cn('text-sm font-mono font-bold', stats.netOfDebtsALL > 0 ? 'text-emerald-600' : stats.netOfDebtsALL < 0 ? 'text-rose-600' : 'text-slate-500')}>
                             {stats.netOfDebtsALL > 0 ? '+' : ''}
-                            {formatCurrency(Math.abs(stats.netOfDebtsALL), 'ALL')}
+                            {format(Math.abs(stats.netOfDebtsALL))}
                         </p>
                     </div>
                 </div>
@@ -791,7 +795,7 @@ export const BudgetView: React.FC = () => {
                 <StatTile
                     icon={<Wallet className="w-3.5 h-3.5 text-emerald-600" />}
                     label="Remaining"
-                    value={formatCurrency(stats.remaining, 'ALL')}
+                    value={format(stats.remaining)}
                     sub="this cycle"
                     negative={stats.remaining < 0}
                     showInfo
@@ -808,7 +812,7 @@ export const BudgetView: React.FC = () => {
                 <StatTile
                     icon={<RefreshCw className="w-3.5 h-3.5 text-amber-600" />}
                     label="Buffer pool"
-                    value={formatCurrency(stats.bufferPool, 'ALL')}
+                    value={format(stats.bufferPool)}
                     sub="unspent from logged days"
                     showInfo
                     onClick={() => setInfoModal({ title: 'Buffer Pool', description: 'Money you saved by spending less than the expected daily burn rate. This is automatically added to your budget for the next cycle (or rolls into your Travel Stash). It does not increase your daily allowance.' })}
@@ -816,8 +820,8 @@ export const BudgetView: React.FC = () => {
                 <StatTile
                     icon={<PiggyBank className="w-3.5 h-3.5 text-rose-600" />}
                     label="Travel stash"
-                    value={formatCurrency(stats.travelStashBalance, 'ALL')}
-                    sub={stats.projectedSurplus > 0 ? `+${formatCurrency(stats.projectedSurplus, 'ALL')} at payday` : undefined}
+                    value={format(stats.travelStashBalance)}
+                    sub={stats.projectedSurplus > 0 ? `+${format(stats.projectedSurplus)} at payday` : undefined}
                     negative={stats.travelStashBalance < 0}
                     onClick={() => setIsTravelStashOpen(true)}
                 />
@@ -825,7 +829,7 @@ export const BudgetView: React.FC = () => {
 
             {stats.travelSpent > 0 && (
                 <p className="text-[11px] text-slate-500 px-1">
-                    {formatCurrency(stats.travelSpent, 'ALL')} of Travel spending is paid from the stash, not the daily budget.
+                    {format(stats.travelSpent)} of Travel spending is paid from the stash, not the daily budget.
                 </p>
             )}
 
