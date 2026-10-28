@@ -356,14 +356,13 @@ export const QuickEntryView: React.FC = () => {
           const timestamp = dateOverride ? dateToNoonISO(dateOverride) : undefined;
 
           if (payMethod === 'SomeoneElse') {
-            // Log ONLY your share as the expense and the debt.
             const myShareALL = hasShare ? normalizedShareALL : normalizedALL;
             const myShareDisplay = hasShare ? shareAmount : parsedAmount;
 
             await addDebt({
               counterparty: payerName.trim(),
               direction: 'iOwe',
-              amountALL: myShareALL, // The debt is ONLY your share
+              amountALL: myShareALL,
               myShareAmountALL: myShareALL,
               purchaseDetails: {
                 category,
@@ -437,6 +436,8 @@ export const QuickEntryView: React.FC = () => {
     }
   };
 
+  const spentThisCycle = stats?.spent ?? 0;
+
   return (
     <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
       
@@ -461,16 +462,16 @@ export const QuickEntryView: React.FC = () => {
         
         <div className="text-right">
           <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-            All-time Total
+            Spent This Cycle
           </p>
           <div className="text-right mt-0.5">
             <span className="text-sm font-mono font-bold text-slate-900 tracking-tight">
-              {format(totalSpentALL)}
-            </span>
-            <span className="text-[10px] text-slate-400 ml-1.5 font-medium">
-              ({expenses.length})
+              {format(spentThisCycle)}
             </span>
           </div>
+          <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+            All-time: {format(totalSpentALL)}
+          </p>
         </div>
       </div>
 

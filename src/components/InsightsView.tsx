@@ -24,6 +24,8 @@ import {
     aggregate,
     aggregateByCategory,
     aggregatePaidWith,
+    cashFlow,
+    totalOutflow,
     filterExpenses,
     getMonthOptions,
     monthLabel,
@@ -260,26 +262,14 @@ const PaymentBehaviorCard: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses
 const CashFlowCard: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => {
     const { format } = useCurrency();
 
-    const moneyIn = useMemo(() => {
-        return expenses
-            .filter((e) => !e.deleted && e.amount > 0 && !e.walletNeutral)
-            .reduce((sum, e) => sum + e.amountInALL, 0);
-    }, [expenses]);
-
-    const moneyOut = useMemo(() => {
-        return expenses
-            .filter((e) => !e.deleted && e.amount < 0 && !e.walletNeutral)
-            .reduce((sum, e) => sum + Math.abs(e.amountInALL), 0);
-    }, [expenses]);
-
-    const net = moneyIn - moneyOut;
+    const flow = useMemo(() => cashFlow(expenses), [expenses]);
 
     return (
         <Card className="space-y-3">
             <div className="flex items-center justify-between">
-                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Cash Flow</span>
-                <span className={cn('text-base font-mono font-bold', net >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
-                    {net > 0 ? '+' : ''}{format(net)}
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Cash Flow (Loans & Repayments)</span>
+                <span className={cn('text-base font-mono font-bold', flow.netALL >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                    {flow.netALL > 0 ? '+' : ''}{format(flow.netALL)}
                 </span>
             </div>
 
@@ -289,16 +279,16 @@ const CashFlowCard: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => 
                         <ArrowRightLeft className="w-3 h-3" />
                         In
                     </div>
-                    <p className="text-sm font-mono font-bold text-emerald-800">{format(moneyIn)}</p>
-                    <p className="text-[10px] text-emerald-600">Repayments, refunds</p>
+                    <p className="text-sm font-mono font-bold text-emerald-800">{format(flow.inALL)}</p>
+                    <p className="text-[10px] text-emerald-600">Repayments received</p>
                 </div>
                 <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-100">
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold text-rose-700 uppercase tracking-wider mb-1">
                         <ArrowRightLeft className="w-3 h-3" />
                         Out
                     </div>
-                    <p className="text-sm font-mono font-bold text-rose-800">{format(moneyOut)}</p>
-                    <p className="text-[10px] text-rose-600">Expenses, loans</p>
+                    <p className="text-sm font-mono font-bold text-rose-800">{format(flow.outALL)}</p>
+                    <p className="text-[10px] text-rose-600">Loans given</p>
                 </div>
             </div>
         </Card>
@@ -436,7 +426,6 @@ function filterByScope(
             return now - when <= 30 * 24 * 60 * 60 * 1000;
         }
 
-        // cycle
         if (cycleStart) {
             const cycleMs = new Date(cycleStart).getTime();
             return when >= cycleMs;
@@ -461,6 +450,7 @@ export const InsightsView: React.FC = () => {
     const filtered = useMemo(() => filterExpenses(scopedExpenses, filters), [scopedExpenses, filters]);
     const filteredAgg = useMemo(() => aggregate(filtered), [filtered]);
     const monthOptions = useMemo(() => getMonthOptions(scopedExpenses), [scopedExpenses]);
+    const outflow = useMemo(() => totalOutflow(scopedExpenses), [scopedExpenses]);
 
     const update = (key: keyof InsightFilters) => (value: string) =>
         setFilters((prev) => ({ ...prev, [key]: value }));
@@ -471,8 +461,8 @@ export const InsightsView: React.FC = () => {
         <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
             <DebtsPanel isOpen={isDebtsOpen} onClose={() => setIsDebtsOpen(false)} />
 
-            {/* Sticky Time Scope Toggle — has its own vertical padding to prevent clipping */}
-            <div className="sticky top-0 -mx-4 px-4 pt-3 pb-3 bg-slate-50/95 backdrop-blur-md z-10 border-b border-slate-200/60">
+            {/* Time Scope Toggle — solid background, no blur, extra padding at top */}
+            <div className="sticky top-0 -mx-4 px-4 pt-3 pb-3 bg-slate-50 z-10 border-b border-slate-200/60">
                 <div className="flex items-center p-1 rounded-2xl bg-slate-100 border border-slate-200">
                     {SCOPES.map((s) => {
                         const active = timeScope === s.id;
@@ -521,6 +511,21 @@ export const InsightsView: React.FC = () => {
                     Cash Flow
                 </SectionTitle>
                 <CashFlowCard expenses={scopedExpenses} />
+            </section>
+
+            <section>
+                <SectionTitle icon={<PieChart className="w-3.5 h-3.5 text-slate-400" />}>
+                    Total Outflow
+                </SectionTitle>
+                <Card className="space-y-2">
+                    <div className="flex items-baseline justify-between">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">All Money Out</span>
+                        <span className="text-lg font-mono font-bold text-slate-900">{format(outflow)}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                        Every expense that left your pocket: regular spending, rent, and loans given.
+                    </p>
+                </Card>
             </section>
 
             <section>

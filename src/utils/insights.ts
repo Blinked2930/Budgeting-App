@@ -84,43 +84,53 @@ export function aggregate(expenses: ExpenseRecord[]): Aggregate {
     };
 }
 
-export interface FoodDailyStats {
-    totalFoodSpend: number;
-    daysElapsed: number;
-    dailyAverage: number;
-    costPerMealEstimate: number;
+/**
+ * Total Outflow: sum of ALL real money that left your pocket.
+ * Includes Big Expenses (rent), normal expenses, and loans given.
+ * Excludes loan settlements (money coming back) and wallet-neutral entries.
+ */
+export function totalOutflow(expenses: ExpenseRecord[]): number {
+    return expenses
+        .filter((e) => !e.deleted && !e.walletNeutral)
+        .reduce((sum, e) => sum + Math.abs(e.amountInALL), 0);
 }
 
-export function calculateFoodDailyStats(
-    expenses: ExpenseRecord[],
-    startDateStr?: string
-): FoodDailyStats | null {
-    const foodExpenses = expenses.filter((e) => !e.debtRelated && !e.walletNeutral && e.category === 'Food');
-    const totalFoodSpend = foodExpenses.reduce(
-        (sum, e) => sum + (e.budgetAmountALL ?? e.amountInALL),
-        0
-    );
+/**
+ * Spend Against Budget: what actually hit your `Remaining`.
+ * Excludes Big Expenses (pre-budgeted) and loan settlements.
+ */
+export function spendAgainstBudget(expenses: ExpenseRecord[]): number {
+    return expenses
+        .filter((e) => !e.deleted && !e.walletNeutral && !e.isBigExpense && !e.debtRelated)
+        .reduce((sum, e) => sum + (e.budgetAmountALL ?? e.amountInALL), 0);
+}
 
-    if (totalFoodSpend === 0 || foodExpenses.length === 0) return null;
+/**
+ * Cash Flow: Money IN minus Money OUT, EXCLUDING regular expenses.
+ * Money in = loans received + repayments received + refunds.
+ * Money out = loans given + repayments made.
+ */
+export function cashFlow(expenses: ExpenseRecord[]): { inALL: number; outALL: number; netALL: number } {
+    let inALL = 0;
+    let outALL = 0;
 
-    let start = startDateStr ? new Date(startDateStr).getTime() : 0;
-    
-    if (!startDateStr) {
-        const timestamps = foodExpenses.map((e) => new Date(e.timestamp).getTime());
-        start = Math.min(...timestamps);
+    for (const e of expenses) {
+        if (e.deleted || e.walletNeutral) continue;
+        const amount = Math.abs(e.amountInALL);
+
+        if (e.debtRelated) {
+            if (e.amount > 0) inALL += amount;
+            else if (e.amount < 0) outALL += amount;
+            continue;
+        }
+
+        if (e.isDebtOrigin) {
+            if (e.amount < 0) inALL += amount;
+            else outALL += amount;
+        }
     }
 
-    const now = new Date().getTime();
-    const daysElapsed = Math.max(1, Math.ceil((now - start) / (1000 * 60 * 60 * 24)));
-
-    const dailyAverage = totalFoodSpend / daysElapsed;
-    
-    return {
-        totalFoodSpend,
-        daysElapsed,
-        dailyAverage,
-        costPerMealEstimate: dailyAverage / 3,
-    };
+    return { inALL, outALL, netALL: inALL - outALL };
 }
 
 export interface CategoryStat {
@@ -180,37 +190,4 @@ export function aggregatePaidWith(expenses: ExpenseRecord[]): PaidWithStat {
         cashPct: total > 0 ? (cash / total) * 100 : 0,
         cardPct: total > 0 ? (card / total) * 100 : 0,
     };
-}
-
-export interface VendorStat {
-    vendor: string;
-    total: number;
-    count: number;
-    percent: number;
-}
-
-export function aggregateByVendor(expenses: ExpenseRecord[]): VendorStat[] {
-    const map = new Map<string, { total: number; count: number }>();
-    let grandTotal = 0;
-
-    for (const e of expenses) {
-        if (e.debtRelated || e.walletNeutral) continue;
-        const amount = e.budgetAmountALL ?? e.amountInALL;
-        const key = e.vendorType ?? 'Other';
-        const existing = map.get(key) ?? { total: 0, count: 0 };
-        existing.total += amount;
-        existing.count += 1;
-        map.set(key, existing);
-        grandTotal += amount;
-    }
-
-    return Array.from(map.entries())
-        .filter(([, s]) => s.total > 0)
-        .map(([vendor, s]) => ({
-            vendor,
-            total: s.total,
-            count: s.count,
-            percent: grandTotal > 0 ? (s.total / grandTotal) * 100 : 0,
-        }))
-        .sort((a, b) => b.total - a.total);
 }
