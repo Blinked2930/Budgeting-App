@@ -26,6 +26,7 @@ import {
     aggregatePaidWith,
     cashFlow,
     totalOutflow,
+    spendAgainstBudget,
     filterExpenses,
     getMonthOptions,
     monthLabel,
@@ -261,13 +262,14 @@ const PaymentBehaviorCard: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses
 
 const CashFlowCard: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => {
     const { format } = useCurrency();
-
     const flow = useMemo(() => cashFlow(expenses), [expenses]);
 
     return (
         <Card className="space-y-3">
             <div className="flex items-center justify-between">
-                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Cash Flow (Loans & Repayments)</span>
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                    Cash Flow (Loans & Repayments)
+                </span>
                 <span className={cn('text-base font-mono font-bold', flow.netALL >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
                     {flow.netALL > 0 ? '+' : ''}{format(flow.netALL)}
                 </span>
@@ -349,7 +351,7 @@ const DebtSummary: React.FC<{ onOpen: () => void }> = ({ onOpen }) => {
 
 const CycleHistorySection: React.FC = () => {
     const { format } = useCurrency();
-    
+
     const allCycles = useLiveQuery(
         () => db.budgetCycles.orderBy('startDate').reverse().filter((c) => !c.deleted).toArray(),
         []
@@ -451,6 +453,7 @@ export const InsightsView: React.FC = () => {
     const filteredAgg = useMemo(() => aggregate(filtered), [filtered]);
     const monthOptions = useMemo(() => getMonthOptions(scopedExpenses), [scopedExpenses]);
     const outflow = useMemo(() => totalOutflow(scopedExpenses), [scopedExpenses]);
+    const spendBudget = useMemo(() => spendAgainstBudget(scopedExpenses), [scopedExpenses]);
 
     const update = (key: keyof InsightFilters) => (value: string) =>
         setFilters((prev) => ({ ...prev, [key]: value }));
@@ -461,7 +464,6 @@ export const InsightsView: React.FC = () => {
         <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
             <DebtsPanel isOpen={isDebtsOpen} onClose={() => setIsDebtsOpen(false)} />
 
-            {/* Time Scope Toggle — solid background, no blur, extra padding at top */}
             <div className="sticky top-0 -mx-4 px-4 pt-3 pb-3 bg-slate-50 z-10 border-b border-slate-200/60">
                 <div className="flex items-center p-1 rounded-2xl bg-slate-100 border border-slate-200">
                     {SCOPES.map((s) => {
@@ -500,6 +502,28 @@ export const InsightsView: React.FC = () => {
             </section>
 
             <section>
+                <SectionTitle icon={<PieChart className="w-3.5 h-3.5 text-slate-400" />}>
+                    Total Outflow
+                </SectionTitle>
+                <Card className="space-y-2">
+                    <div className="flex items-baseline justify-between">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">All money out</span>
+                        <span className="text-lg font-mono font-bold text-slate-900">{format(outflow)}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 leading-relaxed">
+                        Every penny that left your pocket: regular spending, rent, and loans given.
+                    </p>
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Budgeted spend</span>
+                        <span className="text-sm font-mono font-bold text-slate-700">{format(spendBudget)}</span>
+                    </div>
+                    <p className="text-[10px] text-slate-400">
+                        Matches the "Spent" number on the Budget tab. Excludes Big Expenses (rent) and loans.
+                    </p>
+                </Card>
+            </section>
+
+            <section>
                 <SectionTitle icon={<Banknote className="w-3.5 h-3.5 text-slate-400" />}>
                     Cash vs Card
                 </SectionTitle>
@@ -511,21 +535,6 @@ export const InsightsView: React.FC = () => {
                     Cash Flow
                 </SectionTitle>
                 <CashFlowCard expenses={scopedExpenses} />
-            </section>
-
-            <section>
-                <SectionTitle icon={<PieChart className="w-3.5 h-3.5 text-slate-400" />}>
-                    Total Outflow
-                </SectionTitle>
-                <Card className="space-y-2">
-                    <div className="flex items-baseline justify-between">
-                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">All Money Out</span>
-                        <span className="text-lg font-mono font-bold text-slate-900">{format(outflow)}</span>
-                    </div>
-                    <p className="text-[10px] text-slate-500 leading-relaxed">
-                        Every expense that left your pocket: regular spending, rent, and loans given.
-                    </p>
-                </Card>
             </section>
 
             <section>

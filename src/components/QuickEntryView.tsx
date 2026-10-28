@@ -461,10 +461,7 @@ export const QuickEntryView: React.FC = () => {
         </div>
         
         <div className="text-right">
-          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-            Spent This Cycle
-          </p>
-          <div className="text-right mt-0.5">
+          <div className="text-right">
             <span className="text-sm font-mono font-bold text-slate-900 tracking-tight">
               {format(spentThisCycle)}
             </span>

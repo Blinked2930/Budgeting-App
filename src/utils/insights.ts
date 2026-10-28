@@ -52,52 +52,28 @@ export interface Aggregate {
     total: number;
     count: number;
     average: number;
-    meals: number;
-    mealSpend: number;
-    costPerMeal: number | null;
 }
 
 export function aggregate(expenses: ExpenseRecord[]): Aggregate {
     let total = 0;
     let count = 0;
-    let meals = 0;
-    let mealSpend = 0;
 
     for (const e of expenses) {
         if (e.debtRelated || e.walletNeutral) continue;
-        const effectiveAmount = e.budgetAmountALL ?? e.amountInALL;
-        total += effectiveAmount;
+        total += e.budgetAmountALL ?? e.amountInALL;
         count += 1;
-        if (e.estimatedMeals && e.estimatedMeals > 0) {
-            meals += e.estimatedMeals;
-            mealSpend += effectiveAmount;
-        }
     }
 
     return {
         total,
         count,
         average: count > 0 ? total / count : 0,
-        meals,
-        mealSpend,
-        costPerMeal: meals > 0 ? mealSpend / meals : null,
     };
 }
 
 /**
- * Total Outflow: sum of ALL real money that left your pocket.
- * Includes Big Expenses (rent), normal expenses, and loans given.
- * Excludes loan settlements (money coming back) and wallet-neutral entries.
- */
-export function totalOutflow(expenses: ExpenseRecord[]): number {
-    return expenses
-        .filter((e) => !e.deleted && !e.walletNeutral)
-        .reduce((sum, e) => sum + Math.abs(e.amountInALL), 0);
-}
-
-/**
- * Spend Against Budget: what actually hit your `Remaining`.
- * Excludes Big Expenses (pre-budgeted) and loan settlements.
+ * Spend Against Budget: matches the "spent" number on the Budget tab.
+ * Skips Big Expenses (already pre-budgeted), wallet-neutral entries, and debt settlements.
  */
 export function spendAgainstBudget(expenses: ExpenseRecord[]): number {
     return expenses
@@ -106,9 +82,26 @@ export function spendAgainstBudget(expenses: ExpenseRecord[]): number {
 }
 
 /**
- * Cash Flow: Money IN minus Money OUT, EXCLUDING regular expenses.
- * Money in = loans received + repayments received + refunds.
- * Money out = loans given + repayments made.
+ * Total Outflow: every penny that actually left your wallet.
+ * Includes regular expenses, Big Expenses, loans given.
+ * Excludes repayments received (money in) and wallet-neutral entries.
+ */
+export function totalOutflow(expenses: ExpenseRecord[]): number {
+    return expenses
+        .filter((e) => {
+            if (e.deleted) return false;
+            if (e.walletNeutral) return false;
+            // Exclude income (repayments received), but keep everything else
+            // that represents real cash out.
+            return e.amount > 0;
+        })
+        .reduce((sum, e) => sum + Math.abs(e.amountInALL), 0);
+}
+
+/**
+ * Cash Flow: loans & repayments only. Excludes regular expenses entirely.
+ * In = repayments received + loans borrowed.
+ * Out = loans given.
  */
 export function cashFlow(expenses: ExpenseRecord[]): { inALL: number; outALL: number; netALL: number } {
     let inALL = 0;
@@ -116,14 +109,20 @@ export function cashFlow(expenses: ExpenseRecord[]): { inALL: number; outALL: nu
 
     for (const e of expenses) {
         if (e.deleted || e.walletNeutral) continue;
+
         const amount = Math.abs(e.amountInALL);
 
-        if (e.debtRelated) {
-            if (e.amount > 0) inALL += amount;
-            else if (e.amount < 0) outALL += amount;
+        // Repayment received by me (income)
+        if (e.debtRelated && e.amount < 0) {
+            inALL += amount;
             continue;
         }
-
+        // Repayment made by me (outflow)
+        if (e.debtRelated && e.amount > 0) {
+            outALL += amount;
+            continue;
+        }
+        // Origin of a lend/borrow
         if (e.isDebtOrigin) {
             if (e.amount < 0) inALL += amount;
             else outALL += amount;
@@ -145,7 +144,7 @@ export function aggregateByCategory(expenses: ExpenseRecord[]): CategoryStat[] {
     let grandTotal = 0;
 
     for (const e of expenses) {
-        if (e.debtRelated || e.walletNeutral) continue;
+        if (e.debtRelated || e.walletNeutral || e.isBigExpense) continue;
         const amount = e.budgetAmountALL ?? e.amountInALL;
         const existing = map.get(e.category) ?? { total: 0, count: 0 };
         existing.total += amount;
@@ -177,7 +176,7 @@ export function aggregatePaidWith(expenses: ExpenseRecord[]): PaidWithStat {
     let card = 0;
 
     for (const e of expenses) {
-        if (e.debtRelated || e.walletNeutral) continue;
+        if (e.debtRelated || e.walletNeutral || e.isBigExpense) continue;
         const amount = e.budgetAmountALL ?? e.amountInALL;
         if (e.paidWith === 'Cash') cash += amount;
         else card += amount;
