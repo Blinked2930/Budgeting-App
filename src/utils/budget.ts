@@ -30,6 +30,7 @@ export function daysBetween(from: Date, to: Date): number {
 export interface BudgetStats {
     cycleBudget: number;
     spent: number;
+    bigExpenseSpent: number;
     travelSpent: number;
     remaining: number;
     percentSpent: number;
@@ -52,13 +53,6 @@ export interface BudgetStats {
     netWorthALL: number;
 }
 
-function dayKey(d: Date): string {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-}
-
 export function computeBudgetStats(
     cycle: BudgetCycle,
     expenses: ExpenseRecord[],
@@ -79,14 +73,13 @@ export function computeBudgetStats(
     const daysElapsed = Math.min(totalDays, Math.max(0, daysBetween(start, today)));
     const dayNumber = Math.min(totalDays, daysElapsed + 1);
 
-    let spent = 0;
+    let spent = 0;              // Regular expenses only (excludes Big Expenses, loan settlements)
+    let bigExpenseSpent = 0;    // Track separately
     let travelSpent = 0;
     let spentToday = 0;
     let spentBeforeToday = 0;
     let cardSpent = 0;
     let cashSpent = 0;
-
-    const spentByDay = new Map<string, number>();
 
     for (const e of expenses) {
         if (e.deleted) continue;
@@ -94,35 +87,37 @@ export function computeBudgetStats(
         const whenMs = when.getTime();
         if (whenMs < startMs) continue;
 
+        // Wallet tracking (for estimated bank/cash balances)
         if (!e.walletNeutral) {
             if (e.paidWith === 'Cash') cashSpent += e.amountInALL;
             else cardSpent += e.amountInALL;
         }
 
+        // Debt settlements don't count against budget
         if (e.debtRelated) continue;
 
         const budgetImpact = e.budgetAmountALL ?? e.amountInALL;
 
+        // Travel is paid from the stash, not the daily budget
         if (e.category === 'Travel') {
             travelSpent += budgetImpact;
             continue;
         }
 
-        // Big expenses always reduce `remaining` because they're real outflows,
-        // but they don't count against the daily-allowance math (already
-        // pre-budgeted via plannedBigExpensesALL).
-        spent += budgetImpact;
-
+        // Big Expenses are tracked separately — they were pre-budgeted
+        // via plannedBigExpensesALL, so we don't subtract them from `spent`.
         if (e.isBigExpense) {
+            bigExpenseSpent += budgetImpact;
             continue;
         }
+
+        // Regular budget spending
+        spent += budgetImpact;
 
         if (whenMs >= todayMs) {
             spentToday += budgetImpact;
         } else {
             spentBeforeToday += budgetImpact;
-            const key = dayKey(when);
-            spentByDay.set(key, (spentByDay.get(key) ?? 0) + budgetImpact);
         }
     }
 
@@ -137,7 +132,7 @@ export function computeBudgetStats(
         else cashToBank += t.amountALL;
     }
 
-    // Cycle budget subtracts the *planned* big expenses up front.
+    // Rent is already subtracted from cycleBudget via plannedBigExpensesALL.
     const planned = cycle.plannedBigExpensesALL ?? 0;
     const cycleBudget = cycle.stipendAmountALL + cycle.bufferPoolALL - planned;
     const remaining = cycleBudget - spent;
@@ -168,12 +163,19 @@ export function computeBudgetStats(
     }
     const netOfDebtsALL = receivablesALL - payablesALL;
 
+    // Progress bar = fraction of TOTAL stipend used (regular + rent), not cycle budget
+    const baseTotal = cycle.stipendAmountALL + cycle.bufferPoolALL;
+    const percentSpent = baseTotal > 0
+        ? Math.min(100, ((spent + bigExpenseSpent) / baseTotal) * 100)
+        : 0;
+
     return {
         cycleBudget,
         spent,
+        bigExpenseSpent,
         travelSpent,
         remaining,
-        percentSpent: cycleBudget > 0 ? Math.min(100, (spent / cycleBudget) * 100) : 0,
+        percentSpent,
         totalDays,
         daysLeft: rawDaysLeft,
         dayNumber,
