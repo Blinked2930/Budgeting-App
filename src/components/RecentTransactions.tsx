@@ -86,7 +86,9 @@ type DebtClass =
   | 'repaidOut'
   | 'offsetIn'
   | 'offsetOut'
-  | 'gift';
+  | 'gift'
+  | 'splitMine'
+  | 'splitTheirs';
 
 function classifyDebtExpense(e: ExpenseRecord): DebtClass | null {
   const hasDebt = Boolean(e.debtId) || Boolean(e.debtRelated) || Boolean(e.isDebtOrigin);
@@ -100,10 +102,13 @@ function classifyDebtExpense(e: ExpenseRecord): DebtClass | null {
   if (isOrigin) return isIncome ? 'originBorrow' : 'originLend';
   if (walletNeutral) {
     if (name.startsWith('Gift to ')) return 'gift';
-    return 'offsetIn';
+    return 'splitTheirs';
   }
   if (name.startsWith('Offset to ')) return 'offsetOut';
-  return isIncome ? 'repaidIn' : 'repaidOut';
+  if (isIncome) return 'repaidIn';
+  
+  // If it's linked to a debt but not an origin, and not wallet neutral, it's likely your share of a split
+  return 'splitMine';
 }
 
 const DEBT_META: Record<DebtClass, { badge: string; isWalletNeutral: boolean }> = {
@@ -114,6 +119,8 @@ const DEBT_META: Record<DebtClass, { badge: string; isWalletNeutral: boolean }> 
   offsetIn: { badge: 'Offset in', isWalletNeutral: true },
   offsetOut: { badge: 'Offset out', isWalletNeutral: false },
   gift: { badge: 'Gift', isWalletNeutral: true },
+  splitMine: { badge: 'Your share', isWalletNeutral: true }, 
+  splitTheirs: { badge: 'Their share', isWalletNeutral: true },
 };
 
 type MergedItem =
@@ -149,7 +156,6 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
     ].sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
   }, [expenses, transfers]);
 
-  // Group by day, only for the most recent 15 entries
   const grouped = useMemo(() => {
     const visible = merged.slice(0, 15);
     const groups: { key: string; label: string; items: MergedItem[]; total: number }[] = [];
@@ -344,7 +350,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                           {debtMeta.badge}
                         </span>
                       )}
-                      {!isWalletNeutral && (
+                      {!isWalletNeutral && !debtClass && (
                         <span
                           className={cn(
                             'text-[10px] px-1.5 py-0.2 rounded-md font-medium flex items-center gap-0.5',

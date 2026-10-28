@@ -234,7 +234,6 @@ export const QuickEntryView: React.FC = () => {
     return () => window.removeEventListener('lekflow:currency-changed', handleCurrencyChange);
   }, []);
 
-  // Amount parsing with math-expression support
   const parsedAmount = useMemo(() => {
     if (!amountStr.trim()) return 0;
     if (/[+\-*/()]/.test(amountStr)) {
@@ -246,14 +245,13 @@ export const QuickEntryView: React.FC = () => {
   }, [amountStr]);
 
   const isExpression = /[+\-*/()]/.test(amountStr) && amountStr.trim().length > 0;
-
   const normalizedALL = convertToALL(parsedAmount, currency);
 
   const shareAmount = parseFloat(shareAmountStr) || 0;
-  const hasShare = shareAmount > 0 && shareCounterparty.trim().length > 0;
+  const hasShare = shareAmount > 0;
 
   const hasAdvancedData = Boolean(
-    subcategory || vendorType || foodType || estimatedMeals || hasShare
+    subcategory || vendorType || foodType || estimatedMeals
   );
 
   const selectedGroup = debtGroups.find((g) => g.key === settleGroupKey);
@@ -416,10 +414,6 @@ export const QuickEntryView: React.FC = () => {
           const timestamp = dateOverride ? dateToNoonISO(dateOverride) : undefined;
 
           if (payMethod === 'SomeoneElse') {
-            // Someone else paid. If a share is specified, it means *their*
-            // portion is (amount - myShare) and *my* portion is myShare.
-            // Without a share, the full amount is someone else's and the
-            // whole thing becomes a debt to them.
             const myShareALL = hasShare ? shareAmount : undefined;
 
             await addDebt({
@@ -440,7 +434,6 @@ export const QuickEntryView: React.FC = () => {
                 : `Logged ${formatCurrency(parsedAmount, currency)} paid by ${payerName} in ${latencyMs}ms ⚡`
             );
           } else if (hasShare && shareAmount < normalizedALL) {
-            // I bought it, but someone owes me.
             const saved = await addExpense({
               ...baseData,
               paidWith: payMethod as PaymentSource,
@@ -523,7 +516,6 @@ export const QuickEntryView: React.FC = () => {
 
   return (
     <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
-      {/* Today vs. expected (day summary) */}
       {stats && (
         <div className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 shadow-sm">
           <div>
@@ -794,7 +786,7 @@ export const QuickEntryView: React.FC = () => {
             </div>
 
             {payMethod === 'SomeoneElse' && (
-              <div>
+              <div className="space-y-2.5">
                 <input
                   type="text"
                   value={payerName}
@@ -813,8 +805,29 @@ export const QuickEntryView: React.FC = () => {
                   value={payerName}
                   onSelect={setPayerName}
                 />
+                
+                {/* Inline Share Inputs */}
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <input
+                    type="text"
+                    value={shareCounterparty}
+                    onChange={(e) => setShareCounterparty(e.target.value)}
+                    placeholder="Whose share is it? (Optional)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-colors"
+                  />
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    value={shareAmountStr}
+                    onChange={(e) => setShareAmountStr(e.target.value)}
+                    placeholder="Amount they paid for you (L)"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-colors"
+                  />
+                </div>
+
                 {hasShare && (
-                  <p className="text-[10px] text-indigo-600 mt-2 leading-relaxed">
+                  <p className="text-[10px] text-indigo-600 leading-relaxed px-1">
                     Your share: {formatCurrency(shareAmount, 'ALL')} · {payerName || 'They'}'s share: {formatCurrency(Math.max(0, normalizedALL - shareAmount), 'ALL')} · Owed to {payerName || 'them'}: {formatCurrency(Math.max(0, normalizedALL - shareAmount), 'ALL')}
                   </p>
                 )}
@@ -862,9 +875,6 @@ export const QuickEntryView: React.FC = () => {
                     {subcategory || 'Item'}{' '}
                     {vendorType ? `• ${vendorType}` : ''}{' '}
                     {estimatedMeals ? `• ${estimatedMeals} meal(s)` : ''}
-                    {hasShare
-                      ? ` • ${shareCounterparty} owes ${formatCurrency(shareAmount, 'ALL')}`
-                      : ''}
                   </span>
                 </div>
                 <button
