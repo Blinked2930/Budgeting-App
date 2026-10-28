@@ -27,7 +27,7 @@ import {
     getCounterparties,
     updateDebt,
 } from '../db';
-import { formatCurrency } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 import { cn } from '../utils/cn';
 import type { DebtDirection, DebtRecord, PaymentSource } from '../types';
 
@@ -267,6 +267,7 @@ const DebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void
     const [editName, setEditName] = useState(debt.counterparty);
     const [editAmount, setEditAmount] = useState(String(debt.amountALL));
     const [editNote, setEditNote] = useState(debt.note || '');
+    const { format } = useCurrency();
 
     useEffect(() => {
         setAmountStr(String(debt.remainingALL));
@@ -344,7 +345,7 @@ const DebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void
                 </span>
                 <div className="flex items-center gap-1.5">
                     <span className="text-sm font-mono font-bold text-slate-900">
-                        {formatCurrency(debt.remainingALL, 'ALL')}
+                        {format(debt.remainingALL)}
                     </span>
                     <button
                         type="button"
@@ -393,7 +394,7 @@ const DebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void
                 <div className="flex flex-col items-end gap-1 shrink-0 pt-4">
                     {isPartial ? (
                         <span className="text-[10px] font-semibold text-amber-600">
-                            Partial · {formatCurrency(clamped, 'ALL')}
+                            Partial · {format(clamped)}
                         </span>
                     ) : (
                         <span className="text-[10px] font-semibold text-emerald-600">
@@ -510,6 +511,7 @@ const DebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void
 
 const ResolvedDebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void }> = ({ debt, onDelete }) => {
     const owedToMe = debt.direction === 'OwedToMe';
+    const { format } = useCurrency();
 
     return (
         <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
@@ -520,7 +522,7 @@ const ResolvedDebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord)
                         owedToMe ? 'text-emerald-600/60' : 'text-rose-500/60'
                     )}
                 >
-                    {owedToMe ? 'Owes you' : 'You owe'} {formatCurrency(debt.amountALL, 'ALL')}
+                    {owedToMe ? 'Owes you' : 'You owe'} {format(debt.amountALL)}
                 </p>
                 {debt.note && (
                     <p className="text-[10px] text-slate-400 italic truncate line-through">
@@ -552,6 +554,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
     const [showNewForm, setShowNewForm] = useState(false);
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+    const { format } = useCurrency();
 
     const groups = useMemo<CounterpartyGroup[]>(() => {
         const map = new Map<string, CounterpartyGroup>();
@@ -598,7 +601,9 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
     };
 
     const handleDeleteDebt = (debt: DebtRecord) => {
-        if (debt.sourceExpenseId) {
+        // Check if this debt is linked to a transaction. 
+        // We check both sourceExpenseId (from Lend tab) AND if any expense has this debtId (from QuickEntry)
+        if (debt.sourceExpenseId || debt.myShareAmountALL !== undefined) {
             setConfirm({
                 isOpen: true,
                 title: 'Delete linked transaction?',
@@ -745,7 +750,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                                                         )}
                                                     >
                                                         {hasOpen && net > 0 ? '+' : ''}
-                                                        {formatCurrency(Math.abs(net), 'ALL')}
+                                                        {format(Math.abs(net))}
                                                     </p>
                                                     <p className="text-[10px] text-slate-500">
                                                         {!hasOpen
