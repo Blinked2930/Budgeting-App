@@ -703,14 +703,24 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                                         {isExpanded && (
                                             <div className="px-3 pb-3 space-y-2 border-t border-slate-200 pt-3">
                                                 {hasOpen && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handleSettleAll(g, 'Cash')}
-                                                        className="w-full py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
-                                                    >
-                                                        <CheckCheck className="w-3.5 h-3.5" />
-                                                        Settle all {net < 0 ? 'to' : 'from'} {g.name} in Cash
-                                                    </button>
+                                                    <div className="grid grid-cols-2 gap-1.5">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSettleAll(g, 'Cash')}
+                                                            className="w-full py-2 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-700 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                                                        >
+                                                            <CheckCheck className="w-3.5 h-3.5" />
+                                                            All (Cash)
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleSettleAll(g, 'Card')}
+                                                            className="w-full py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                                                        >
+                                                            <CheckCheck className="w-3.5 h-3.5" />
+                                                            All (Bank)
+                                                        </button>
+                                                    </div>
                                                 )}
 
                                                 {g.openDebts.map((d) => (

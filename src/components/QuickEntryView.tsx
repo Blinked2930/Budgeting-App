@@ -516,42 +516,39 @@ export const QuickEntryView: React.FC = () => {
 
   return (
     <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
-      {stats && (
-        <div className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 shadow-sm">
-          <div>
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-              Today
-            </p>
-            <p className="text-sm font-mono font-bold text-slate-900 tracking-tight mt-0.5">
-              {formatCurrency(stats.spentToday, 'ALL')} spent
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-              Expected
-            </p>
-            <p className={cn(
-              'text-sm font-mono font-bold tracking-tight mt-0.5',
-              stats.spentToday > stats.dailyAllowance ? 'text-rose-600' : 'text-emerald-600'
-            )}>
-              {formatCurrency(stats.dailyAllowance, 'ALL')}
-            </p>
-          </div>
-        </div>
-      )}
-
+      
+      {/* Unified Header */}
       <div className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 shadow-sm">
-        <div className="flex items-center gap-2">
-          <div className={cn('w-2 h-2 rounded-full', isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500')} />
-          <span className="text-xs text-slate-500 font-medium">{isOnline ? 'Logged Total' : 'Offline Mode'}</span>
+        <div className="flex flex-col">
+          <div className="flex items-center gap-2">
+            <div className={cn('w-2 h-2 rounded-full', isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500')} />
+            <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+              Today
+            </span>
+          </div>
+          <div className="flex items-baseline gap-1 mt-0.5">
+            <span className={cn(
+              "text-sm font-mono font-bold tracking-tight",
+              stats && stats.spentToday > stats.dailyAllowance ? 'text-rose-600' : 'text-emerald-600'
+            )}>
+              {stats ? formatCurrency(stats.spentToday, 'ALL') : '—'}
+            </span>
+            <span className="text-[10px] text-slate-400">/ {stats ? formatCurrency(stats.dailyAllowance, 'ALL') : '—'}</span>
+          </div>
         </div>
+        
         <div className="text-right">
-          <span className="text-sm font-mono font-bold text-slate-900 tracking-tight">
-            {formatCurrency(totalSpentALL, 'ALL')}
-          </span>
-          <span className="text-[10px] text-slate-400 ml-1.5 font-medium">
-            ({expenses.length} logs)
-          </span>
+          <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+            All-time Total
+          </p>
+          <div className="text-right mt-0.5">
+            <span className="text-sm font-mono font-bold text-slate-900 tracking-tight">
+              {formatCurrency(totalSpentALL, 'ALL')}
+            </span>
+            <span className="text-[10px] text-slate-400 ml-1.5 font-medium">
+              ({expenses.length})
+            </span>
+          </div>
         </div>
       </div>
 
@@ -806,7 +803,6 @@ export const QuickEntryView: React.FC = () => {
                   onSelect={setPayerName}
                 />
                 
-                {/* Inline Share Inputs */}
                 <div className="grid grid-cols-2 gap-2 pt-1">
                   <input
                     type="text"
