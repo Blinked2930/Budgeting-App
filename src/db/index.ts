@@ -405,21 +405,10 @@ export async function addDebt(data: {
     });
   } else if (data.purchaseDetails) {
     const myShare = data.myShareAmountALL ?? data.amountALL;
-    const theirShare = data.amountALL - myShare;
+    const fullItemName = data.purchaseDetails.itemName || `Bought by ${record.counterparty}`;
 
-    const fullItemName =
-      data.purchaseDetails.itemName || `Bought by ${record.counterparty}`;
-
-    await addExpense({
-      amount: theirShare,
-      currency: 'ALL',
-      category: data.purchaseDetails.category,
-      itemName: fullItemName,
-      walletNeutral: true,
-      debtRelated: true,
-      debtId: record.id,
-    });
-
+    // We ONLY create one expense (your share). 
+    // The other person's share isn't your expense, so we don't create a record for it.
     await addExpense({
       amount: myShare,
       currency: 'ALL',

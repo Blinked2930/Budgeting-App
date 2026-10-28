@@ -14,7 +14,6 @@ import {
   CreditCard,
   ArrowLeftRight,
   HandCoins,
-  Gift,
   PlusCircle,
 } from 'lucide-react';
 import type { ExpenseRecord, Category, TransferRecord } from '../types';
@@ -86,9 +85,7 @@ type DebtClass =
   | 'repaidOut'
   | 'offsetIn'
   | 'offsetOut'
-  | 'gift'
-  | 'splitMine'
-  | 'splitTheirs';
+  | 'splitMine';
 
 function classifyDebtExpense(e: ExpenseRecord): DebtClass | null {
   const hasDebt = Boolean(e.debtId) || Boolean(e.debtRelated) || Boolean(e.isDebtOrigin);
@@ -100,14 +97,10 @@ function classifyDebtExpense(e: ExpenseRecord): DebtClass | null {
   const isIncome = e.amount < 0;
 
   if (isOrigin) return isIncome ? 'originBorrow' : 'originLend';
-  if (walletNeutral) {
-    if (name.startsWith('Gift to ')) return 'gift';
-    return 'splitTheirs';
-  }
+  if (walletNeutral) return null; // We skip these entirely now
   if (name.startsWith('Offset to ')) return 'offsetOut';
   if (isIncome) return 'repaidIn';
   
-  // If it's linked to a debt but not an origin, and not wallet neutral, it's likely your share of a split
   return 'splitMine';
 }
 
@@ -118,9 +111,7 @@ const DEBT_META: Record<DebtClass, { badge: string; isWalletNeutral: boolean }> 
   repaidOut: { badge: 'Paid back', isWalletNeutral: false },
   offsetIn: { badge: 'Offset in', isWalletNeutral: true },
   offsetOut: { badge: 'Offset out', isWalletNeutral: false },
-  gift: { badge: 'Gift', isWalletNeutral: true },
-  splitMine: { badge: 'Your share', isWalletNeutral: true }, 
-  splitTheirs: { badge: 'Their share', isWalletNeutral: true },
+  splitMine: { badge: 'Your share', isWalletNeutral: false }, 
 };
 
 type MergedItem =
@@ -135,6 +126,15 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
 }) => {
   const handleDeleteExpense = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    const record = expenses.find(x => x.id === id);
+    
+    if (record?.debtId) {
+      const confirmed = window.confirm(
+        "This transaction is linked to a debt. Deleting it will also remove the debt record. Continue?"
+      );
+      if (!confirmed) return;
+    }
+
     await deleteExpense(id);
     if (onDeleted) onDeleted();
   };
@@ -150,8 +150,11 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   };
 
   const merged: MergedItem[] = useMemo(() => {
+    // Filter out walletNeutral records entirely so they don't clutter the feed
+    const visibleExpenses = expenses.filter(e => !e.walletNeutral);
+    
     return [
-      ...expenses.map((e) => ({ kind: 'expense' as const, record: e, timestamp: e.timestamp })),
+      ...visibleExpenses.map((e) => ({ kind: 'expense' as const, record: e, timestamp: e.timestamp })),
       ...transfers.map((t) => ({ kind: 'transfer' as const, record: t, timestamp: t.timestamp })),
     ].sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1));
   }, [expenses, transfers]);
@@ -270,7 +273,6 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
             const isCash = expense.paidWith === 'Cash';
             const debtClass = classifyDebtExpense(expense);
             const debtMeta = debtClass ? DEBT_META[debtClass] : null;
-            const isWalletNeutral = debtMeta?.isWalletNeutral ?? false;
             const isIncome = expense.amount < 0;
 
             const theme = debtClass
@@ -281,29 +283,20 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
 
             let displayAmount: string;
             let amountColor: string;
-            let amountHint: string | null = null;
 
             if (debtClass) {
-              if (isWalletNeutral) {
-                displayAmount = formatCurrency(Math.abs(expense.amount), expense.currency);
-                amountColor = 'text-slate-400';
-                amountHint = 'no wallet change';
-              } else {
-                displayAmount = `${isIncome ? '+' : '−'}${formatCurrency(
-                  Math.abs(expense.amount),
-                  expense.currency
-                )}`;
-                amountColor = isIncome ? 'text-emerald-600' : 'text-rose-600';
-              }
+              displayAmount = `${isIncome ? '+' : '−'}${formatCurrency(
+                Math.abs(expense.amount),
+                expense.currency
+              )}`;
+              amountColor = isIncome ? 'text-emerald-600' : 'text-rose-600';
             } else {
               displayAmount = formatCurrency(expense.amount, expense.currency);
               amountColor = expense.amount < 0 ? 'text-emerald-600' : 'text-slate-900';
             }
 
             let icon: React.ReactNode;
-            if (debtClass === 'offsetIn' || debtClass === 'gift') {
-              icon = <Gift className={cn('w-3.5 h-3.5', theme.icon)} />;
-            } else if (debtClass) {
+            if (debtClass) {
               icon = <HandCoins className={cn('w-3.5 h-3.5', theme.icon)} />;
             } else if (expense.amount < 0) {
               icon = <PlusCircle className={cn('w-3.5 h-3.5', theme.icon)} />;
@@ -315,10 +308,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
               <div
                 key={expense.id}
                 onClick={() => handleRowClick(expense)}
-                className={cn(
-                  'flex items-center justify-between p-3 rounded-2xl bg-white transition-all border shadow-sm cursor-pointer hover:border-emerald-300 hover:shadow-md',
-                  isWalletNeutral ? 'border-dashed border-slate-300' : 'border-slate-200'
-                )}
+                className="flex items-center justify-between p-3 rounded-2xl bg-white transition-all border border-slate-200 shadow-sm cursor-pointer hover:border-emerald-300 hover:shadow-md"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div
@@ -350,7 +340,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                           {debtMeta.badge}
                         </span>
                       )}
-                      {!isWalletNeutral && !debtClass && (
+                      {!debtClass && (
                         <span
                           className={cn(
                             'text-[10px] px-1.5 py-0.2 rounded-md font-medium flex items-center gap-0.5',
@@ -387,11 +377,6 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                     {isForeignCurrency && (
                       <p className="text-[10px] font-mono text-emerald-600 font-medium">
                         ≈ {formatCurrency(expense.amountInALL, 'ALL')}
-                      </p>
-                    )}
-                    {amountHint && (
-                      <p className="text-[9px] text-slate-400 font-medium italic">
-                        {amountHint}
                       </p>
                     )}
                   </div>
