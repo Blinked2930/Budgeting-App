@@ -7,9 +7,6 @@ import { useLock } from '../hooks/useLock';
 import { DEFAULT_EXCHANGE_RATES, type Currency } from '../types';
 import { cn } from '../utils/cn';
 
-// Clerk is only available when the publishable key is set. Importing these
-// unconditionally is safe (the package must be installed regardless), but
-// the component itself only renders when ClerkProvider is mounted upstream.
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/clerk-react';
 
 const clerkEnabled = Boolean(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
@@ -81,6 +78,7 @@ export const SettingsView: React.FC = () => {
     const saveRates = (newRates: typeof rates) => {
         setRates(newRates);
         localStorage.setItem('lekflow:rates', JSON.stringify(newRates));
+        window.dispatchEvent(new Event('lekflow:currency-changed'));
         showToast('Exchange rates updated');
     };
 
