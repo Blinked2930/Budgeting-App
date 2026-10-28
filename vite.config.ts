@@ -44,10 +44,15 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Force the new service worker to activate immediately and take
+        // control of all open tabs instead of waiting for the old one to die.
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+
         // Cache the app shell (JS, CSS, HTML, icons) for offline use
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         navigateFallback: '/index.html',
-        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             // Google Fonts stylesheets

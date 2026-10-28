@@ -13,7 +13,25 @@ import { LockScreen } from './components/LockScreen'
 import InstallPrompt from './components/InstallPrompt'
 import { useLock } from './hooks/useLock'
 
-registerSW({ immediate: true });
+// Register the Service Worker and capture the update function.
+// When a new version is detected, force it to activate immediately.
+const updateSW = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    // New version found — skip the "reload?" prompt and just take it.
+    updateSW(true);
+  },
+});
+
+// iOS PWAs don't reliably check for updates on cold launch. Force a check
+// every time the app comes back into focus (e.g. switching from another app).
+if (typeof window !== 'undefined') {
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      updateSW();
+    }
+  });
+}
 
 const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
 const clerkKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY as string | undefined;
