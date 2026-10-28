@@ -14,6 +14,7 @@ import {
     TriangleAlert,
     CircleCheck,
     Check,
+    Search,
 } from 'lucide-react';
 import type { BudgetCycle, PaymentSource } from '../types';
 import type { BudgetStats } from '../utils/budget';
@@ -26,6 +27,7 @@ import { addDays, toDateInputValue } from '../utils/budget';
 import { cn } from '../utils/cn';
 import { DebtsPanel } from './DebtsPanel';
 import { BigExpensesCard } from './BigExpensesCard';
+import { AuditPanel } from './AuditPanel';
 
 type FormMode = 'first' | 'next' | 'edit';
 
@@ -545,6 +547,7 @@ export const BudgetView: React.FC = () => {
     const [formMode, setFormMode] = useState<FormMode | null>(null);
     const [isDebtsOpen, setIsDebtsOpen] = useState(false);
     const [isTravelStashOpen, setIsTravelStashOpen] = useState(false);
+    const [isAuditOpen, setIsAuditOpen] = useState(false);
     const [infoModal, setInfoModal] = useState<{ title: string; description: string } | null>(null);
 
     const debtGroups = useMemo(() => {
@@ -663,11 +666,19 @@ export const BudgetView: React.FC = () => {
 
     const hasDebts = stats.receivablesALL > 0 || stats.payablesALL > 0;
 
+    // "Where is my money?" reconciliation
+    const walletTotal = stats.estimatedTotalBalance;
+    const travelStash = stats.travelStashBalance;
+    const receivables = stats.receivablesALL;
+    const payables = stats.payablesALL;
+    const grandTotal = walletTotal + travelStash + receivables - payables;
+
     return (
         <div className="w-full max-w-md mx-auto px-3 sm:px-4 py-4 space-y-3.5">
             {infoModal && <InfoModal title={infoModal.title} description={infoModal.description} onClose={() => setInfoModal(null)} />}
             <DebtsPanel isOpen={isDebtsOpen} onClose={() => setIsDebtsOpen(false)} />
             <TravelStashModal isOpen={isTravelStashOpen} onClose={() => setIsTravelStashOpen(false)} cycle={cycle} stats={stats} />
+            <AuditPanel isOpen={isAuditOpen} onClose={() => setIsAuditOpen(false)} />
 
             {stats.isPaydayReached && (
                 <div className="p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 text-xs flex items-center justify-between gap-3 shadow-sm">
@@ -724,12 +735,6 @@ export const BudgetView: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                     <ReconcileRow icon={<Landmark className="w-3 h-3" />} label="Bank" estimated={stats.estimatedBankBalance} paidWith="Card" />
                     <ReconcileRow icon={<Banknote className="w-3 h-3" />} label="Cash" estimated={stats.estimatedCashBalance} paidWith="Cash" />
-                </div>
-                <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Net worth (with debts)</p>
-                    <p className={cn('text-base font-mono font-bold', stats.netWorthALL < 0 ? 'text-rose-600' : 'text-slate-900')}>
-                        {format(stats.netWorthALL)}
-                    </p>
                 </div>
             </div>
 
@@ -801,10 +806,10 @@ export const BudgetView: React.FC = () => {
                     icon={<Wallet className="w-3.5 h-3.5 text-emerald-600" />}
                     label="Remaining"
                     value={format(stats.remaining)}
-                    sub="this cycle"
+                    sub="budget left this cycle"
                     negative={stats.remaining < 0}
                     showInfo
-                    onClick={() => setInfoModal({ title: 'Remaining Budget', description: 'Your stipend minus your tracked expenses (only the portion that counts against your budget). This can be higher than Bank + Cash if you have money tied up in debts or travel stashes.' })}
+                    onClick={() => setInfoModal({ title: 'Remaining Budget', description: 'This is your BUDGET remaining — how much you can still spend on regular daily life before your stipend runs out. It is NOT your bank balance. It excludes: rent you already planned for, money you have lent out, and travel stash you have set aside. To see your actual wallet total, look at the "Where is my money?" card below.' })}
                 />
                 <StatTile
                     icon={<CalendarDays className="w-3.5 h-3.5 text-cyan-600" />}
@@ -837,6 +842,61 @@ export const BudgetView: React.FC = () => {
                     {format(stats.travelSpent)} of Travel spending is paid from the stash, not the daily budget.
                 </p>
             )}
+
+            {/* Where is my money? — reconciliation */}
+            <div className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                        Where is my money?
+                    </p>
+                    <button
+                        onClick={() => setIsAuditOpen(true)}
+                        className="flex items-center gap-1 text-[10px] text-emerald-600 hover:text-emerald-700 font-semibold cursor-pointer"
+                    >
+                        <Search className="w-3 h-3" />
+                        Audit
+                    </button>
+                </div>
+                <div className="space-y-1.5 text-[11px] font-mono">
+                    <div className="flex justify-between">
+                        <span className="text-slate-500">Bank</span>
+                        <span className="text-slate-900">{format(stats.estimatedBankBalance)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-slate-500">+ Cash</span>
+                        <span className="text-slate-900">{format(stats.estimatedCashBalance)}</span>
+                    </div>
+                    <div className="flex justify-between pt-1.5 border-t border-slate-100">
+                        <span className="text-slate-700 font-semibold">= Wallet total</span>
+                        <span className="text-slate-900 font-bold">{format(walletTotal)}</span>
+                    </div>
+                    {travelStash > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-slate-500">+ Travel stash (earmarked)</span>
+                            <span className="text-slate-900">{format(travelStash)}</span>
+                        </div>
+                    )}
+                    {receivables > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-slate-500">+ Owed to you</span>
+                            <span className="text-slate-900">{format(receivables)}</span>
+                        </div>
+                    )}
+                    {payables > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-slate-500">− You owe</span>
+                            <span className="text-rose-600">{format(payables)}</span>
+                        </div>
+                    )}
+                    <div className="flex justify-between pt-1.5 border-t border-slate-100">
+                        <span className="text-slate-700 font-semibold">= Net worth</span>
+                        <span className="text-slate-900 font-bold">{format(grandTotal)}</span>
+                    </div>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-relaxed pt-1">
+                    This is what you actually have, if you opened your bank app right now. If it doesn't match your real balance, tap Audit or use the Bank/Cash reconciliation fields above to log the difference.
+                </p>
+            </div>
 
             <div className="grid grid-cols-2 gap-2.5 pt-2">
                 <button

@@ -17,6 +17,7 @@ import {
   HandCoins,
   PlusCircle,
   TriangleAlert,
+  ChevronDown,
 } from 'lucide-react';
 import type { ExpenseRecord, Category, TransferRecord } from '../types';
 import { deleteExpense, deleteTransfer } from '../db';
@@ -29,6 +30,8 @@ interface RecentTransactionsProps {
   onDeleted?: () => void;
   onEdit?: (expense: ExpenseRecord) => void;
 }
+
+const PAGE_SIZE = 15;
 
 const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
   Food: <Utensils className="w-3.5 h-3.5 text-slate-600" />,
@@ -99,7 +102,7 @@ function classifyDebtExpense(e: ExpenseRecord): DebtClass | null {
   const isIncome = e.amount < 0;
 
   if (isOrigin) return isIncome ? 'originBorrow' : 'originLend';
-  if (walletNeutral) return null; // We skip these entirely now
+  if (walletNeutral) return null;
   if (name.startsWith('Offset to ')) return 'offsetOut';
   if (isIncome) return 'repaidIn';
 
@@ -185,7 +188,8 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   onEdit,
 }) => {
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
-  const { format, currency } = useCurrency();
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const { format } = useCurrency();
 
   const handleDeleteExpense = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -231,7 +235,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   }, [expenses, transfers]);
 
   const grouped = useMemo(() => {
-    const visible = merged.slice(0, 15);
+    const visible = merged.slice(0, visibleCount);
     const groups: { key: string; label: string; items: MergedItem[]; total: number }[] = [];
     const index = new Map<string, number>();
     for (const item of visible) {
@@ -250,7 +254,9 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
       }
     }
     return groups;
-  }, [merged]);
+  }, [merged, visibleCount]);
+
+  const hasMore = visibleCount < merged.length;
 
   if (merged.length === 0) {
     return (
@@ -276,7 +282,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
             Recent activity
           </h2>
           <span className="text-[11px] font-mono text-slate-400">
-            {merged.length} recorded
+            {Math.min(visibleCount, merged.length)} of {merged.length}
           </span>
         </div>
 
@@ -346,7 +352,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
               }
 
               const expense = item.record;
-              const isForeignCurrency = expense.currency !== 'ALL' && currency !== 'ALL' && expense.currency !== currency;
+              const isForeignCurrency = expense.currency !== 'ALL';
               const isCash = expense.paidWith === 'Cash';
               const debtClass = classifyDebtExpense(expense);
               const debtMeta = debtClass ? DEBT_META[debtClass] : null;
@@ -362,7 +368,6 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
               let amountColor: string;
 
               if (debtClass) {
-                // For debts, we use the actual amount and sign
                 displayAmount = `${isIncome ? '+' : '−'}${format(Math.abs(expense.amountInALL))}`;
                 amountColor = isIncome ? 'text-emerald-600' : 'text-rose-600';
               } else {
@@ -409,9 +414,9 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                             {expense.vendorType}
                           </span>
                         )}
-                        {expense.estimatedMeals && (
-                          <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 font-medium">
-                            {expense.estimatedMeals} meal{expense.estimatedMeals > 1 ? 's' : ''}
+                        {expense.isBigExpense && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-purple-50 text-purple-700 font-medium">
+                            Big
                           </span>
                         )}
                         {debtMeta && (
@@ -419,7 +424,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                             {debtMeta.badge}
                           </span>
                         )}
-                        {!debtClass && (
+                        {!debtClass && !expense.isBigExpense && (
                           <span
                             className={cn(
                               'text-[10px] px-1.5 py-0.2 rounded-md font-medium flex items-center gap-0.5',
@@ -476,6 +481,24 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
             })}
           </div>
         ))}
+
+        {hasMore ? (
+          <button
+            type="button"
+            onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+            className="w-full py-3 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 text-xs font-semibold transition-colors cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
+          >
+            <ChevronDown className="w-3.5 h-3.5" />
+            Load older entries
+            <span className="text-[10px] text-slate-400 font-mono">
+              ({merged.length - visibleCount} remaining)
+            </span>
+          </button>
+        ) : (
+          <p className="text-center text-[10px] text-slate-400 py-3">
+            You've reached the beginning.
+          </p>
+        )}
       </div>
     </>
   );
