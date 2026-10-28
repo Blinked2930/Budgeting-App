@@ -1,5 +1,6 @@
 // src/components/DebtsPanel.tsx
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
     X,
     Plus,
@@ -14,6 +15,7 @@ import {
     Pencil,
     Save,
     CheckCheck,
+    TriangleAlert,
 } from 'lucide-react';
 import { useDebts } from '../hooks/useDebts';
 import {
@@ -54,6 +56,64 @@ function formatDebtDate(iso: string): string {
         return iso;
     }
 }
+
+interface ConfirmState {
+  isOpen: boolean;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+}
+
+const ConfirmDialog: React.FC<{ state: ConfirmState | null; onClose: () => void }> = ({
+  state,
+  onClose,
+}) => {
+  if (!state || !state.isOpen) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-5 space-y-4 animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center shrink-0">
+            <TriangleAlert className="w-5 h-5 text-rose-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-bold text-slate-900">{state.title}</h3>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">{state.message}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="py-3 rounded-2xl bg-white border border-slate-200 text-slate-600 text-xs font-semibold cursor-pointer hover:bg-slate-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              state.onConfirm();
+              onClose();
+            }}
+            className="py-3 rounded-2xl bg-rose-600 text-white text-xs font-bold cursor-pointer hover:bg-rose-700 transition-colors"
+          >
+            {state.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
 
 const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
     const [counterparty, setCounterparty] = useState('');
@@ -200,7 +260,7 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
     );
 };
 
-const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
+const DebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void }> = ({ debt, onDelete }) => {
     const [busyAction, setBusyAction] = useState<string | null>(null);
     const [amountStr, setAmountStr] = useState<string>(String(debt.remainingALL));
     const [isEditing, setIsEditing] = useState(false);
@@ -236,12 +296,6 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
     const handleWriteOff = async () => {
         setBusyAction('writeoff');
         await writeOffDebt(debt.id);
-        setBusyAction(null);
-    };
-
-    const handleDelete = async () => {
-        setBusyAction('delete');
-        await deleteDebt(debt.id);
         setBusyAction(null);
     };
 
@@ -302,7 +356,7 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                     </button>
                     <button
                         type="button"
-                        onClick={handleDelete}
+                        onClick={() => onDelete(debt)}
                         disabled={busyAction !== null}
                         className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50"
                         title="Delete debt (undoes cash/bank effect)"
@@ -454,15 +508,8 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
     );
 };
 
-const ResolvedDebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
-    const [busy, setBusy] = useState(false);
+const ResolvedDebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void }> = ({ debt, onDelete }) => {
     const owedToMe = debt.direction === 'OwedToMe';
-
-    const handleDelete = async () => {
-        setBusy(true);
-        await deleteDebt(debt.id);
-        setBusy(false);
-    };
 
     return (
         <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2">
@@ -489,9 +536,8 @@ const ResolvedDebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                 <Check className="w-3.5 h-3.5 text-slate-400" />
                 <button
                     type="button"
-                    onClick={handleDelete}
-                    disabled={busy}
-                    className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer disabled:opacity-50"
+                    onClick={() => onDelete(debt)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                     title="Delete resolved debt (undoes all effects)"
                 >
                     <Trash2 className="w-3 h-3" />
@@ -505,6 +551,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
     const { debts } = useDebts();
     const [showNewForm, setShowNewForm] = useState(false);
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
+    const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
     const groups = useMemo<CounterpartyGroup[]>(() => {
         const map = new Map<string, CounterpartyGroup>();
@@ -550,6 +597,23 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
         }
     };
 
+    const handleDeleteDebt = (debt: DebtRecord) => {
+        if (debt.sourceExpenseId) {
+            setConfirm({
+                isOpen: true,
+                title: 'Delete linked transaction?',
+                message: 'This debt is linked to an expense in Recent Activity. Deleting it will also remove the expense. Continue?',
+                confirmLabel: 'Delete both',
+                onConfirm: async () => {
+                    await deleteDebt(debt.id);
+                },
+            });
+            return;
+        }
+
+        deleteDebt(debt.id);
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -557,6 +621,8 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/40 backdrop-blur-sm"
             onClick={onClose}
         >
+            <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
+
             <div
                 className="w-full max-w-md max-h-[90vh] flex flex-col bg-white border-t sm:border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl"
                 onClick={(e) => e.stopPropagation()}
@@ -724,7 +790,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                                                 )}
 
                                                 {g.openDebts.map((d) => (
-                                                    <DebtRow key={d.id} debt={d} />
+                                                    <DebtRow key={d.id} debt={d} onDelete={handleDeleteDebt} />
                                                 ))}
 
                                                 {g.resolvedDebts.length > 0 && (
@@ -735,7 +801,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                                                             </p>
                                                         )}
                                                         {g.resolvedDebts.map((d) => (
-                                                            <ResolvedDebtRow key={d.id} debt={d} />
+                                                            <ResolvedDebtRow key={d.id} debt={d} onDelete={handleDeleteDebt} />
                                                         ))}
                                                     </>
                                                 )}

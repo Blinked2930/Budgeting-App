@@ -1,9 +1,7 @@
 // src/components/QuickEntryView.tsx
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
-  SlidersHorizontal,
   ArrowRight,
-  Sparkles,
   Utensils,
   Lightbulb,
   Bus,
@@ -12,7 +10,6 @@ import {
   MoreHorizontal,
   RotateCcw,
   Zap,
-  CalendarDays,
   Pencil,
   X,
   CreditCard,
@@ -25,19 +22,17 @@ import {
   TriangleAlert,
   Handshake,
   Calculator,
+  CalendarRange,
 } from 'lucide-react';
 import {
   type Currency,
   type Category,
   CATEGORIES,
-  type VendorType,
-  type FoodType,
   type PaymentSource,
   type TransferDirection,
   type DebtDirection,
   type ExpenseRecord,
 } from '../types';
-import { AdvancedDrawer } from './AdvancedDrawer';
 import { RecentTransactions } from './RecentTransactions';
 import { DebtsPanel } from './DebtsPanel';
 import {
@@ -53,7 +48,7 @@ import { useDebts } from '../hooks/useDebts';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { convertToALL, formatCurrency, evaluateAmountExpression } from '../utils/currency';
 import { dateToNoonISO, toDateInputValue } from '../utils/budget';
-import { getVendorOptions, showFoodDetails, CATEGORY_CONFIG } from '../utils/categoryConfig';
+import { CATEGORY_CONFIG } from '../utils/categoryConfig';
 import { cn } from '../utils/cn';
 
 type EntryMode = 'expense' | 'withdraw' | 'lend' | 'settle';
@@ -163,14 +158,9 @@ export const QuickEntryView: React.FC = () => {
   const [dateOverride, setDateOverride] = useState<string | null>(null);
   const todayStr = toDateInputValue(new Date());
 
-  const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
   const [itemName, setItemName] = useState<string>('');
   const [isItemFocused, setIsItemFocused] = useState(false);
-  const [subcategory, setSubcategory] = useState<string | undefined>(undefined);
-  const [vendorType, setVendorType] = useState<VendorType | undefined>(undefined);
-  const [foodType, setFoodType] = useState<FoodType | undefined>(undefined);
-  const [estimatedMeals, setEstimatedMeals] = useState<number | undefined>(undefined);
-  const [shareCounterparty, setShareCounterparty] = useState<string>('');
+  
   const [shareAmountStr, setShareAmountStr] = useState<string>('');
   const [isBigExpense, setIsBigExpense] = useState<boolean>(false);
 
@@ -251,10 +241,6 @@ export const QuickEntryView: React.FC = () => {
   const shareAmount = parseFloat(shareAmountStr) || 0;
   const hasShare = shareAmount > 0;
 
-  const hasAdvancedData = Boolean(
-    subcategory || vendorType || foodType || estimatedMeals || isBigExpense
-  );
-
   const selectedGroup = debtGroups.find((g) => g.key === settleGroupKey);
 
   const isValid =
@@ -280,10 +266,6 @@ export const QuickEntryView: React.FC = () => {
 
   const applySuggestion = (s: Suggestion) => {
     setItemName(s.name);
-    setSubcategory(s.latest.subcategory);
-    setVendorType(s.latest.vendorType);
-    setFoodType(s.latest.foodType);
-    setEstimatedMeals(s.latest.estimatedMeals);
   };
 
   const handleModeChange = (next: EntryMode) => {
@@ -293,17 +275,6 @@ export const QuickEntryView: React.FC = () => {
 
   const handleCategoryChange = (next: Category) => {
     setCategory(next);
-    setSubcategory(undefined);
-
-    if (!showFoodDetails(next)) {
-      setFoodType(undefined);
-      setEstimatedMeals(undefined);
-    }
-
-    const allowedVendors = getVendorOptions(next, undefined);
-    if (vendorType && !allowedVendors.includes(vendorType)) {
-      setVendorType(undefined);
-    }
   };
 
   const handleQuickAdd = (inc: number) => {
@@ -313,20 +284,11 @@ export const QuickEntryView: React.FC = () => {
     });
   };
 
-  const handleClearAdvanced = () => {
-    setItemName('');
-    setSubcategory(undefined);
-    setVendorType(undefined);
-    setFoodType(undefined);
-    setEstimatedMeals(undefined);
-    setShareCounterparty('');
-    setShareAmountStr('');
-    setIsBigExpense(false);
-  };
-
   const handleResetForm = () => {
     setAmountStr('');
-    handleClearAdvanced();
+    setItemName('');
+    setShareAmountStr('');
+    setIsBigExpense(false);
     setLendPerson('');
     setLendNote('');
     setSettleGroupKey(null);
@@ -342,11 +304,6 @@ export const QuickEntryView: React.FC = () => {
     setCategory(expense.category);
     setPayMethod((expense.paidWith as PayMethod) ?? 'Card');
     setItemName(expense.itemName ?? '');
-    setSubcategory(expense.subcategory);
-    setVendorType(expense.vendorType);
-    setFoodType(expense.foodType);
-    setEstimatedMeals(expense.estimatedMeals);
-    setShareCounterparty('');
     setShareAmountStr('');
     setIsBigExpense(Boolean(expense.isBigExpense));
 
@@ -393,10 +350,6 @@ export const QuickEntryView: React.FC = () => {
           currency,
           category,
           itemName: itemName.trim() || undefined,
-          subcategory,
-          vendorType,
-          foodType,
-          estimatedMeals,
           isBigExpense: isBigExpense || undefined,
         };
 
@@ -437,22 +390,6 @@ export const QuickEntryView: React.FC = () => {
                 ? `Logged ${formatCurrency(shareAmount, 'ALL')} for you + ${formatCurrency(normalizedALL - shareAmount, 'ALL')} owed to ${payerName} in ${latencyMs}ms ⚡`
                 : `Logged ${formatCurrency(parsedAmount, currency)} paid by ${payerName} in ${latencyMs}ms ⚡`
             );
-          } else if (hasShare && shareAmount < normalizedALL) {
-            const saved = await addExpense({
-              ...baseData,
-              paidWith: payMethod as PaymentSource,
-              budgetAmountALL: normalizedALL - shareAmount,
-              timestamp,
-            });
-            await addDebt({
-              counterparty: shareCounterparty,
-              direction: 'OwedToMe',
-              amountALL: shareAmount,
-              sourceExpenseId: saved.id,
-              note: itemName.trim() || undefined,
-            });
-            const latencyMs = Math.round(performance.now() - startTime);
-            setFeedback(`Logged with ${formatCurrency(shareAmount, 'ALL')} owed to you in ${latencyMs}ms ⚡`);
           } else {
             await addExpense({
               ...baseData,
@@ -680,9 +617,6 @@ export const QuickEntryView: React.FC = () => {
                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
                   Category
                 </span>
-                <span className="text-[11px] text-emerald-600 font-medium">
-                  {subcategory ? `${category} · ${subcategory}` : category}
-                </span>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {CATEGORIES.map((cat) => {
@@ -786,14 +720,14 @@ export const QuickEntryView: React.FC = () => {
             </div>
 
             {payMethod === 'SomeoneElse' && (
-              <div className="space-y-2.5">
+              <div className="bg-indigo-50/50 p-3 rounded-2xl border border-indigo-100 space-y-2">
                 <input
                   type="text"
                   value={payerName}
                   onChange={(e) => setPayerName(e.target.value)}
                   placeholder="Who paid?"
                   list="lekflow-payer-names"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
                 />
                 <datalist id="lekflow-payer-names">
                   {lendSuggestions.map((p) => (
@@ -806,38 +740,44 @@ export const QuickEntryView: React.FC = () => {
                   onSelect={setPayerName}
                 />
                 
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <input
-                    type="text"
-                    value={shareCounterparty}
-                    onChange={(e) => setShareCounterparty(e.target.value)}
-                    placeholder="Whose share is it? (Optional)"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-colors"
-                  />
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs font-medium text-indigo-900 whitespace-nowrap">Your share:</span>
                   <input
                     type="number"
                     inputMode="decimal"
                     step="any"
                     value={shareAmountStr}
                     onChange={(e) => setShareAmountStr(e.target.value)}
-                    placeholder="Amount they paid for you (L)"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-colors"
+                    placeholder="250"
+                    className="w-24 bg-white border border-indigo-200 rounded-xl px-3 py-1.5 text-sm font-mono text-indigo-900 placeholder-indigo-300 focus:outline-none focus:border-indigo-500"
                   />
+                  <span className="text-xs font-medium text-indigo-900">L</span>
                 </div>
 
                 {hasShare && (
-                  <p className="text-[10px] text-indigo-600 leading-relaxed px-1">
-                    Your share: {formatCurrency(shareAmount, 'ALL')} · {payerName || 'They'}'s share: {formatCurrency(Math.max(0, normalizedALL - shareAmount), 'ALL')} · Owed to {payerName || 'them'}: {formatCurrency(Math.max(0, normalizedALL - shareAmount), 'ALL')}
+                  <p className="text-[10px] text-indigo-600/80 leading-relaxed px-1 pt-0.5">
+                    {payerName || 'They'} paid the rest ({formatCurrency(Math.max(0, normalizedALL - shareAmount), 'ALL')}) and you owe it to them.
                   </p>
                 )}
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-3 px-1">
-              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
-                <CalendarDays className="w-3.5 h-3.5" />
-                Date
-              </span>
+            <div className="flex items-center justify-between gap-3 px-1 pt-1">
+              <div className="flex items-center gap-3">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={isBigExpense}
+                    onChange={(e) => setIsBigExpense(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                    <CalendarRange className="w-3.5 h-3.5 text-slate-400" />
+                    Big Expense
+                  </span>
+                </label>
+              </div>
+              
               <div className="flex items-center gap-2">
                 {dateOverride && (
                   <button
@@ -857,7 +797,7 @@ export const QuickEntryView: React.FC = () => {
                     setDateOverride(v && v !== todayStr ? v : null);
                   }}
                   className={cn(
-                    'bg-slate-50 border rounded-xl px-2.5 py-1.5 text-xs font-mono focus:outline-none focus:bg-white',
+                    'bg-slate-50 border rounded-xl px-2 py-1 text-[11px] font-mono focus:outline-none focus:bg-white',
                     dateOverride
                       ? 'border-amber-400 text-amber-700'
                       : 'border-slate-200 text-slate-600'
@@ -865,27 +805,6 @@ export const QuickEntryView: React.FC = () => {
                 />
               </div>
             </div>
-
-            {hasAdvancedData && (
-              <div className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs flex items-center justify-between">
-                <div className="flex items-center gap-1.5 truncate text-slate-600 font-medium">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                  <span className="truncate">
-                    {subcategory || 'Item'}{' '}
-                    {vendorType ? `• ${vendorType}` : ''}{' '}
-                    {estimatedMeals ? `• ${estimatedMeals} meal(s)` : ''}
-                    {isBigExpense ? `• Big expense` : ''}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsDrawerOpen(true)}
-                  className="text-[11px] text-emerald-600 hover:underline shrink-0 ml-2 cursor-pointer"
-                >
-                  Edit
-                </button>
-              </div>
-            )}
           </>
         )}
 
@@ -1149,17 +1068,6 @@ export const QuickEntryView: React.FC = () => {
             <span>{saveLabel}</span>
             <ArrowRight className="w-4 h-4 ml-1" />
           </button>
-
-          {mode === 'expense' && (
-            <button
-              type="button"
-              onClick={() => setIsDrawerOpen(true)}
-              className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 hover:text-slate-900 text-xs font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-            >
-              <SlidersHorizontal className="w-4 h-4 text-emerald-600" />
-              <span>Advanced Entry</span>
-            </button>
-          )}
         </div>
 
         {feedback && (
@@ -1169,26 +1077,6 @@ export const QuickEntryView: React.FC = () => {
           </div>
         )}
       </form>
-
-      <AdvancedDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => setIsDrawerOpen(false)}
-        category={category}
-        vendorType={vendorType}
-        setVendorType={setVendorType}
-        foodType={foodType}
-        setFoodType={setFoodType}
-        estimatedMeals={estimatedMeals}
-        setEstimatedMeals={setEstimatedMeals}
-        shareCounterparty={shareCounterparty}
-        setShareCounterparty={setShareCounterparty}
-        shareAmountStr={shareAmountStr}
-        setShareAmountStr={setShareAmountStr}
-        isBigExpense={isBigExpense}
-        setIsBigExpense={setIsBigExpense}
-        onApplyAndClose={() => setIsDrawerOpen(false)}
-        onClear={handleClearAdvanced}
-      />
 
       <DebtsPanel isOpen={isDebtsPanelOpen} onClose={() => setIsDebtsPanelOpen(false)} />
 
