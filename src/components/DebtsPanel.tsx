@@ -42,6 +42,18 @@ interface CounterpartyGroup {
     payables: number;
 }
 
+function formatDebtDate(iso: string): string {
+    try {
+        return new Date(iso).toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+        });
+    } catch {
+        return iso;
+    }
+}
+
 const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
     const [counterparty, setCounterparty] = useState('');
     const [amountStr, setAmountStr] = useState('');
@@ -298,6 +310,18 @@ const DebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
 
             {debt.note && <p className="text-[11px] text-slate-500 italic">{debt.note}</p>}
 
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-400">
+                <span>Opened {formatDebtDate(debt.createdAt)}</span>
+                {debt.resolvedAt && (
+                    <span>· Resolved {formatDebtDate(debt.resolvedAt)}</span>
+                )}
+                {debt.myShareAmountALL !== undefined && (
+                    <span className="text-indigo-500 font-medium">
+                        · Your share {formatCurrency(debt.myShareAmountALL, 'ALL')}
+                    </span>
+                )}
+            </div>
+
             <div className="flex items-center gap-2">
                 <div className="flex-1 min-w-0">
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
@@ -457,6 +481,10 @@ const ResolvedDebtRow: React.FC<{ debt: DebtRecord }> = ({ debt }) => {
                         {debt.note}
                     </p>
                 )}
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                    Opened {formatDebtDate(debt.createdAt)}
+                    {debt.resolvedAt && ` · Resolved ${formatDebtDate(debt.resolvedAt)}`}
+                </p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
                 <Check className="w-3.5 h-3.5 text-slate-400" />

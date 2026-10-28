@@ -24,6 +24,7 @@ import {
   Check,
   TriangleAlert,
   Handshake,
+  Calculator,
 } from 'lucide-react';
 import {
   type Currency,
@@ -49,7 +50,8 @@ import {
 import { useExpenses } from '../hooks/useExpenses';
 import { useTransfers } from '../hooks/useTransfers';
 import { useDebts } from '../hooks/useDebts';
-import { convertToALL, formatCurrency } from '../utils/currency';
+import { useBudgetCycle } from '../hooks/useBudgetCycle';
+import { convertToALL, formatCurrency, evaluateAmountExpression } from '../utils/currency';
 import { dateToNoonISO, toDateInputValue } from '../utils/budget';
 import { getVendorOptions, showFoodDetails, CATEGORY_CONFIG } from '../utils/categoryConfig';
 import { cn } from '../utils/cn';
@@ -109,10 +111,6 @@ function buildSuggestions(
     .slice(0, 6);
 }
 
-/**
- * Visible tappable suggestion chips that render below a text input.
- * Works on mobile — unlike <datalist>, which iOS/Android often ignore.
- */
 const SuggestionChips: React.FC<{
   options: string[];
   value: string;
@@ -149,6 +147,7 @@ export const QuickEntryView: React.FC = () => {
   const { expenses, totalSpentALL } = useExpenses();
   const { transfers } = useTransfers();
   const { openDebts, debts } = useDebts();
+  const { stats } = useBudgetCycle();
 
   const [amountStr, setAmountStr] = useState<string>('');
   const [currency, setCurrency] = useState<Currency>(() => {
@@ -180,13 +179,11 @@ export const QuickEntryView: React.FC = () => {
   const [lendDirection, setLendDirection] = useState<DebtDirection>('OwedToMe');
   const [lendNote, setLendNote] = useState<string>('');
 
-  // Pull unique counterparties directly from live debts
   const lendSuggestions = useMemo(() => {
     const names = new Set(debts.map((d) => d.counterparty));
     return Array.from(names).sort();
   }, [debts]);
 
-  // Group open debts by person for the Settle tab
   const debtGroups = useMemo(() => {
     const map = new Map<string, { key: string; name: string; net: number; count: number }>();
     for (const d of openDebts) {
@@ -228,7 +225,6 @@ export const QuickEntryView: React.FC = () => {
     return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
   }, []);
 
-  // Listen for currency changes from Settings
   useEffect(() => {
     const handleCurrencyChange = () => {
       const saved = localStorage.getItem('lekflow:currency');
@@ -238,7 +234,19 @@ export const QuickEntryView: React.FC = () => {
     return () => window.removeEventListener('lekflow:currency-changed', handleCurrencyChange);
   }, []);
 
-  const parsedAmount = parseFloat(amountStr) || 0;
+  // Amount parsing with math-expression support
+  const parsedAmount = useMemo(() => {
+    if (!amountStr.trim()) return 0;
+    if (/[+\-*/()]/.test(amountStr)) {
+      const result = evaluateAmountExpression(amountStr);
+      return result ?? 0;
+    }
+    const n = parseFloat(amountStr);
+    return Number.isNaN(n) ? 0 : n;
+  }, [amountStr]);
+
+  const isExpression = /[+\-*/()]/.test(amountStr) && amountStr.trim().length > 0;
+
   const normalizedALL = convertToALL(parsedAmount, currency);
 
   const shareAmount = parseFloat(shareAmountStr) || 0;
@@ -300,7 +308,6 @@ export const QuickEntryView: React.FC = () => {
   };
 
   const handleQuickAdd = (inc: number) => {
-    // NO focus() here — prevents the keyboard from popping up on mobile
     setAmountStr((prev) => {
       const current = parseFloat(prev) || 0;
       return (current + inc).toString();
@@ -409,11 +416,17 @@ export const QuickEntryView: React.FC = () => {
           const timestamp = dateOverride ? dateToNoonISO(dateOverride) : undefined;
 
           if (payMethod === 'SomeoneElse') {
-            // Someone bought it for me
+            // Someone else paid. If a share is specified, it means *their*
+            // portion is (amount - myShare) and *my* portion is myShare.
+            // Without a share, the full amount is someone else's and the
+            // whole thing becomes a debt to them.
+            const myShareALL = hasShare ? shareAmount : undefined;
+
             await addDebt({
-              counterparty: payerName,
+              counterparty: payerName.trim(),
               direction: 'iOwe',
-              amountALL: parsedAmount,
+              amountALL: normalizedALL,
+              myShareAmountALL: myShareALL,
               purchaseDetails: {
                 category,
                 itemName: itemName.trim() || undefined,
@@ -421,9 +434,13 @@ export const QuickEntryView: React.FC = () => {
               timestamp,
             });
             const latencyMs = Math.round(performance.now() - startTime);
-            setFeedback(`Logged ${formatCurrency(parsedAmount, currency)} paid by ${payerName} in ${latencyMs}ms ⚡`);
+            setFeedback(
+              hasShare
+                ? `Logged ${formatCurrency(shareAmount, 'ALL')} for you + ${formatCurrency(normalizedALL - shareAmount, 'ALL')} owed to ${payerName} in ${latencyMs}ms ⚡`
+                : `Logged ${formatCurrency(parsedAmount, currency)} paid by ${payerName} in ${latencyMs}ms ⚡`
+            );
           } else if (hasShare && shareAmount < normalizedALL) {
-            // I bought it, but someone owes me
+            // I bought it, but someone owes me.
             const saved = await addExpense({
               ...baseData,
               paidWith: payMethod as PaymentSource,
@@ -440,7 +457,6 @@ export const QuickEntryView: React.FC = () => {
             const latencyMs = Math.round(performance.now() - startTime);
             setFeedback(`Logged with ${formatCurrency(shareAmount, 'ALL')} owed to you in ${latencyMs}ms ⚡`);
           } else {
-            // Normal expense
             await addExpense({
               ...baseData,
               paidWith: payMethod as PaymentSource,
@@ -482,7 +498,6 @@ export const QuickEntryView: React.FC = () => {
             : `Borrowed ${formatCurrency(parsedAmount, 'ALL')} from ${lendPerson}`
         );
       } else if (mode === 'settle' && settleGroupKey) {
-        // Settle grouped debts: pay oldest first
         const personDebts = openDebts.filter(d => d.counterpartyKey === settleGroupKey);
         personDebts.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
@@ -508,6 +523,31 @@ export const QuickEntryView: React.FC = () => {
 
   return (
     <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
+      {/* Today vs. expected (day summary) */}
+      {stats && (
+        <div className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 shadow-sm">
+          <div>
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+              Today
+            </p>
+            <p className="text-sm font-mono font-bold text-slate-900 tracking-tight mt-0.5">
+              {formatCurrency(stats.spentToday, 'ALL')} spent
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+              Expected
+            </p>
+            <p className={cn(
+              'text-sm font-mono font-bold tracking-tight mt-0.5',
+              stats.spentToday > stats.dailyAllowance ? 'text-rose-600' : 'text-emerald-600'
+            )}>
+              {formatCurrency(stats.dailyAllowance, 'ALL')}
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 shadow-sm">
         <div className="flex items-center gap-2">
           <div className={cn('w-2 h-2 rounded-full', isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500')} />
@@ -571,9 +611,8 @@ export const QuickEntryView: React.FC = () => {
             )}
             <input
               ref={inputRef}
-              type="number"
+              type="text"
               inputMode="decimal"
-              step="any"
               value={amountStr}
               onChange={(e) => setAmountStr(e.target.value)}
               placeholder="0"
@@ -582,7 +621,13 @@ export const QuickEntryView: React.FC = () => {
             />
           </div>
 
-          {currency !== 'ALL' && parsedAmount > 0 && (
+          {isExpression && parsedAmount > 0 && (
+            <p className="text-xs font-mono text-emerald-600 mt-1 font-semibold flex items-center justify-center gap-1">
+              <Calculator className="w-3 h-3" />= {formatCurrency(parsedAmount, currency)}
+            </p>
+          )}
+
+          {!isExpression && currency !== 'ALL' && parsedAmount > 0 && (
             <p className="text-xs font-mono text-emerald-600 mt-1 font-semibold">
               ≈ {formatCurrency(normalizedALL, 'ALL')} base Lek
             </p>
@@ -768,6 +813,11 @@ export const QuickEntryView: React.FC = () => {
                   value={payerName}
                   onSelect={setPayerName}
                 />
+                {hasShare && (
+                  <p className="text-[10px] text-indigo-600 mt-2 leading-relaxed">
+                    Your share: {formatCurrency(shareAmount, 'ALL')} · {payerName || 'They'}'s share: {formatCurrency(Math.max(0, normalizedALL - shareAmount), 'ALL')} · Owed to {payerName || 'them'}: {formatCurrency(Math.max(0, normalizedALL - shareAmount), 'ALL')}
+                  </p>
+                )}
               </div>
             )}
 

@@ -95,6 +95,14 @@ export interface DebtRecord {
   note?: string;
   status: 'open' | 'resolved';
   sourceExpenseId?: string;
+
+  /**
+   * When someone else paid for a shared expense, this is the portion that
+   * belongs to *you* (my share). The rest is the debt. Undefined for
+   * regular lend/borrow debt.
+   */
+  myShareAmountALL?: number;
+
   createdAt: string;
   resolvedAt?: string;
   isSynced: boolean;

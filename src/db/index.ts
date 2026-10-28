@@ -106,6 +106,7 @@ export interface RemoteDebt {
   note?: string;
   status: string;
   sourceExpenseId?: string;
+  myShareAmountALL?: number;
   createdAt: string;
   resolvedAt?: string;
   updatedAt?: string;
@@ -364,6 +365,12 @@ export async function addDebt(data: {
   timestamp?: string;
   moveWalletWith?: PaymentSource;
   purchaseDetails?: { category: Category; itemName?: string };
+  /**
+   * When someone else paid for a shared expense: the portion that belongs
+   * to *you*. Undefined means the entire amount is the debt (regular
+   * lend/borrow).
+   */
+  myShareAmountALL?: number;
 }): Promise<DebtRecord> {
   const now = new Date().toISOString();
   const record: DebtRecord = {
@@ -376,6 +383,7 @@ export async function addDebt(data: {
     note: data.note,
     status: 'open',
     sourceExpenseId: data.sourceExpenseId,
+    myShareAmountALL: data.myShareAmountALL,
     createdAt: data.timestamp ?? now,
     isSynced: false,
     updatedAt: now,
@@ -383,6 +391,7 @@ export async function addDebt(data: {
   await db.debts.add(record);
 
   if (data.moveWalletWith && !data.sourceExpenseId) {
+    // Lend / borrow origin: one wallet-changing expense entry.
     const signedAmount = data.direction === 'iOwe' ? -data.amountALL : data.amountALL;
 
     const baseName = data.direction === 'iOwe'
@@ -401,12 +410,32 @@ export async function addDebt(data: {
       isDebtOrigin: true,
     });
   } else if (data.purchaseDetails) {
+    // Someone else paid for a shared expense.
+    const myShare = data.myShareAmountALL ?? data.amountALL;
+    const theirShare = data.amountALL - myShare;
+
+    const fullItemName =
+      data.purchaseDetails.itemName || `Bought by ${record.counterparty}`;
+
+    // Their share → wallet-neutral, skipped by the budget math.
+    // Budget still sees the expense so the item shows up in Recent Activity.
     await addExpense({
-      amount: data.amountALL,
+      amount: theirShare,
       currency: 'ALL',
       category: data.purchaseDetails.category,
-      itemName: data.purchaseDetails.itemName || `Bought by ${record.counterparty}`,
+      itemName: fullItemName,
       walletNeutral: true,
+      debtRelated: true,
+      debtId: record.id,
+    });
+
+    // Your share → normal expense that hits the budget.
+    await addExpense({
+      amount: myShare,
+      currency: 'ALL',
+      category: data.purchaseDetails.category,
+      itemName: fullItemName,
+      budgetAmountALL: myShare,
       debtId: record.id,
     });
   }
@@ -681,6 +710,7 @@ export async function applyRemoteDebts(remote: RemoteDebt[]): Promise<void> {
         note: r.note,
         status: r.status as 'open' | 'resolved',
         sourceExpenseId: r.sourceExpenseId,
+        myShareAmountALL: r.myShareAmountALL,
         createdAt: r.createdAt,
         resolvedAt: r.resolvedAt,
         updatedAt: remoteUpdatedAt,
