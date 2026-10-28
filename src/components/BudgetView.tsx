@@ -20,10 +20,12 @@ import type { BudgetStats } from '../utils/budget';
 import { addExpense, saveBudgetCycle } from '../db';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { useDebts } from '../hooks/useDebts';
+import { useExpenses } from '../hooks/useExpenses';
 import { useCurrency } from '../hooks/useCurrency';
 import { addDays, toDateInputValue } from '../utils/budget';
 import { cn } from '../utils/cn';
 import { DebtsPanel } from './DebtsPanel';
+import { BigExpensesCard } from './BigExpensesCard';
 
 type FormMode = 'first' | 'next' | 'edit';
 
@@ -537,6 +539,7 @@ const StatTile: React.FC<{
 export const BudgetView: React.FC = () => {
     const { cycle, stats, isLoading } = useBudgetCycle();
     const { openDebts } = useDebts();
+    const { expenses } = useExpenses();
     const { format } = useCurrency();
 
     const [formMode, setFormMode] = useState<FormMode | null>(null);
@@ -714,6 +717,8 @@ export const BudgetView: React.FC = () => {
                     </div>
                 </div>
             </div>
+
+            <BigExpensesCard cycle={cycle} expenses={expenses} />
 
             <div className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
                 <div className="grid grid-cols-2 gap-3">

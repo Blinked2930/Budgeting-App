@@ -22,7 +22,6 @@ import {
   TriangleAlert,
   Handshake,
   Calculator,
-  CalendarRange,
 } from 'lucide-react';
 import {
   type Category,
@@ -159,7 +158,6 @@ export const QuickEntryView: React.FC = () => {
   const [isItemFocused, setIsItemFocused] = useState(false);
   
   const [shareAmountStr, setShareAmountStr] = useState<string>('');
-  const [isBigExpense, setIsBigExpense] = useState<boolean>(false);
 
   const [withdrawDirection, setWithdrawDirection] = useState<TransferDirection>('BankToCash');
 
@@ -278,7 +276,6 @@ export const QuickEntryView: React.FC = () => {
     setAmountStr('');
     setItemName('');
     setShareAmountStr('');
-    setIsBigExpense(false);
     setLendPerson('');
     setLendNote('');
     setSettleGroupKey(null);
@@ -295,7 +292,6 @@ export const QuickEntryView: React.FC = () => {
     setPayMethod((expense.paidWith as PayMethod) ?? 'Card');
     setItemName(expense.itemName ?? '');
     setShareAmountStr('');
-    setIsBigExpense(Boolean(expense.isBigExpense));
 
     const expenseDate = toDateInputValue(new Date(expense.timestamp));
     const override = expenseDate === todayStr ? null : expenseDate;
@@ -340,7 +336,6 @@ export const QuickEntryView: React.FC = () => {
           currency,
           category,
           itemName: itemName.trim() || undefined,
-          isBigExpense: isBigExpense || undefined,
         };
 
         if (editingId) {
@@ -753,22 +748,7 @@ export const QuickEntryView: React.FC = () => {
               </div>
             )}
 
-            <div className="flex items-center justify-between gap-3 px-1 pt-1">
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isBigExpense}
-                    onChange={(e) => setIsBigExpense(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                    <CalendarRange className="w-3.5 h-3.5 text-slate-400" />
-                    Big Expense
-                  </span>
-                </label>
-              </div>
-              
+            <div className="flex items-center justify-end gap-2 px-1 pt-1">
               <div className="flex items-center gap-2">
                 {dateOverride && (
                   <button
