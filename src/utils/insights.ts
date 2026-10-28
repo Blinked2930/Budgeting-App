@@ -29,7 +29,7 @@ export function monthLabel(key: string): string {
 export function getMonthOptions(expenses: ExpenseRecord[]): string[] {
     const keys = new Set<string>();
     for (const e of expenses) {
-        if (e.debtRelated) continue;
+        if (e.debtRelated || e.walletNeutral) continue;
         keys.add(monthKey(e.timestamp));
     }
     return Array.from(keys).sort().reverse();
@@ -40,7 +40,7 @@ export function filterExpenses(
     filters: InsightFilters
 ): ExpenseRecord[] {
     return expenses.filter((e) => {
-        if (e.debtRelated) return false;
+        if (e.debtRelated || e.walletNeutral) return false;
         if (filters.category !== 'all' && e.category !== filters.category) return false;
         if (filters.paidWith !== 'all' && (e.paidWith ?? 'Card') !== filters.paidWith) return false;
         if (filters.month !== 'all' && monthKey(e.timestamp) !== filters.month) return false;
@@ -64,7 +64,7 @@ export function aggregate(expenses: ExpenseRecord[]): Aggregate {
     let mealSpend = 0;
 
     for (const e of expenses) {
-        if (e.debtRelated) continue;
+        if (e.debtRelated || e.walletNeutral) continue;
         const effectiveAmount = e.budgetAmountALL ?? e.amountInALL;
         total += effectiveAmount;
         count += 1;
@@ -95,7 +95,7 @@ export function calculateFoodDailyStats(
     expenses: ExpenseRecord[],
     startDateStr?: string
 ): FoodDailyStats | null {
-    const foodExpenses = expenses.filter((e) => !e.debtRelated && e.category === 'Food');
+    const foodExpenses = expenses.filter((e) => !e.debtRelated && !e.walletNeutral && e.category === 'Food');
     const totalFoodSpend = foodExpenses.reduce(
         (sum, e) => sum + (e.budgetAmountALL ?? e.amountInALL),
         0
@@ -104,19 +104,17 @@ export function calculateFoodDailyStats(
     if (totalFoodSpend === 0 || foodExpenses.length === 0) return null;
 
     let start = startDateStr ? new Date(startDateStr).getTime() : 0;
-
-    // If no cycle start date is provided, fallback to the date of the oldest food expense
+    
     if (!startDateStr) {
         const timestamps = foodExpenses.map((e) => new Date(e.timestamp).getTime());
         start = Math.min(...timestamps);
     }
 
     const now = new Date().getTime();
-    // Ensure we count at least 1 day to avoid dividing by zero
     const daysElapsed = Math.max(1, Math.ceil((now - start) / (1000 * 60 * 60 * 24)));
 
     const dailyAverage = totalFoodSpend / daysElapsed;
-
+    
     return {
         totalFoodSpend,
         daysElapsed,
@@ -137,7 +135,7 @@ export function aggregateByCategory(expenses: ExpenseRecord[]): CategoryStat[] {
     let grandTotal = 0;
 
     for (const e of expenses) {
-        if (e.debtRelated) continue;
+        if (e.debtRelated || e.walletNeutral) continue;
         const amount = e.budgetAmountALL ?? e.amountInALL;
         const existing = map.get(e.category) ?? { total: 0, count: 0 };
         existing.total += amount;
@@ -169,7 +167,7 @@ export function aggregatePaidWith(expenses: ExpenseRecord[]): PaidWithStat {
     let card = 0;
 
     for (const e of expenses) {
-        if (e.debtRelated) continue;
+        if (e.debtRelated || e.walletNeutral) continue;
         const amount = e.budgetAmountALL ?? e.amountInALL;
         if (e.paidWith === 'Cash') cash += amount;
         else card += amount;
@@ -196,7 +194,7 @@ export function aggregateByVendor(expenses: ExpenseRecord[]): VendorStat[] {
     let grandTotal = 0;
 
     for (const e of expenses) {
-        if (e.debtRelated) continue;
+        if (e.debtRelated || e.walletNeutral) continue;
         const amount = e.budgetAmountALL ?? e.amountInALL;
         const key = e.vendorType ?? 'Other';
         const existing = map.get(key) ?? { total: 0, count: 0 };
