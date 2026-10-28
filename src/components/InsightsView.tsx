@@ -2,15 +2,15 @@
 import React, { useMemo, useState } from 'react';
 import {
     ListFilter,
-    Store,
-    Utensils,
     Banknote,
     CreditCard,
     HandCoins,
     PieChart,
     History,
     PiggyBank,
-    CalendarDays,
+    TrendingUp,
+    TrendingDown,
+    ArrowRightLeft,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { CATEGORIES, type Category, type ExpenseRecord } from '../types';
@@ -23,9 +23,7 @@ import {
     DEFAULT_FILTERS,
     aggregate,
     aggregateByCategory,
-    aggregateByVendor,
     aggregatePaidWith,
-    calculateFoodDailyStats,
     filterExpenses,
     getMonthOptions,
     monthLabel,
@@ -42,18 +40,6 @@ const CATEGORY_COLORS: Record<Category, { bar: string; text: string; dot: string
     Travel: { bar: 'bg-rose-400', text: 'text-rose-700', dot: 'bg-rose-400' },
     Other: { bar: 'bg-slate-400', text: 'text-slate-700', dot: 'bg-slate-400' },
 };
-
-const VENDOR_COLORS: Record<string, { bar: string; text: string; dot: string }> = {
-    Pazar: { bar: 'bg-emerald-400', text: 'text-emerald-700', dot: 'bg-emerald-400' },
-    Supermarket: { bar: 'bg-cyan-400', text: 'text-cyan-700', dot: 'bg-cyan-400' },
-    'Café': { bar: 'bg-purple-400', text: 'text-purple-700', dot: 'bg-purple-400' },
-    Bakery: { bar: 'bg-amber-400', text: 'text-amber-700', dot: 'bg-amber-400' },
-    Restaurant: { bar: 'bg-rose-400', text: 'text-rose-700', dot: 'bg-rose-400' },
-    Other: { bar: 'bg-slate-400', text: 'text-slate-700', dot: 'bg-slate-400' },
-};
-
-const getVendorColor = (vendor: string) =>
-    VENDOR_COLORS[vendor] ?? { bar: 'bg-slate-400', text: 'text-slate-700', dot: 'bg-slate-400' };
 
 const SectionTitle: React.FC<{ icon: React.ReactNode; children: React.ReactNode }> = ({ icon, children }) => (
     <div className="flex items-center gap-1.5 px-1 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -119,7 +105,6 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
 
 const CategoryBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => {
     const stats = useMemo(() => aggregateByCategory(expenses), [expenses]);
-    const paidWith = useMemo(() => aggregatePaidWith(expenses), [expenses]);
     const { format } = useCurrency();
 
     if (stats.length === 0) {
@@ -156,73 +141,173 @@ const CategoryBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }
                     </div>
                 ))}
             </div>
+        </Card>
+    );
+};
 
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Paid with</span>
-                <div className="flex items-center gap-3 text-[10px] font-mono">
-                    <span className="flex items-center gap-1">
-                        <Banknote className="w-3 h-3 text-teal-600" />
-                        <span className="text-slate-500">Cash</span>
-                        <span className="text-teal-700 font-semibold">{paidWith.cashPct.toFixed(0)}%</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                        <CreditCard className="w-3 h-3 text-rose-500" />
-                        <span className="text-slate-500">Card</span>
-                        <span className="text-rose-700 font-semibold">{paidWith.cardPct.toFixed(0)}%</span>
-                    </span>
+/**
+ * NEW INSIGHT 1: Spend Pace vs. Budget
+ * Compares actual spent vs. daily-pace-projected spent so far in the cycle.
+ */
+const SpendPaceCard: React.FC = () => {
+    const { stats } = useBudgetCycle();
+    const { format } = useCurrency();
+
+    if (!stats) {
+        return (
+            <Card>
+                <p className="text-xs text-slate-500">Set up a budget cycle to see your spending pace.</p>
+            </Card>
+        );
+    }
+
+    const daysElapsed = stats.dayNumber;
+    const daysTotal = stats.totalDays;
+    const projectedByNow = (stats.cycleBudget / daysTotal) * daysElapsed;
+    const pace = projectedByNow > 0 ? (stats.spent / projectedByNow) * 100 : 0;
+    const isOverPace = pace > 100;
+    
+    // A simple visual bar showing progress
+    const barWidth = Math.min(100, Math.max(0, pace));
+
+    return (
+        <Card className="space-y-3">
+            <div className="flex items-start justify-between">
+                <div>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Pace</p>
+                    <p className={cn(
+                        'text-lg font-mono font-bold mt-0.5 flex items-center gap-1',
+                        isOverPace ? 'text-rose-600' : 'text-emerald-600'
+                    )}>
+                        {isOverPace ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
+                        {pace.toFixed(0)}%
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                        {isOverPace ? 'ahead of' : 'behind'} pace by {format(Math.abs(stats.spent - projectedByNow))}
+                    </p>
+                </div>
+                <div className="text-right">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Day</p>
+                    <p className="text-sm font-mono font-bold text-slate-900">{daysElapsed} of {daysTotal}</p>
+                </div>
+            </div>
+
+            <div className="space-y-1.5">
+                <div className="h-2 rounded-full bg-slate-100 overflow-hidden relative">
+                    {/* The pace marker */}
+                    <div className="absolute top-0 bottom-0 w-px bg-slate-400 z-10" style={{ left: `${(daysElapsed / daysTotal) * 100}%` }} />
+                    {/* The actual spend bar */}
+                    <div
+                        className={cn('h-full rounded-full transition-all', isOverPace ? 'bg-rose-500' : 'bg-emerald-500')}
+                        style={{ width: `${barWidth}%` }}
+                    />
+                </div>
+                <div className="flex justify-between text-[10px] font-mono text-slate-400">
+                    <span>{format(stats.spent)} spent</span>
+                    <span>{format(projectedByNow)} expected</span>
                 </div>
             </div>
         </Card>
     );
 };
 
-const VendorBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => {
-    const stats = useMemo(() => aggregateByVendor(expenses), [expenses]);
+/**
+ * NEW INSIGHT 2: Cash vs Card behaviour
+ * Useful for finding spending leaks (e.g. "I spend way more with card").
+ */
+const PaymentBehaviorCard: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => {
+    const paidWith = useMemo(() => aggregatePaidWith(expenses), [expenses]);
     const { format } = useCurrency();
 
-    if (stats.length === 0) {
+    if (paidWith.cash + paidWith.card === 0) {
         return (
             <Card>
-                <p className="text-xs text-slate-500">
-                    Log some expenses with a vendor to see where you spend most.
-                </p>
+                <p className="text-xs text-slate-500">Log some expenses to see your cash vs card habits.</p>
             </Card>
         );
     }
 
-    const top = stats.slice(0, 6);
-    const grandTotal = stats.reduce((s, v) => s + v.total, 0);
-
     return (
         <Card className="space-y-3">
             <div className="flex items-baseline justify-between">
-                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Total</span>
-                <span className="text-base font-mono font-bold text-slate-900">{format(grandTotal)}</span>
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Cash vs Card</span>
+                <span className="text-base font-mono font-bold text-slate-900">{format(paidWith.cash + paidWith.card)}</span>
             </div>
 
             <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden flex">
-                {top.map((v) => (
-                    <div key={v.vendor} className={cn('h-full', getVendorColor(v.vendor).bar)} style={{ width: `${v.percent}%` }} />
-                ))}
+                <div className="h-full bg-teal-400" style={{ width: `${paidWith.cashPct}%` }} />
+                <div className="h-full bg-rose-400" style={{ width: `${paidWith.cardPct}%` }} />
             </div>
 
-            <div className="space-y-1.5">
-                {top.map((v) => {
-                    const c = getVendorColor(v.vendor);
-                    return (
-                        <div key={v.vendor} className="flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-2 min-w-0">
-                                <span className={cn('w-2 h-2 rounded-full shrink-0', c.dot)} />
-                                <span className={cn('font-semibold truncate', c.text)}>{v.vendor}</span>
-                                <span className="text-[10px] text-slate-400 font-mono">{v.count}×</span>
-                            </div>
-                            <div className="flex items-center gap-2.5 font-mono shrink-0">
-                                <span className="text-[10px] text-slate-400">{v.percent.toFixed(0)}%</span>
-                                <span className="font-bold text-slate-900 text-[11px]">{format(v.total)}</span>
-                            </div>
-                        </div>
-                    );
-                })}
+            <div className="grid grid-cols-2 gap-3">
+                <div className="p-2 rounded-xl bg-teal-50/50 border border-teal-100">
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-teal-700 uppercase tracking-wider">
+                        <Banknote className="w-3 h-3" />
+                        Cash
+                    </div>
+                    <p className="text-sm font-mono font-bold text-teal-800 mt-0.5">{format(paidWith.cash)}</p>
+                    <p className="text-[10px] text-teal-600 font-mono">{paidWith.cashPct.toFixed(0)}%</p>
+                </div>
+                <div className="p-2 rounded-xl bg-rose-50/50 border border-rose-100">
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-rose-700 uppercase tracking-wider">
+                        <CreditCard className="w-3 h-3" />
+                        Card
+                    </div>
+                    <p className="text-sm font-mono font-bold text-rose-800 mt-0.5">{format(paidWith.card)}</p>
+                    <p className="text-[10px] text-rose-600 font-mono">{paidWith.cardPct.toFixed(0)}%</p>
+                </div>
+            </div>
+        </Card>
+    );
+};
+
+/**
+ * NEW INSIGHT 3: Cash Flow
+ * Money in vs. money out.
+ */
+const CashFlowCard: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => {
+    const { format } = useCurrency();
+    
+    const moneyIn = useMemo(() => {
+        return expenses
+            .filter((e) => !e.deleted && e.amount > 0 && !e.walletNeutral)
+            .reduce((sum, e) => sum + e.amountInALL, 0);
+    }, [expenses]);
+
+    const moneyOut = useMemo(() => {
+        return expenses
+            .filter((e) => !e.deleted && e.amount < 0 && !e.walletNeutral)
+            .reduce((sum, e) => sum + Math.abs(e.amountInALL), 0);
+    }, [expenses]);
+
+    const net = moneyIn - moneyOut;
+
+    return (
+        <Card className="space-y-3">
+            <div className="flex items-center justify-between">
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Cash Flow</span>
+                <span className={cn('text-base font-mono font-bold', net >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                    {net > 0 ? '+' : ''}{format(net)}
+                </span>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-100">
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 uppercase tracking-wider mb-1">
+                        <ArrowRightLeft className="w-3 h-3" />
+                        In
+                    </div>
+                    <p className="text-sm font-mono font-bold text-emerald-800">{format(moneyIn)}</p>
+                    <p className="text-[10px] text-emerald-600">Repayments, refunds</p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-100">
+                    <div className="flex items-center gap-1.5 text-[10px] font-semibold text-rose-700 uppercase tracking-wider mb-1">
+                        <ArrowRightLeft className="w-3 h-3" />
+                        Out
+                    </div>
+                    <p className="text-sm font-mono font-bold text-rose-800">{format(moneyOut)}</p>
+                    <p className="text-[10px] text-rose-600">Expenses, loans</p>
+                </div>
             </div>
         </Card>
     );
@@ -344,20 +429,13 @@ const CycleHistorySection: React.FC = () => {
 
 export const InsightsView: React.FC = () => {
     const { expenses } = useExpenses();
-    const { cycle } = useBudgetCycle();
     const { format } = useCurrency();
     const [filters, setFilters] = useState<InsightFilters>(DEFAULT_FILTERS);
     const [isDebtsOpen, setIsDebtsOpen] = useState(false);
 
-    const overall = useMemo(() => aggregate(expenses), [expenses]);
-    const monthOptions = useMemo(() => getMonthOptions(expenses), [expenses]);
     const filtered = useMemo(() => filterExpenses(expenses, filters), [expenses, filters]);
     const filteredAgg = useMemo(() => aggregate(filtered), [filtered]);
-
-    const dailyFoodStats = useMemo(
-        () => calculateFoodDailyStats(expenses, cycle?.startDate),
-        [expenses, cycle?.startDate]
-    );
+    const monthOptions = useMemo(() => getMonthOptions(expenses), [expenses]);
 
     const update = (key: keyof InsightFilters) => (value: string) =>
         setFilters((prev) => ({ ...prev, [key]: value }));
@@ -376,80 +454,31 @@ export const InsightsView: React.FC = () => {
             </section>
 
             <section>
+                <SectionTitle icon={<TrendingUp className="w-3.5 h-3.5 text-slate-400" />}>
+                    Spend Pace
+                </SectionTitle>
+                <SpendPaceCard />
+            </section>
+
+            <section>
+                <SectionTitle icon={<Banknote className="w-3.5 h-3.5 text-slate-400" />}>
+                    Cash vs Card
+                </SectionTitle>
+                <PaymentBehaviorCard expenses={expenses} />
+            </section>
+
+            <section>
+                <SectionTitle icon={<ArrowRightLeft className="w-3.5 h-3.5 text-slate-400" />}>
+                    Cash Flow
+                </SectionTitle>
+                <CashFlowCard expenses={expenses} />
+            </section>
+
+            <section>
                 <SectionTitle icon={<PieChart className="w-3.5 h-3.5 text-slate-400" />}>
                     Where your money went
                 </SectionTitle>
                 <CategoryBreakdown expenses={expenses} />
-            </section>
-
-            <section>
-                <SectionTitle icon={<Store className="w-3.5 h-3.5 text-slate-400" />}>
-                    Where you spend most
-                </SectionTitle>
-                <VendorBreakdown expenses={expenses} />
-            </section>
-
-            <section>
-                <SectionTitle icon={<Utensils className="w-3.5 h-3.5 text-slate-400" />}>
-                    Cost per meal
-                </SectionTitle>
-                <Card className="space-y-4 divide-y divide-slate-100">
-                    {/* Metric 1: Tagged Average */}
-                    <div>
-                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Tagged Average</p>
-                        {overall.costPerMeal !== null ? (
-                            <div className="flex items-end justify-between gap-3">
-                                <div>
-                                    <p className="text-2xl font-mono font-extrabold text-emerald-600 tracking-tight">
-                                        {format(overall.costPerMeal)}
-                                    </p>
-                                    <p className="text-[11px] text-slate-500 mt-1">
-                                        based on {overall.meals} manually tagged meals
-                                    </p>
-                                </div>
-                                <p className="text-[11px] font-mono text-slate-400 text-right">
-                                    {format(overall.mealSpend)}
-                                    <br />
-                                    total spend
-                                </p>
-                            </div>
-                        ) : (
-                            <p className="text-xs text-slate-500">
-                                Add an estimated meal count in Advanced Entry when you log food, and your
-                                average cost per meal will show up here.
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Metric 2: Daily Food Burn (3 meals/day) */}
-                    <div className="pt-4">
-                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                            <CalendarDays className="w-3 h-3" />
-                            Daily Food Burn (est. 3 meals/day)
-                        </p>
-                        {dailyFoodStats ? (
-                            <div className="flex items-end justify-between gap-3">
-                                <div>
-                                    <p className="text-2xl font-mono font-extrabold text-amber-600 tracking-tight">
-                                        {format(dailyFoodStats.costPerMealEstimate)}
-                                    </p>
-                                    <p className="text-[11px] text-slate-500 mt-1">
-                                        average cost assuming 3 meals a day
-                                    </p>
-                                </div>
-                                <div className="text-[11px] font-mono text-slate-400 text-right">
-                                    {format(dailyFoodStats.totalFoodSpend)}
-                                    <br />
-                                    across {dailyFoodStats.daysElapsed} days
-                                </div>
-                            </div>
-                        ) : (
-                            <p className="text-xs text-slate-500">
-                                Start a budget cycle or log some Food expenses to see your daily burn rate.
-                            </p>
-                        )}
-                    </div>
-                </Card>
             </section>
 
             <section>
@@ -505,14 +534,6 @@ export const InsightsView: React.FC = () => {
                                 <Metric
                                     label="Average"
                                     value={format(filteredAgg.average)}
-                                />
-                                <Metric
-                                    label="Per meal"
-                                    value={
-                                        filteredAgg.costPerMeal !== null
-                                            ? format(filteredAgg.costPerMeal)
-                                            : '—'
-                                    }
                                 />
                             </div>
                         )}
