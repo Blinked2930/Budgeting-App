@@ -13,6 +13,7 @@ import {
     Trash2,
     Pencil,
     Save,
+    CheckCheck,
 } from 'lucide-react';
 import { useDebts } from '../hooks/useDebts';
 import {
@@ -536,6 +537,19 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
         });
     }, [debts]);
 
+    const handleSettleAll = async (
+        group: CounterpartyGroup,
+        paidWith: PaymentSource
+    ) => {
+        // FIFO: settle oldest first
+        const sorted = [...group.openDebts].sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+        for (const d of sorted) {
+            await settleDebtCash(d.id, d.remainingALL, paidWith);
+        }
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -688,6 +702,17 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
 
                                         {isExpanded && (
                                             <div className="px-3 pb-3 space-y-2 border-t border-slate-200 pt-3">
+                                                {hasOpen && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleSettleAll(g, 'Cash')}
+                                                        className="w-full py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                                                    >
+                                                        <CheckCheck className="w-3.5 h-3.5" />
+                                                        Settle all {net < 0 ? 'to' : 'from'} {g.name} in Cash
+                                                    </button>
+                                                )}
+
                                                 {g.openDebts.map((d) => (
                                                     <DebtRow key={d.id} debt={d} />
                                                 ))}

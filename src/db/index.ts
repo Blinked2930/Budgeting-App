@@ -157,6 +157,16 @@ export async function getExpenses(limit?: number): Promise<ExpenseRecord[]> {
 }
 
 export async function deleteExpense(id: string): Promise<void> {
+  const expense = await db.expenses.get(id);
+  if (!expense) return;
+
+  // Cascade: if this expense is linked to a debt, delete the debt too.
+  // deleteDebt() also cleans up any wallet movements linked to that debt.
+  if (expense.debtId) {
+    await deleteDebt(expense.debtId);
+    return;
+  }
+
   await db.expenses.update(id, {
     deleted: true,
     isSynced: false,
@@ -407,8 +417,6 @@ export async function addDebt(data: {
     const myShare = data.myShareAmountALL ?? data.amountALL;
     const fullItemName = data.purchaseDetails.itemName || `Bought by ${record.counterparty}`;
 
-    // We ONLY create one expense (your share). 
-    // The other person's share isn't your expense, so we don't create a record for it.
     await addExpense({
       amount: myShare,
       currency: 'ALL',
@@ -482,7 +490,11 @@ export async function deleteDebt(id: string): Promise<void> {
     .filter((e) => e.debtId === id && !e.deleted)
     .toArray();
   for (const e of linkedExpenses) {
-    await deleteExpense(e.id);
+    await db.expenses.update(e.id, {
+      deleted: true,
+      isSynced: false,
+      updatedAt: new Date().toISOString(),
+    });
   }
 }
 
