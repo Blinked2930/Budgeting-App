@@ -19,8 +19,8 @@ import {
   TriangleAlert,
 } from 'lucide-react';
 import type { ExpenseRecord, Category, TransferRecord } from '../types';
-import { formatCurrency } from '../utils/currency';
 import { deleteExpense, deleteTransfer } from '../db';
+import { useCurrency } from '../hooks/useCurrency';
 import { cn } from '../utils/cn';
 
 interface RecentTransactionsProps {
@@ -99,7 +99,7 @@ function classifyDebtExpense(e: ExpenseRecord): DebtClass | null {
   const isIncome = e.amount < 0;
 
   if (isOrigin) return isIncome ? 'originBorrow' : 'originLend';
-  if (walletNeutral) return null;
+  if (walletNeutral) return null; // We skip these entirely now
   if (name.startsWith('Offset to ')) return 'offsetOut';
   if (isIncome) return 'repaidIn';
 
@@ -119,10 +119,6 @@ const DEBT_META: Record<DebtClass, { badge: string; isWalletNeutral: boolean }> 
 type MergedItem =
   | { kind: 'expense'; record: ExpenseRecord; timestamp: string }
   | { kind: 'transfer'; record: TransferRecord; timestamp: string };
-
-// ---------------------------------------------------------------------------
-// Custom confirmation dialog (replaces window.confirm)
-// ---------------------------------------------------------------------------
 
 interface ConfirmState {
   isOpen: boolean;
@@ -182,8 +178,6 @@ const ConfirmDialog: React.FC<{ state: ConfirmState | null; onClose: () => void 
   );
 };
 
-// ---------------------------------------------------------------------------
-
 export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   expenses,
   transfers = [],
@@ -191,6 +185,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   onEdit,
 }) => {
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const { format, currency } = useCurrency();
 
   const handleDeleteExpense = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -293,7 +288,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
               </h3>
               {group.total > 0 && (
                 <span className="text-[10px] font-mono text-slate-400">
-                  {formatCurrency(group.total, 'ALL')}
+                  {format(group.total)}
                 </span>
               )}
             </div>
@@ -333,7 +328,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                     </div>
                     <div className="flex items-center gap-2 shrink-0 ml-2">
                       <p className="text-sm font-bold font-mono text-amber-700 tracking-tight">
-                        {formatCurrency(t.amountALL, 'ALL')}
+                        {format(t.amountALL)}
                       </p>
                       <div className="flex items-center justify-center w-[26px]">
                         <button
@@ -351,7 +346,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
               }
 
               const expense = item.record;
-              const isForeignCurrency = expense.currency !== 'ALL';
+              const isForeignCurrency = expense.currency !== 'ALL' && currency !== 'ALL' && expense.currency !== currency;
               const isCash = expense.paidWith === 'Cash';
               const debtClass = classifyDebtExpense(expense);
               const debtMeta = debtClass ? DEBT_META[debtClass] : null;
@@ -367,13 +362,11 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
               let amountColor: string;
 
               if (debtClass) {
-                displayAmount = `${isIncome ? '+' : '−'}${formatCurrency(
-                  Math.abs(expense.amount),
-                  expense.currency
-                )}`;
+                // For debts, we use the actual amount and sign
+                displayAmount = `${isIncome ? '+' : '−'}${format(Math.abs(expense.amountInALL))}`;
                 amountColor = isIncome ? 'text-emerald-600' : 'text-rose-600';
               } else {
-                displayAmount = formatCurrency(expense.amount, expense.currency);
+                displayAmount = format(Math.abs(expense.amountInALL));
                 amountColor = expense.amount < 0 ? 'text-emerald-600' : 'text-slate-900';
               }
 
@@ -462,7 +455,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                       </p>
                       {isForeignCurrency && (
                         <p className="text-[10px] font-mono text-emerald-600 font-medium">
-                          ≈ {formatCurrency(expense.amountInALL, 'ALL')}
+                          ≈ {format(expense.amountInALL)}
                         </p>
                       )}
                     </div>

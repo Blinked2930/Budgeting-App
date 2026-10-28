@@ -17,6 +17,7 @@ import { CATEGORIES, type Category, type ExpenseRecord } from '../types';
 import { useExpenses } from '../hooks/useExpenses';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { useDebts } from '../hooks/useDebts';
+import { useCurrency } from '../hooks/useCurrency';
 import { db } from '../db';
 import {
     DEFAULT_FILTERS,
@@ -30,7 +31,6 @@ import {
     monthLabel,
     type InsightFilters,
 } from '../utils/insights';
-import { formatCurrency } from '../utils/currency';
 import { cn } from '../utils/cn';
 import { DebtsPanel } from './DebtsPanel';
 
@@ -62,7 +62,11 @@ const SectionTitle: React.FC<{ icon: React.ReactNode; children: React.ReactNode 
     </div>
 );
 
-const Card: React.FC<{ children: React.ReactNode; className?: string; onClick?: () => void }> = ({ children, className, onClick }) => (
+const Card: React.FC<{
+    children: React.ReactNode;
+    className?: string;
+    onClick?: () => void;
+}> = ({ children, className, onClick }) => (
     <div
         onClick={onClick}
         className={cn(
@@ -116,6 +120,7 @@ const Metric: React.FC<{ label: string; value: string }> = ({ label, value }) =>
 const CategoryBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => {
     const stats = useMemo(() => aggregateByCategory(expenses), [expenses]);
     const paidWith = useMemo(() => aggregatePaidWith(expenses), [expenses]);
+    const { format } = useCurrency();
 
     if (stats.length === 0) {
         return <Card><p className="text-xs text-slate-500">Log some expenses to see where your money went.</p></Card>;
@@ -127,7 +132,7 @@ const CategoryBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }
         <Card className="space-y-3">
             <div className="flex items-baseline justify-between">
                 <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Total</span>
-                <span className="text-base font-mono font-bold text-slate-900">{formatCurrency(grandTotal, 'ALL')}</span>
+                <span className="text-base font-mono font-bold text-slate-900">{format(grandTotal)}</span>
             </div>
 
             <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden flex">
@@ -146,7 +151,7 @@ const CategoryBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }
                         </div>
                         <div className="flex items-center gap-2.5 font-mono shrink-0">
                             <span className="text-[10px] text-slate-400">{c.percent.toFixed(0)}%</span>
-                            <span className="font-bold text-slate-900 text-[11px]">{formatCurrency(c.total, 'ALL')}</span>
+                            <span className="font-bold text-slate-900 text-[11px]">{format(c.total)}</span>
                         </div>
                     </div>
                 ))}
@@ -173,6 +178,7 @@ const CategoryBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }
 
 const VendorBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => {
     const stats = useMemo(() => aggregateByVendor(expenses), [expenses]);
+    const { format } = useCurrency();
 
     if (stats.length === 0) {
         return (
@@ -191,7 +197,7 @@ const VendorBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) 
         <Card className="space-y-3">
             <div className="flex items-baseline justify-between">
                 <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Total</span>
-                <span className="text-base font-mono font-bold text-slate-900">{formatCurrency(grandTotal, 'ALL')}</span>
+                <span className="text-base font-mono font-bold text-slate-900">{format(grandTotal)}</span>
             </div>
 
             <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden flex">
@@ -212,7 +218,7 @@ const VendorBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) 
                             </div>
                             <div className="flex items-center gap-2.5 font-mono shrink-0">
                                 <span className="text-[10px] text-slate-400">{v.percent.toFixed(0)}%</span>
-                                <span className="font-bold text-slate-900 text-[11px]">{formatCurrency(v.total, 'ALL')}</span>
+                                <span className="font-bold text-slate-900 text-[11px]">{format(v.total)}</span>
                             </div>
                         </div>
                     );
@@ -224,6 +230,7 @@ const VendorBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) 
 
 const DebtSummary: React.FC<{ onOpen: () => void }> = ({ onOpen }) => {
     const { openDebts } = useDebts();
+    const { format } = useCurrency();
 
     const totals = useMemo(() => {
         let receivables = 0;
@@ -253,19 +260,19 @@ const DebtSummary: React.FC<{ onOpen: () => void }> = ({ onOpen }) => {
                 <div>
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Owed to you</p>
                     <p className="text-sm font-mono font-bold text-emerald-600 mt-0.5">
-                        {formatCurrency(totals.receivables, 'ALL')}
+                        {format(totals.receivables)}
                     </p>
                 </div>
                 <div>
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">You owe</p>
                     <p className="text-sm font-mono font-bold text-rose-600 mt-0.5">
-                        {formatCurrency(totals.payables, 'ALL')}
+                        {format(totals.payables)}
                     </p>
                 </div>
                 <div>
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Net</p>
                     <p className={cn('text-sm font-mono font-bold mt-0.5', totals.net > 0 ? 'text-emerald-600' : totals.net < 0 ? 'text-rose-600' : 'text-slate-500')}>
-                        {totals.net > 0 ? '+' : ''}{formatCurrency(Math.abs(totals.net), 'ALL')}
+                        {totals.net > 0 ? '+' : ''}{format(Math.abs(totals.net))}
                     </p>
                 </div>
             </div>
@@ -274,6 +281,8 @@ const DebtSummary: React.FC<{ onOpen: () => void }> = ({ onOpen }) => {
 };
 
 const CycleHistorySection: React.FC = () => {
+    const { format } = useCurrency();
+    
     const allCycles = useLiveQuery(
         () => db.budgetCycles.orderBy('startDate').reverse().filter((c) => !c.deleted).toArray(),
         []
@@ -308,7 +317,7 @@ const CycleHistorySection: React.FC = () => {
                             </div>
                             <div className="text-right">
                                 <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Stipend</p>
-                                <p className="text-sm font-mono font-bold text-slate-900">{formatCurrency(cycle.stipendAmountALL, 'ALL')}</p>
+                                <p className="text-sm font-mono font-bold text-slate-900">{format(cycle.stipendAmountALL)}</p>
                             </div>
                         </div>
 
@@ -317,11 +326,11 @@ const CycleHistorySection: React.FC = () => {
                                 <PiggyBank className="w-4 h-4 text-emerald-600 shrink-0" />
                                 <div className="flex-1 min-w-0">
                                     <p className="text-[11px] font-bold text-emerald-800">
-                                        Saved {formatCurrency(surplus, 'ALL')}
+                                        Saved {format(surplus)}
                                     </p>
                                     <div className="flex items-center gap-3 mt-1 text-[10px] text-emerald-700 font-mono">
-                                        <span>Buffer: {formatCurrency(cycle.bufferPoolALL, 'ALL')}</span>
-                                        <span>Travel Stash: {formatCurrency(cycle.travelStashALL, 'ALL')}</span>
+                                        <span>Buffer: {format(cycle.bufferPoolALL)}</span>
+                                        <span>Travel Stash: {format(cycle.travelStashALL)}</span>
                                     </div>
                                 </div>
                             </div>
@@ -336,6 +345,7 @@ const CycleHistorySection: React.FC = () => {
 export const InsightsView: React.FC = () => {
     const { expenses } = useExpenses();
     const { cycle } = useBudgetCycle();
+    const { format } = useCurrency();
     const [filters, setFilters] = useState<InsightFilters>(DEFAULT_FILTERS);
     const [isDebtsOpen, setIsDebtsOpen] = useState(false);
 
@@ -384,20 +394,21 @@ export const InsightsView: React.FC = () => {
                     Cost per meal
                 </SectionTitle>
                 <Card className="space-y-4 divide-y divide-slate-100">
+                    {/* Metric 1: Tagged Average */}
                     <div>
                         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Tagged Average</p>
                         {overall.costPerMeal !== null ? (
                             <div className="flex items-end justify-between gap-3">
                                 <div>
                                     <p className="text-2xl font-mono font-extrabold text-emerald-600 tracking-tight">
-                                        {formatCurrency(overall.costPerMeal, 'ALL')}
+                                        {format(overall.costPerMeal)}
                                     </p>
                                     <p className="text-[11px] text-slate-500 mt-1">
                                         based on {overall.meals} manually tagged meals
                                     </p>
                                 </div>
                                 <p className="text-[11px] font-mono text-slate-400 text-right">
-                                    {formatCurrency(overall.mealSpend, 'ALL')}
+                                    {format(overall.mealSpend)}
                                     <br />
                                     total spend
                                 </p>
@@ -410,6 +421,7 @@ export const InsightsView: React.FC = () => {
                         )}
                     </div>
 
+                    {/* Metric 2: Daily Food Burn (3 meals/day) */}
                     <div className="pt-4">
                         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1.5">
                             <CalendarDays className="w-3 h-3" />
@@ -419,14 +431,14 @@ export const InsightsView: React.FC = () => {
                             <div className="flex items-end justify-between gap-3">
                                 <div>
                                     <p className="text-2xl font-mono font-extrabold text-amber-600 tracking-tight">
-                                        {formatCurrency(dailyFoodStats.costPerMealEstimate, 'ALL')}
+                                        {format(dailyFoodStats.costPerMealEstimate)}
                                     </p>
                                     <p className="text-[11px] text-slate-500 mt-1">
                                         average cost assuming 3 meals a day
                                     </p>
                                 </div>
                                 <div className="text-[11px] font-mono text-slate-400 text-right">
-                                    {formatCurrency(dailyFoodStats.totalFoodSpend, 'ALL')}
+                                    {format(dailyFoodStats.totalFoodSpend)}
                                     <br />
                                     across {dailyFoodStats.daysElapsed} days
                                 </div>
@@ -487,18 +499,18 @@ export const InsightsView: React.FC = () => {
                             <div className="grid grid-cols-2 gap-4">
                                 <Metric
                                     label="Total"
-                                    value={formatCurrency(filteredAgg.total, 'ALL')}
+                                    value={format(filteredAgg.total)}
                                 />
                                 <Metric label="Entries" value={String(filteredAgg.count)} />
                                 <Metric
                                     label="Average"
-                                    value={formatCurrency(filteredAgg.average, 'ALL')}
+                                    value={format(filteredAgg.average)}
                                 />
                                 <Metric
                                     label="Per meal"
                                     value={
                                         filteredAgg.costPerMeal !== null
-                                            ? formatCurrency(filteredAgg.costPerMeal, 'ALL')
+                                            ? format(filteredAgg.costPerMeal)
                                             : '—'
                                     }
                                 />
@@ -507,7 +519,7 @@ export const InsightsView: React.FC = () => {
                     </div>
                 </Card>
                 <p className="text-[10px] text-slate-400 px-1 mt-2">
-                    Totals use each expense's value converted to Lek.
+                    Totals use each expense's value converted to your current currency.
                 </p>
             </section>
 
