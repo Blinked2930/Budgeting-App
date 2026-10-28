@@ -66,6 +66,7 @@ export interface RemoteExpense {
   debtRelated?: boolean;
   walletNeutral?: boolean;
   isDebtOrigin?: boolean;
+  isBigExpense?: boolean;
   timestamp: string;
   updatedAt?: string;
   deleted?: boolean;
@@ -81,6 +82,7 @@ export interface RemoteBudgetCycle {
   startingCashALL?: number;
   bufferPoolALL: number;
   travelStashALL: number;
+  plannedBigExpensesALL?: number;
   updatedAt?: string;
   deleted?: boolean;
 }
@@ -251,6 +253,7 @@ export async function applyRemoteExpenses(remote: RemoteExpense[]): Promise<void
         debtRelated: r.debtRelated,
         walletNeutral: r.walletNeutral,
         isDebtOrigin: r.isDebtOrigin,
+        isBigExpense: r.isBigExpense,
         timestamp: r.timestamp,
         updatedAt: remoteUpdatedAt,
         deleted: r.deleted,
@@ -384,11 +387,11 @@ export async function addDebt(data: {
     counterpartyKey: normalizeKey(data.counterparty),
     direction: data.direction,
     amountALL: data.amountALL,
-    remainingALL: data.amountALL - (data.myShareAmountALL ?? 0),
+    remainingALL: data.amountALL,
     note: data.note,
     status: 'open',
     sourceExpenseId: data.sourceExpenseId,
-    myShareAmountALL: data.myShareAmountALL,
+    myShareAmountALL: data.myShareAmountALL, // <--- CRITICAL FIX: Saves the field so the warning works
     createdAt: data.timestamp ?? now,
     isSynced: false,
     updatedAt: now,
@@ -781,6 +784,7 @@ export async function applyRemoteBudgetCycles(remote: RemoteBudgetCycle[]): Prom
         startingCashALL: r.startingCashALL,
         bufferPoolALL: r.bufferPoolALL,
         travelStashALL: r.travelStashALL,
+        plannedBigExpensesALL: r.plannedBigExpensesALL,
         updatedAt: remoteUpdatedAt,
         deleted: r.deleted,
         isSynced: true,

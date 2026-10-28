@@ -369,6 +369,7 @@ export const QuickEntryView: React.FC = () => {
               counterparty: payerName.trim(),
               direction: 'iOwe',
               amountALL: myShareALL, // The debt is ONLY your share
+              myShareAmountALL: myShareALL,
               purchaseDetails: {
                 category,
                 itemName: itemName.trim() || undefined,
@@ -746,7 +747,7 @@ export const QuickEntryView: React.FC = () => {
 
                 {hasShare && (
                   <p className="text-[10px] text-slate-500 leading-relaxed px-1 pt-0.5">
-                    {payerName || 'They'} paid {formatCurrency(normalizedALL, 'ALL')} total. You owe them {formatCurrency(Math.max(0, normalizedALL - shareAmount), 'ALL')}.
+                    You owe {payerName || 'them'} {formatCurrency(shareAmount, currency)}.
                   </p>
                 )}
               </div>
