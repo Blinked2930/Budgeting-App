@@ -673,6 +673,10 @@ export const BudgetView: React.FC = () => {
     const payables = stats.payablesALL;
     const grandTotal = walletTotal + travelStash + receivables - payables;
 
+    // Progress bar shows actual stipend usage (regular + rent paid)
+    const actualStipend = cycle.stipendAmountALL + cycle.bufferPoolALL;
+    const displayedSpent = stats.spent + stats.bigExpenseSpent;
+
     return (
         <div className="w-full max-w-md mx-auto px-3 sm:px-4 py-4 space-y-3.5">
             {infoModal && <InfoModal title={infoModal.title} description={infoModal.description} onClose={() => setInfoModal(null)} />}
@@ -723,8 +727,8 @@ export const BudgetView: React.FC = () => {
                         />
                     </div>
                     <div className="flex justify-between mt-1.5 text-[10px] font-mono text-slate-400">
-                        <span>{format(stats.spent)} spent</span>
-                        <span>{format(stats.cycleBudget)} budget</span>
+                        <span>{format(displayedSpent)} spent</span>
+                        <span>{format(actualStipend)} total</span>
                     </div>
                 </div>
             </div>

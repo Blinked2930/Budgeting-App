@@ -20,11 +20,15 @@ export function startOfDay(date: Date): Date {
 }
 
 export function addDays(date: Date, days: number): Date {
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d;
 }
 
-export function daysBetween(from: Date, to: Date): number {
-    return Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / MS_PER_DAY);
+export function daysBetween(start: Date, end: Date): number {
+    const startMs = startOfDay(start).getTime();
+    const endMs = startOfDay(end).getTime();
+    return Math.round((endMs - startMs) / MS_PER_DAY);
 }
 
 export interface BudgetStats {
@@ -73,8 +77,8 @@ export function computeBudgetStats(
     const daysElapsed = Math.min(totalDays, Math.max(0, daysBetween(start, today)));
     const dayNumber = Math.min(totalDays, daysElapsed + 1);
 
-    let spent = 0;              // Regular expenses only (excludes Big Expenses, loan settlements)
-    let bigExpenseSpent = 0;    // Track separately
+    let spent = 0;              
+    let bigExpenseSpent = 0;    
     let travelSpent = 0;
     let spentToday = 0;
     let spentBeforeToday = 0;
@@ -87,31 +91,25 @@ export function computeBudgetStats(
         const whenMs = when.getTime();
         if (whenMs < startMs) continue;
 
-        // Wallet tracking (for estimated bank/cash balances)
         if (!e.walletNeutral) {
             if (e.paidWith === 'Cash') cashSpent += e.amountInALL;
             else cardSpent += e.amountInALL;
         }
 
-        // Debt settlements don't count against budget
         if (e.debtRelated) continue;
 
         const budgetImpact = e.budgetAmountALL ?? e.amountInALL;
 
-        // Travel is paid from the stash, not the daily budget
         if (e.category === 'Travel') {
             travelSpent += budgetImpact;
             continue;
         }
 
-        // Big Expenses are tracked separately — they were pre-budgeted
-        // via plannedBigExpensesALL, so we don't subtract them from `spent`.
         if (e.isBigExpense) {
             bigExpenseSpent += budgetImpact;
             continue;
         }
 
-        // Regular budget spending
         spent += budgetImpact;
 
         if (whenMs >= todayMs) {
@@ -132,7 +130,6 @@ export function computeBudgetStats(
         else cashToBank += t.amountALL;
     }
 
-    // Rent is already subtracted from cycleBudget via plannedBigExpensesALL.
     const planned = cycle.plannedBigExpensesALL ?? 0;
     const cycleBudget = cycle.stipendAmountALL + cycle.bufferPoolALL - planned;
     const remaining = cycleBudget - spent;
@@ -163,7 +160,6 @@ export function computeBudgetStats(
     }
     const netOfDebtsALL = receivablesALL - payablesALL;
 
-    // Progress bar = fraction of TOTAL stipend used (regular + rent), not cycle budget
     const baseTotal = cycle.stipendAmountALL + cycle.bufferPoolALL;
     const percentSpent = baseTotal > 0
         ? Math.min(100, ((spent + bigExpenseSpent) / baseTotal) * 100)

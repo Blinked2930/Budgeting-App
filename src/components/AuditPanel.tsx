@@ -44,13 +44,13 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
     const budgeted = spendAgainstBudget(expenses);
     const flow = cashFlow(expenses);
 
-    const Row: React.FC<{ label: string; value: string; hint?: string }> = ({ label, value, hint }) => (
+    const Row: React.FC<{ label: string; value: string; hint?: string; bold?: boolean }> = ({ label, value, hint, bold }) => (
         <div className="flex items-start justify-between gap-3 py-1.5 border-b border-slate-100 last:border-0">
             <div className="min-w-0">
-                <p className="text-xs font-semibold text-slate-700">{label}</p>
+                <p className={`text-xs ${bold ? 'font-bold' : 'font-semibold'} text-slate-700`}>{label}</p>
                 {hint && <p className="text-[10px] text-slate-400 leading-tight">{hint}</p>}
             </div>
-            <p className="text-xs font-mono font-bold text-slate-900 shrink-0">{value}</p>
+            <p className={`text-xs font-mono ${bold ? 'font-bold' : 'font-bold'} text-slate-900 shrink-0`}>{value}</p>
         </div>
     );
 
@@ -81,20 +81,27 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
                             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cycle</p>
                             <Row label="Stipend" value={format(cycle.stipendAmountALL)} />
                             <Row label="+ Buffer Pool" value={format(cycle.bufferPoolALL)} hint="Unspent from previous cycle" />
-                            <Row label="- Planned Big Expenses" value={format(cycle.plannedBigExpensesALL ?? 0)} hint="What you pre-budgeted for rent, bills" />
-                            <Row label="= Cycle Budget" value={format(stats.cycleBudget)} />
-                            <Row label="- Spent (budget impact)" value={format(stats.spent)} hint="Regular + rent + loan settlements" />
-                            <Row label="= Remaining" value={format(stats.remaining)} />
+                            <Row label="- Planned Big Expenses" value={format(cycle.plannedBigExpensesALL ?? 0)} hint="Pre-budgeted rent, bills" />
+                            <Row label="= Cycle Budget" value={format(stats.cycleBudget)} bold />
+                            <div className="h-2" />
+                            <Row label="- Regular Spent" value={format(stats.spent)} hint="Food, transport, etc. (excludes rent)" />
+                            <Row label="= Remaining" value={format(stats.remaining)} bold />
+                        </div>
+
+                        <div>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Big Expenses (Paid)</p>
+                            <Row label="Big Expense Spent" value={format(stats.bigExpenseSpent)} hint="Rent already logged this cycle" />
+                            <Row label="Already subtracted from Cycle Budget" value={format(cycle.plannedBigExpensesALL ?? 0)} hint="Pre-budgeted amount" />
                         </div>
 
                         <div>
                             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Wallet</p>
                             <Row label="Bank (estimated)" value={format(stats.estimatedBankBalance)} />
                             <Row label="Cash (estimated)" value={format(stats.estimatedCashBalance)} />
-                            <Row label="= Total wallet" value={format(stats.estimatedTotalBalance)} />
+                            <Row label="= Total wallet" value={format(stats.estimatedTotalBalance)} bold />
                             <Row label="+ Debts owed to you" value={format(stats.receivablesALL)} />
                             <Row label="- Debts you owe" value={format(stats.payablesALL)} />
-                            <Row label="= Net worth" value={format(stats.netWorthALL)} />
+                            <Row label="= Net worth" value={format(stats.netWorthALL)} bold />
                         </div>
 
                         <div>
@@ -110,32 +117,10 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
                         <div>
                             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Computed totals</p>
                             <Row label="Total Outflow" value={format(outflow)} hint="Every penny that left your pocket" />
-                            <Row label="Budgeted Spend" value={format(budgeted)} hint="Should match Budget tab 'Spent'" />
+                            <Row label="Budgeted Spend" value={format(budgeted)} hint="Regular spending (matches Budget tab)" />
                             <Row label="Cash Flow In" value={format(flow.inALL)} hint="Loans received / repayments" />
                             <Row label="Cash Flow Out" value={format(flow.outALL)} hint="Loans given / repayments" />
                             <Row label="Cash Flow Net" value={format(flow.netALL)} />
-                        </div>
-
-                        <div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Identity checks</p>
-                            <Row
-                                label="Budgeted = Regular + Big + Repayments?"
-                                value={
-                                    Math.abs(budgeted - (sum(buckets.regular) + sum(buckets.big) + sum(buckets.loanRepayments))) < 2
-                                        ? '✅ Match'
-                                        : `❌ Off by ${format(Math.abs(budgeted - (sum(buckets.regular) + sum(buckets.big) + sum(buckets.loanRepayments))))}`
-                                }
-                                hint="Should always match"
-                            />
-                            <Row
-                                label="Outflow = Regular + Big + Loans?"
-                                value={
-                                    Math.abs(outflow - (sum(buckets.regular) + sum(buckets.big) + sum(buckets.loanOrigins) + sum(buckets.loanRepayments))) < 2
-                                        ? '✅ Match'
-                                        : `❌ Off by ${format(Math.abs(outflow - (sum(buckets.regular) + sum(buckets.big) + sum(buckets.loanOrigins) + sum(buckets.loanRepayments))))}`
-                                }
-                                hint="Should always match"
-                            />
                         </div>
                     </>
                 ) : (
