@@ -32,6 +32,14 @@ import {
 import { cn } from '../utils/cn';
 import { DebtsPanel } from './DebtsPanel';
 
+type TimeScope = 'cycle' | '30d' | 'all';
+
+const SCOPES: { id: TimeScope; label: string }[] = [
+    { id: 'cycle', label: 'This Cycle' },
+    { id: '30d', label: 'Last 30 Days' },
+    { id: 'all', label: 'All Time' },
+];
+
 const CATEGORY_COLORS: Record<Category, { bar: string; text: string; dot: string }> = {
     Food: { bar: 'bg-emerald-400', text: 'text-emerald-700', dot: 'bg-emerald-400' },
     Utilities: { bar: 'bg-amber-400', text: 'text-amber-700', dot: 'bg-amber-400' },
@@ -145,10 +153,6 @@ const CategoryBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }
     );
 };
 
-/**
- * NEW INSIGHT 1: Spend Pace vs. Budget
- * Compares actual spent vs. daily-pace-projected spent so far in the cycle.
- */
 const SpendPaceCard: React.FC = () => {
     const { stats } = useBudgetCycle();
     const { format } = useCurrency();
@@ -166,8 +170,6 @@ const SpendPaceCard: React.FC = () => {
     const projectedByNow = (stats.cycleBudget / daysTotal) * daysElapsed;
     const pace = projectedByNow > 0 ? (stats.spent / projectedByNow) * 100 : 0;
     const isOverPace = pace > 100;
-    
-    // A simple visual bar showing progress
     const barWidth = Math.min(100, Math.max(0, pace));
 
     return (
@@ -194,9 +196,7 @@ const SpendPaceCard: React.FC = () => {
 
             <div className="space-y-1.5">
                 <div className="h-2 rounded-full bg-slate-100 overflow-hidden relative">
-                    {/* The pace marker */}
                     <div className="absolute top-0 bottom-0 w-px bg-slate-400 z-10" style={{ left: `${(daysElapsed / daysTotal) * 100}%` }} />
-                    {/* The actual spend bar */}
                     <div
                         className={cn('h-full rounded-full transition-all', isOverPace ? 'bg-rose-500' : 'bg-emerald-500')}
                         style={{ width: `${barWidth}%` }}
@@ -211,10 +211,6 @@ const SpendPaceCard: React.FC = () => {
     );
 };
 
-/**
- * NEW INSIGHT 2: Cash vs Card behaviour
- * Useful for finding spending leaks (e.g. "I spend way more with card").
- */
 const PaymentBehaviorCard: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => {
     const paidWith = useMemo(() => aggregatePaidWith(expenses), [expenses]);
     const { format } = useCurrency();
@@ -261,13 +257,9 @@ const PaymentBehaviorCard: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses
     );
 };
 
-/**
- * NEW INSIGHT 3: Cash Flow
- * Money in vs. money out.
- */
 const CashFlowCard: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => {
     const { format } = useCurrency();
-    
+
     const moneyIn = useMemo(() => {
         return expenses
             .filter((e) => !e.deleted && e.amount > 0 && !e.walletNeutral)
@@ -290,7 +282,7 @@ const CashFlowCard: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }) => 
                     {net > 0 ? '+' : ''}{format(net)}
                 </span>
             </div>
-            
+
             <div className="grid grid-cols-2 gap-3">
                 <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-100">
                     <div className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 uppercase tracking-wider mb-1">
@@ -427,15 +419,48 @@ const CycleHistorySection: React.FC = () => {
     );
 };
 
+function filterByScope(
+    expenses: ExpenseRecord[],
+    scope: TimeScope,
+    cycleStart?: string
+): ExpenseRecord[] {
+    const now = Date.now();
+
+    return expenses.filter((e) => {
+        if (e.deleted) return false;
+        const when = new Date(e.timestamp).getTime();
+
+        if (scope === 'all') return true;
+
+        if (scope === '30d') {
+            return now - when <= 30 * 24 * 60 * 60 * 1000;
+        }
+
+        // cycle
+        if (cycleStart) {
+            const cycleMs = new Date(cycleStart).getTime();
+            return when >= cycleMs;
+        }
+        return true;
+    });
+}
+
 export const InsightsView: React.FC = () => {
     const { expenses } = useExpenses();
+    const { cycle } = useBudgetCycle();
     const { format } = useCurrency();
+    const [timeScope, setTimeScope] = useState<TimeScope>('cycle');
     const [filters, setFilters] = useState<InsightFilters>(DEFAULT_FILTERS);
     const [isDebtsOpen, setIsDebtsOpen] = useState(false);
 
-    const filtered = useMemo(() => filterExpenses(expenses, filters), [expenses, filters]);
+    const scopedExpenses = useMemo(
+        () => filterByScope(expenses, timeScope, cycle?.startDate),
+        [expenses, timeScope, cycle?.startDate]
+    );
+
+    const filtered = useMemo(() => filterExpenses(scopedExpenses, filters), [scopedExpenses, filters]);
     const filteredAgg = useMemo(() => aggregate(filtered), [filtered]);
-    const monthOptions = useMemo(() => getMonthOptions(expenses), [expenses]);
+    const monthOptions = useMemo(() => getMonthOptions(scopedExpenses), [scopedExpenses]);
 
     const update = (key: keyof InsightFilters) => (value: string) =>
         setFilters((prev) => ({ ...prev, [key]: value }));
@@ -445,6 +470,30 @@ export const InsightsView: React.FC = () => {
     return (
         <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
             <DebtsPanel isOpen={isDebtsOpen} onClose={() => setIsDebtsOpen(false)} />
+
+            {/* Sticky Time Scope Toggle — has its own vertical padding to prevent clipping */}
+            <div className="sticky top-0 -mx-4 px-4 pt-3 pb-3 bg-slate-50/95 backdrop-blur-md z-10 border-b border-slate-200/60">
+                <div className="flex items-center p-1 rounded-2xl bg-slate-100 border border-slate-200">
+                    {SCOPES.map((s) => {
+                        const active = timeScope === s.id;
+                        return (
+                            <button
+                                key={s.id}
+                                type="button"
+                                onClick={() => setTimeScope(s.id)}
+                                className={cn(
+                                    'flex-1 py-2 rounded-xl text-[11px] font-semibold transition-colors cursor-pointer',
+                                    active
+                                        ? 'bg-white text-emerald-700 shadow-sm'
+                                        : 'text-slate-500 hover:text-slate-700'
+                                )}
+                            >
+                                {s.label}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
 
             <section>
                 <SectionTitle icon={<HandCoins className="w-3.5 h-3.5 text-slate-400" />}>
@@ -464,21 +513,21 @@ export const InsightsView: React.FC = () => {
                 <SectionTitle icon={<Banknote className="w-3.5 h-3.5 text-slate-400" />}>
                     Cash vs Card
                 </SectionTitle>
-                <PaymentBehaviorCard expenses={expenses} />
+                <PaymentBehaviorCard expenses={scopedExpenses} />
             </section>
 
             <section>
                 <SectionTitle icon={<ArrowRightLeft className="w-3.5 h-3.5 text-slate-400" />}>
                     Cash Flow
                 </SectionTitle>
-                <CashFlowCard expenses={expenses} />
+                <CashFlowCard expenses={scopedExpenses} />
             </section>
 
             <section>
                 <SectionTitle icon={<PieChart className="w-3.5 h-3.5 text-slate-400" />}>
                     Where your money went
                 </SectionTitle>
-                <CategoryBreakdown expenses={expenses} />
+                <CategoryBreakdown expenses={scopedExpenses} />
             </section>
 
             <section>
@@ -526,15 +575,9 @@ export const InsightsView: React.FC = () => {
                             </p>
                         ) : (
                             <div className="grid grid-cols-2 gap-4">
-                                <Metric
-                                    label="Total"
-                                    value={format(filteredAgg.total)}
-                                />
+                                <Metric label="Total" value={format(filteredAgg.total)} />
                                 <Metric label="Entries" value={String(filteredAgg.count)} />
-                                <Metric
-                                    label="Average"
-                                    value={format(filteredAgg.average)}
-                                />
+                                <Metric label="Average" value={format(filteredAgg.average)} />
                             </div>
                         )}
                     </div>

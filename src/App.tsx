@@ -10,7 +10,6 @@ export function App() {
   const [tab, setTab] = useState<Tab>('log');
   const mainRef = useRef<HTMLElement>(null);
 
-  // Reset scroll to top whenever the tab changes
   useEffect(() => {
     if (mainRef.current) {
       mainRef.current.scrollTo(0, 0);
@@ -21,7 +20,8 @@ export function App() {
     <div className="h-[100dvh] bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-emerald-500/20 selection:text-emerald-900 overflow-hidden">
       <main
         ref={mainRef}
-        className="flex-1 overflow-y-auto overscroll-none pb-[90px]"
+        className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pb-[90px]"
+        style={{ WebkitOverflowScrolling: 'touch' }}
       >
         <div className={tab === 'log' ? 'block' : 'hidden'}><QuickEntryView /></div>
         <div className={tab === 'budget' ? 'block' : 'hidden'}><BudgetView /></div>
