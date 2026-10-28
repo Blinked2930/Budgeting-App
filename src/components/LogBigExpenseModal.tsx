@@ -1,9 +1,9 @@
 // src/components/LogBigExpenseModal.tsx
 import React, { useState } from 'react';
-import { X, TriangleAlert, Check } from 'lucide-react';
+import { X, TriangleAlert, Check, Building2, Zap, Wifi, Shield, MoreHorizontal } from 'lucide-react';
 import { addExpense } from '../db';
 import { useCurrency } from '../hooks/useCurrency';
-import { CATEGORIES, type Category } from '../types';
+import type { Category } from '../types';
 import { dateToNoonISO, toDateInputValue } from '../utils/budget';
 import { convertToALL } from '../utils/currency';
 import { cn } from '../utils/cn';
@@ -19,6 +19,14 @@ interface LogBigExpenseModalProps {
 const inputClass =
     'w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors';
 
+const BIG_EXPENSE_PRESETS: { label: string; icon: React.ReactNode; category: Category }[] = [
+    { label: 'Rent', icon: <Building2 className="w-3.5 h-3.5" />, category: 'Utilities' },
+    { label: 'Utilities', icon: <Zap className="w-3.5 h-3.5" />, category: 'Utilities' },
+    { label: 'Phone/Internet', icon: <Wifi className="w-3.5 h-3.5" />, category: 'Utilities' },
+    { label: 'Insurance', icon: <Shield className="w-3.5 h-3.5" />, category: 'Other' },
+    { label: 'Other', icon: <MoreHorizontal className="w-3.5 h-3.5" />, category: 'Other' },
+];
+
 export const LogBigExpenseModal: React.FC<LogBigExpenseModalProps> = ({
     isOpen,
     onClose,
@@ -31,7 +39,7 @@ export const LogBigExpenseModal: React.FC<LogBigExpenseModalProps> = ({
 
     // Pre-fill with whatever is left to pay
     const [amountStr, setAmountStr] = useState(String(Math.max(0, plannedTotal - alreadyPaid) || defaultAmount));
-    const [label, setLabel] = useState('');
+    const [label, setLabel] = useState('Rent');
     const [category, setCategory] = useState<Category>('Utilities');
     const [dateOverride, setDateOverride] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -44,6 +52,11 @@ export const LogBigExpenseModal: React.FC<LogBigExpenseModalProps> = ({
     const newTotalPaid = alreadyPaid + normalizedALL;
     const overpaid = newTotalPaid > plannedTotal;
     const overpayAmount = newTotalPaid - plannedTotal;
+
+    const handlePresetSelect = (presetLabel: string, presetCategory: Category) => {
+        setLabel(presetLabel);
+        setCategory(presetCategory);
+    };
 
     const handleSave = async () => {
         setError(null);
@@ -69,7 +82,8 @@ export const LogBigExpenseModal: React.FC<LogBigExpenseModalProps> = ({
                 timestamp,
             });
             setAmountStr('');
-            setLabel('');
+            setLabel('Rent');
+            setCategory('Utilities');
             setIsSaving(false);
             onClose();
         } catch (err) {
@@ -100,47 +114,58 @@ export const LogBigExpenseModal: React.FC<LogBigExpenseModalProps> = ({
                 </div>
 
                 <div>
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Quick Select
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                        {BIG_EXPENSE_PRESETS.map((preset) => {
+                            const isSelected = label === preset.label;
+                            return (
+                                <button
+                                    key={preset.label}
+                                    type="button"
+                                    onClick={() => handlePresetSelect(preset.label, preset.category)}
+                                    className={cn(
+                                        'flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-[11px] font-semibold transition-colors cursor-pointer',
+                                        isSelected
+                                            ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                                            : 'bg-white border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300'
+                                    )}
+                                >
+                                    {preset.icon}
+                                    {preset.label}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                <div>
                     <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                        Label
+                        Custom Label
                     </label>
                     <input
                         type="text"
                         value={label}
                         onChange={(e) => setLabel(e.target.value)}
-                        placeholder="Rent, Utilities, Insurance…"
-                        className={inputClass}
+                        placeholder="e.g. Rent"
+                        className={inputClass + ' !font-sans'}
                     />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                    <div>
-                        <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                            Amount ({currency})
-                        </label>
-                        <input
-                            type="number"
-                            inputMode="decimal"
-                            step="any"
-                            value={amountStr}
-                            onChange={(e) => setAmountStr(e.target.value)}
-                            placeholder="0"
-                            className={inputClass}
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                            Category
-                        </label>
-                        <select
-                            value={category}
-                            onChange={(e) => setCategory(e.target.value as Category)}
-                            className={inputClass + ' appearance-none cursor-pointer'}
-                        >
-                            {CATEGORIES.map((c) => (
-                                <option key={c} value={c}>{c}</option>
-                            ))}
-                        </select>
-                    </div>
+                <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Amount ({currency})
+                    </label>
+                    <input
+                        type="number"
+                        inputMode="decimal"
+                        step="any"
+                        value={amountStr}
+                        onChange={(e) => setAmountStr(e.target.value)}
+                        placeholder="0"
+                        className={inputClass}
+                    />
                 </div>
 
                 <div>
