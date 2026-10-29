@@ -11,6 +11,7 @@
 import type * as budgetCycles from "../budgetCycles.js";
 import type * as debts from "../debts.js";
 import type * as expenses from "../expenses.js";
+import type * as groups from "../groups.js";
 import type * as migrations from "../migrations.js";
 import type * as transfers from "../transfers.js";
 
@@ -24,6 +25,7 @@ declare const fullApi: ApiFromModules<{
   budgetCycles: typeof budgetCycles;
   debts: typeof debts;
   expenses: typeof expenses;
+  groups: typeof groups;
   migrations: typeof migrations;
   transfers: typeof transfers;
 }>;

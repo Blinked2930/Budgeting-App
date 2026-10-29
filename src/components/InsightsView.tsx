@@ -32,6 +32,7 @@ import {
     monthLabel,
     type InsightFilters,
 } from '../utils/insights';
+import { parseLocalDate } from '../utils/budget';
 import { cn } from '../utils/cn';
 import { DebtsPanel } from './DebtsPanel';
 
@@ -156,7 +157,7 @@ const CategoryBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }
     );
 };
 
-const SpendPaceCard: React.FC = () => {
+const SpendPaceCard: React.FC<{ timeScope: TimeScope }> = ({ timeScope }) => {
     const { stats } = useBudgetCycle();
     const { format } = useCurrency();
 
@@ -179,7 +180,14 @@ const SpendPaceCard: React.FC = () => {
         <Card className="space-y-3">
             <div className="flex items-start justify-between">
                 <div>
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Pace</p>
+                    <div className="flex items-center gap-1.5">
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Pace</p>
+                        {timeScope !== 'cycle' && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 font-medium">
+                                Current cycle
+                            </span>
+                        )}
+                    </div>
                     <p className={cn(
                         'text-lg font-mono font-bold mt-0.5 flex items-center gap-1',
                         isOverPace ? 'text-rose-600' : 'text-emerald-600'
@@ -429,7 +437,7 @@ function filterByScope(
         }
 
         if (cycleStart) {
-            const cycleMs = new Date(cycleStart).getTime();
+            const cycleMs = parseLocalDate(cycleStart).getTime();
             return when >= cycleMs;
         }
         return true;
@@ -498,7 +506,7 @@ export const InsightsView: React.FC = () => {
                 <SectionTitle icon={<TrendingUp className="w-3.5 h-3.5 text-slate-400" />}>
                     Spend Pace
                 </SectionTitle>
-                <SpendPaceCard />
+                <SpendPaceCard timeScope={timeScope} />
             </section>
 
             <section>
@@ -511,7 +519,11 @@ export const InsightsView: React.FC = () => {
                         <span className="text-lg font-mono font-bold text-slate-900">{format(spendBudget)}</span>
                     </div>
                     <p className="text-[10px] text-slate-500 leading-relaxed">
-                        Regular consumption this cycle (matches the "spent" number on the Budget tab). Excludes rent, loans, and reconciliation corrections.
+                        {timeScope === 'cycle'
+                            ? 'Regular consumption this cycle (matches the "spent" number on the Budget tab). Excludes rent, loans, and reconciliation corrections.'
+                            : timeScope === '30d'
+                                ? 'Regular consumption across the last 30 days. Excludes rent, loans, and reconciliation corrections.'
+                                : 'Regular consumption across all logged time. Excludes rent, loans, and reconciliation corrections.'}
                     </p>
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                         <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Total outflow</span>

@@ -77,4 +77,66 @@ export default defineSchema({
     })
         .index("by_localId", ["localId"])
         .index("by_userId", ["userId"]),
+
+    // ---------- Shared Tricount / Split Tables ----------
+
+    groups: defineTable({
+        name: v.string(),
+        currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+        description: v.optional(v.string()),
+        createdBy: v.string(),
+        createdAt: v.string(),
+        updatedAt: v.optional(v.string()),
+        deleted: v.optional(v.boolean()),
+    })
+        .index("by_createdBy", ["createdBy"]),
+
+    groupMembers: defineTable({
+        groupId: v.string(),
+        userId: v.optional(v.string()),
+        name: v.string(),
+        email: v.optional(v.string()),
+        avatarUrl: v.optional(v.string()),
+        joinedAt: v.string(),
+    })
+        .index("by_groupId", ["groupId"])
+        .index("by_userId", ["userId"]),
+
+    groupExpenses: defineTable({
+        groupId: v.string(),
+        title: v.string(),
+        amount: v.number(),
+        currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+        amountInALL: v.number(),
+        category: v.optional(v.string()),
+        paidByMemberId: v.string(),
+        paidByUserId: v.optional(v.string()),
+        splitType: v.union(v.literal("equal"), v.literal("exact"), v.literal("shares")),
+        splits: v.array(
+            v.object({
+                memberId: v.string(),
+                userId: v.optional(v.string()),
+                amountALL: v.number(),
+            })
+        ),
+        timestamp: v.string(),
+        createdAt: v.string(),
+        updatedAt: v.optional(v.string()),
+        deleted: v.optional(v.boolean()),
+    })
+        .index("by_groupId", ["groupId"]),
+
+    groupSettlements: defineTable({
+        groupId: v.string(),
+        fromMemberId: v.string(),
+        toMemberId: v.string(),
+        fromUserId: v.optional(v.string()),
+        toUserId: v.optional(v.string()),
+        amountALL: v.number(),
+        currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+        timestamp: v.string(),
+        createdAt: v.string(),
+        deleted: v.optional(v.boolean()),
+    })
+        .index("by_groupId", ["groupId"]),
 });
