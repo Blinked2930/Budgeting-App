@@ -11,16 +11,12 @@ export const getMyGroups = query({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    const userId = identity?.subject ?? args.userId;
+    const userId = identity?.subject ?? args.userId ?? "anonymous";
 
-    if (!userId) {
-      return [];
-    }
-
-    const memberRecords = await ctx.db
-      .query("groupMembers")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .collect();
+    const allMembers = await ctx.db.query("groupMembers").collect();
+    const memberRecords = allMembers.filter(
+      (m) => m.userId === userId || (!m.userId && userId === "anonymous")
+    );
 
     const groupIds = memberRecords.map((m) => m.groupId);
 
@@ -50,19 +46,27 @@ export const getGroupDetails = query({
 
     const members = await ctx.db
       .query("groupMembers")
-      .withIndex("by_groupId", (q) => q.eq("groupId", args.groupId))
+      .filter((q) => q.eq(q.field("groupId"), args.groupId))
       .collect();
 
     const expenses = await ctx.db
       .query("groupExpenses")
-      .withIndex("by_groupId", (q) => q.eq("groupId", args.groupId))
-      .filter((q) => q.neq(q.field("deleted"), true))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("groupId"), args.groupId),
+          q.neq(q.field("deleted"), true)
+        )
+      )
       .collect();
 
     const settlements = await ctx.db
       .query("groupSettlements")
-      .withIndex("by_groupId", (q) => q.eq("groupId", args.groupId))
-      .filter((q) => q.neq(q.field("deleted"), true))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("groupId"), args.groupId),
+          q.neq(q.field("deleted"), true)
+        )
+      )
       .collect();
 
     return {
@@ -80,14 +84,12 @@ export const getActivityFeed = query({
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    const userId = identity?.subject ?? args.userId;
+    const userId = identity?.subject ?? args.userId ?? "anonymous";
 
-    if (!userId) return [];
-
-    const memberRecords = await ctx.db
-      .query("groupMembers")
-      .withIndex("by_userId", (q) => q.eq("userId", userId))
-      .collect();
+    const allMembers = await ctx.db.query("groupMembers").collect();
+    const memberRecords = allMembers.filter(
+      (m) => m.userId === userId || (!m.userId && userId === "anonymous")
+    );
 
     const groupIds = memberRecords.map((m) => m.groupId);
 
@@ -109,15 +111,19 @@ export const getActivityFeed = query({
 
       const members = await ctx.db
         .query("groupMembers")
-        .withIndex("by_groupId", (q) => q.eq("groupId", groupId))
+        .filter((q) => q.eq(q.field("groupId"), groupId))
         .collect();
 
       const memberMap = new Map(members.map((m) => [m._id, m.name]));
 
       const expenses = await ctx.db
         .query("groupExpenses")
-        .withIndex("by_groupId", (q) => q.eq("groupId", groupId))
-        .filter((q) => q.neq(q.field("deleted"), true))
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("groupId"), groupId),
+            q.neq(q.field("deleted"), true)
+          )
+        )
         .collect();
 
       for (const exp of expenses) {
@@ -136,8 +142,12 @@ export const getActivityFeed = query({
 
       const settlements = await ctx.db
         .query("groupSettlements")
-        .withIndex("by_groupId", (q) => q.eq("groupId", groupId))
-        .filter((q) => q.neq(q.field("deleted"), true))
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("groupId"), groupId),
+            q.neq(q.field("deleted"), true)
+          )
+        )
         .collect();
 
       for (const set of settlements) {
@@ -178,18 +188,29 @@ export const createGroup = mutation({
     const userId = identity?.subject ?? "anonymous";
     const now = Date.now();
 
-    const groupId = await ctx.db.insert("groups", {
+    const groupData: {
+      name: string;
+      currency: "ALL" | "EUR" | "USD";
+      description?: string;
+      createdBy: string;
+      createdAt: number;
+    } = {
       name: args.name,
       currency: args.currency,
-      description: args.description,
       createdBy: userId,
       createdAt: now,
-    });
+    };
+
+    if (args.description?.trim()) {
+      groupData.description = args.description.trim();
+    }
+
+    const groupId = await ctx.db.insert("groups", groupData);
 
     const creatorMemberId = await ctx.db.insert("groupMembers", {
       groupId,
       userId,
-      name: args.memberName,
+      name: args.memberName.trim(),
       joinedAt: now,
     });
 
@@ -198,6 +219,7 @@ export const createGroup = mutation({
         if (name.trim()) {
           await ctx.db.insert("groupMembers", {
             groupId,
+            userId: "anonymous",
             name: name.trim(),
             joinedAt: now,
           });
@@ -224,21 +246,24 @@ export const joinGroup = mutation({
       throw new Error("Group not found");
     }
 
-    const existingMember = await ctx.db
+    const existingMembers = await ctx.db
       .query("groupMembers")
-      .withIndex("by_groupId_and_userId", (q) =>
-        q.eq("groupId", args.groupId).eq("userId", userId)
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("groupId"), args.groupId),
+          q.eq(q.field("userId"), userId)
+        )
       )
-      .first();
+      .collect();
 
-    if (existingMember) {
-      return { groupId: args.groupId, memberId: existingMember._id };
+    if (existingMembers.length > 0) {
+      return { groupId: args.groupId, memberId: existingMembers[0]._id };
     }
 
     const memberId = await ctx.db.insert("groupMembers", {
       groupId: args.groupId,
       userId,
-      name: args.memberName,
+      name: args.memberName.trim(),
       joinedAt: now,
     });
 
@@ -258,9 +283,9 @@ export const addMember = mutation({
 
     const memberId = await ctx.db.insert("groupMembers", {
       groupId: args.groupId,
-      name: args.name,
+      name: args.name.trim(),
       email: args.email,
-      userId: args.userId,
+      userId: args.userId ?? "anonymous",
       joinedAt: now,
     });
 
