@@ -75,6 +75,13 @@ export interface ExpenseRecord {
    */
   isBigExpense?: boolean;
 
+  /**
+   * True when this entry represents a debt that was forgiven. Counts as
+   * an expense (the money is gone) even though no wallet moved.
+   * Paired with walletNeutral: true.
+   */
+  isForgiveness?: boolean;
+
   isSynced: boolean;
   updatedAt?: string;
   deleted?: boolean;

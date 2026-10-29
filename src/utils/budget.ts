@@ -32,29 +32,47 @@ export function daysBetween(start: Date, end: Date): number {
 }
 
 export interface BudgetStats {
+    // ---- BUDGET VIEW ----
     cycleBudget: number;
-    spent: number;
-    bigExpenseSpent: number;
-    travelSpent: number;
+    consumed: number;           // regular consumption + forgiven gifts
+    forgivenSpent: number;      // portion of `consumed` from write-offs (for display)
     remaining: number;
-    percentSpent: number;
+    percentConsumed: number;
+
+    // ---- BIG EXPENSES ----
+    plannedBig: number;
+    bigExpenseSpent: number;
+
+    // ---- TRAVEL ----
+    travelSpent: number;
+    travelStashBalance: number;
+
+    // ---- DAILY MATH ----
     totalDays: number;
     daysLeft: number;
     dayNumber: number;
     isPaydayReached: boolean;
     dailyAllowance: number;
-    spentToday: number;
+    consumedToday: number;
     leftToday: number;
     bufferPool: number;
-    travelStashBalance: number;
-    projectedSurplus: number;
+
+    // ---- WALLET VIEW ----
     estimatedBankBalance: number;
     estimatedCashBalance: number;
-    estimatedTotalBalance: number;
+    walletTotal: number;
+
+    // ---- DEBTS ----
     receivablesALL: number;
     payablesALL: number;
     netOfDebtsALL: number;
     netWorthALL: number;
+
+    // ---- COMPAT ALIASES ----
+    spent: number;              // = consumed
+    spentToday: number;         // = consumedToday
+    estimatedTotalBalance: number;
+    projectedSurplus: number;
 }
 
 export function computeBudgetStats(
@@ -77,46 +95,63 @@ export function computeBudgetStats(
     const daysElapsed = Math.min(totalDays, Math.max(0, daysBetween(start, today)));
     const dayNumber = Math.min(totalDays, daysElapsed + 1);
 
-    let spent = 0;              
-    let bigExpenseSpent = 0;    
+    let consumed = 0;
+    let forgivenSpent = 0;
+    let bigExpenseSpent = 0;
     let travelSpent = 0;
-    let spentToday = 0;
-    let spentBeforeToday = 0;
-    let cardSpent = 0;
-    let cashSpent = 0;
+    let consumedToday = 0;
+    let consumedBeforeToday = 0;
+
+    // Wallet movement per pocket (for reconciliation)
+    let cashDelta = 0;   // money in - money out for CASH
+    let cardDelta = 0;   // money in - money out for CARD
 
     for (const e of expenses) {
         if (e.deleted) continue;
-        const when = new Date(e.timestamp);
-        const whenMs = when.getTime();
+        const whenMs = new Date(e.timestamp).getTime();
         if (whenMs < startMs) continue;
 
+        // ---- WALLET MOVEMENT ----
+        // Only count entries that actually touched a wallet.
+        // walletNeutral entries do not move money. Signed amount:
+        // positive = outflow, negative = inflow.
         if (!e.walletNeutral) {
-            if (e.paidWith === 'Cash') cashSpent += e.amountInALL;
-            else cardSpent += e.amountInALL;
+            const amt = e.amountInALL;
+            if (e.paidWith === 'Cash') cashDelta -= amt;
+            else cardDelta -= amt;
         }
 
-        if (e.debtRelated) continue;
+        // ---- EXPENSE BUCKETS ----
+        // Loans and offsets are not consumption.
+        const isLoan = e.debtRelated || e.isDebtOrigin;
+        if (isLoan) continue;
 
+        // Travel is paid from stash, not daily budget.
         const budgetImpact = e.budgetAmountALL ?? e.amountInALL;
-
         if (e.category === 'Travel') {
             travelSpent += budgetImpact;
             continue;
         }
 
+        // Big Expenses are pre-budgeted separately.
         if (e.isBigExpense) {
             bigExpenseSpent += budgetImpact;
             continue;
         }
 
-        spent += budgetImpact;
-
-        if (whenMs >= todayMs) {
-            spentToday += budgetImpact;
-        } else {
-            spentBeforeToday += budgetImpact;
+        // Forgiveness = money gone without wallet movement. Counts as expense.
+        if (e.isForgiveness) {
+            consumed += budgetImpact;
+            forgivenSpent += budgetImpact;
+            if (whenMs >= todayMs) consumedToday += budgetImpact;
+            else consumedBeforeToday += budgetImpact;
+            continue;
         }
+
+        // Regular consumption (including genuine gifts you paid for).
+        consumed += budgetImpact;
+        if (whenMs >= todayMs) consumedToday += budgetImpact;
+        else consumedBeforeToday += budgetImpact;
     }
 
     let bankToCash = 0;
@@ -125,32 +160,39 @@ export function computeBudgetStats(
         if (t.deleted) continue;
         const whenMs = new Date(t.timestamp).getTime();
         if (whenMs < startMs) continue;
-
-        if (t.direction === 'BankToCash') bankToCash += t.amountALL;
-        else cashToBank += t.amountALL;
+        if (t.direction === 'BankToCash') {
+            bankToCash += t.amountALL;
+            cashDelta += t.amountALL;
+            cardDelta -= t.amountALL;
+        } else {
+            cashToBank += t.amountALL;
+            cashDelta -= t.amountALL;
+            cardDelta += t.amountALL;
+        }
     }
 
-    const planned = cycle.plannedBigExpensesALL ?? 0;
-    const cycleBudget = cycle.stipendAmountALL + cycle.bufferPoolALL - planned;
-    const remaining = cycleBudget - spent;
+    // ---- BUDGET VIEW ----
+    const plannedBig = cycle.plannedBigExpensesALL ?? 0;
+    const cycleBudget = cycle.stipendAmountALL + cycle.bufferPoolALL - plannedBig;
+    const remaining = cycleBudget - consumed;
+    const percentConsumed = cycleBudget > 0
+        ? Math.min(100, (consumed / cycleBudget) * 100)
+        : 0;
 
+    // ---- DAILY MATH ----
     const baseDaily = cycleBudget / totalDays;
-    const rawAllowance = (remaining + spentToday) / daysLeft;
+    const rawAllowance = (remaining + consumedToday) / daysLeft;
     const dailyAllowance = Math.min(baseDaily, rawAllowance);
-    const leftToday = dailyAllowance - spentToday;
+    const leftToday = dailyAllowance - consumedToday;
+    const bufferPool = Math.max(0, baseDaily * daysElapsed - consumedBeforeToday);
 
-    const bufferPool = Math.max(0, baseDaily * daysElapsed - spentBeforeToday);
-
+    // ---- WALLET VIEW ----
     const startingCash = cycle.startingCashALL ?? 0;
-    const estimatedBankBalance =
-        cycle.startingRaiffeisenBalanceALL +
-        cycle.stipendAmountALL -
-        cardSpent -
-        bankToCash +
-        cashToBank;
-    const estimatedCashBalance =
-        startingCash - cashSpent - cashToBank + bankToCash;
+    const estimatedBankBalance = cycle.startingRaiffeisenBalanceALL + cycle.stipendAmountALL + cardDelta;
+    const estimatedCashBalance = startingCash + cashDelta;
+    const walletTotal = estimatedBankBalance + estimatedCashBalance;
 
+    // ---- DEBTS ----
     let receivablesALL = 0;
     let payablesALL = 0;
     for (const d of debts) {
@@ -159,36 +201,43 @@ export function computeBudgetStats(
         else payablesALL += d.remainingALL;
     }
     const netOfDebtsALL = receivablesALL - payablesALL;
-
-    const baseTotal = cycle.stipendAmountALL + cycle.bufferPoolALL;
-    const percentSpent = baseTotal > 0
-        ? Math.min(100, ((spent + bigExpenseSpent) / baseTotal) * 100)
-        : 0;
+    const travelStashBalance = cycle.travelStashALL - travelSpent;
 
     return {
         cycleBudget,
-        spent,
-        bigExpenseSpent,
-        travelSpent,
+        consumed,
+        forgivenSpent,
         remaining,
-        percentSpent,
+        percentConsumed,
+
+        plannedBig,
+        bigExpenseSpent,
+
+        travelSpent,
+        travelStashBalance,
+
         totalDays,
         daysLeft: rawDaysLeft,
         dayNumber,
         isPaydayReached,
         dailyAllowance,
-        spentToday,
+        consumedToday,
         leftToday,
         bufferPool,
-        travelStashBalance: cycle.travelStashALL - travelSpent,
-        projectedSurplus: Math.max(0, remaining),
+
         estimatedBankBalance,
         estimatedCashBalance,
-        estimatedTotalBalance: estimatedBankBalance + estimatedCashBalance,
+        walletTotal,
+
         receivablesALL,
         payablesALL,
         netOfDebtsALL,
-        netWorthALL: estimatedBankBalance + estimatedCashBalance + netOfDebtsALL,
+        netWorthALL: walletTotal + travelStashBalance + netOfDebtsALL,
+
+        spent: consumed,
+        spentToday: consumedToday,
+        estimatedTotalBalance: walletTotal,
+        projectedSurplus: Math.max(0, remaining),
     };
 }
 

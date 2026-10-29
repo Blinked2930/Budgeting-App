@@ -658,24 +658,24 @@ export const BudgetView: React.FC = () => {
     }
 
     const barColor =
-        stats.percentSpent >= 90
+        stats.percentConsumed >= 90
             ? 'bg-rose-500'
-            : stats.percentSpent >= 70
+            : stats.percentConsumed >= 70
                 ? 'bg-amber-500'
                 : 'bg-emerald-500';
 
     const hasDebts = stats.receivablesALL > 0 || stats.payablesALL > 0;
 
     // "Where is my money?" reconciliation
-    const walletTotal = stats.estimatedTotalBalance;
+    const walletTotal = stats.walletTotal;
     const travelStash = stats.travelStashBalance;
     const receivables = stats.receivablesALL;
     const payables = stats.payablesALL;
-    const grandTotal = walletTotal + travelStash + receivables - payables;
+    const grandTotal = stats.netWorthALL;
 
-    // Progress bar shows actual stipend usage (regular + rent paid)
+    // Progress bar: consumed (regular + forgiven) out of cycleBudget
     const actualStipend = cycle.stipendAmountALL + cycle.bufferPoolALL;
-    const displayedSpent = stats.spent + stats.bigExpenseSpent;
+    const displayedSpent = stats.consumed + stats.bigExpenseSpent;
 
     return (
         <div className="w-full max-w-md mx-auto px-3 sm:px-4 py-4 space-y-3.5">
@@ -716,14 +716,14 @@ export const BudgetView: React.FC = () => {
                 </p>
                 <p className="text-[11px] text-slate-400 mt-1">
                     of {format(stats.dailyAllowance)} today ·{' '}
-                    {format(stats.spentToday)} spent
+                    {format(stats.consumedToday)} spent
                 </p>
 
                 <div className="mt-3.5">
                     <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
                         <div
                             className={cn('h-full rounded-full transition-all', barColor)}
-                            style={{ width: `${stats.percentSpent}%` }}
+                            style={{ width: `${stats.percentConsumed}%` }}
                         />
                     </div>
                     <div className="flex justify-between mt-1.5 text-[10px] font-mono text-slate-400">
