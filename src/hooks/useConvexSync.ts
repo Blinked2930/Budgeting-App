@@ -61,6 +61,7 @@ export function useConvexSync() {
                     walletNeutral: item.walletNeutral,
                     isDebtOrigin: item.isDebtOrigin,
                     isBigExpense: item.isBigExpense,
+                    isForgiveness: item.isForgiveness,
                     timestamp: item.timestamp,
                     updatedAt,
                     deleted: item.deleted,

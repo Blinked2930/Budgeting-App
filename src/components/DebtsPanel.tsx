@@ -26,6 +26,7 @@ import {
     deleteDebt,
     getCounterparties,
     updateDebt,
+    hasLinkedExpenses,
 } from '../db';
 import { useCurrency } from '../hooks/useCurrency';
 import { cn } from '../utils/cn';
@@ -600,14 +601,14 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
         }
     };
 
-    const handleDeleteDebt = (debt: DebtRecord) => {
-        // Check if this debt is linked to a transaction. 
-        // We check both sourceExpenseId (from Lend tab) AND if any expense has this debtId (from QuickEntry)
-        if (debt.sourceExpenseId || debt.myShareAmountALL !== undefined) {
+    const handleDeleteDebt = async (debt: DebtRecord) => {
+        const isLinked = await hasLinkedExpenses(debt);
+        if (isLinked) {
             setConfirm({
                 isOpen: true,
-                title: 'Delete linked transaction?',
-                message: 'This debt is linked to an expense in Recent Activity. Deleting it will also remove the expense. Continue?',
+                title: 'Delete both the debt AND the transaction?',
+                message:
+                    'This debt is linked to a transaction in Recent Activity. Deleting it will also remove the transaction and any settlements linked to it. Continue?',
                 confirmLabel: 'Delete both',
                 onConfirm: async () => {
                     await deleteDebt(debt.id);
@@ -616,7 +617,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
             return;
         }
 
-        deleteDebt(debt.id);
+        await deleteDebt(debt.id);
     };
 
     if (!isOpen) return null;
@@ -648,123 +649,93 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                     </button>
                 </div>
 
-                <div className="overflow-y-auto px-5 py-4 space-y-3">
-                    <button
-                        type="button"
-                        onClick={() => setShowNewForm((v) => !v)}
-                        className={cn(
-                            'w-full flex items-center justify-center gap-2 py-2.5 rounded-2xl border text-xs font-bold transition-colors cursor-pointer',
-                            showNewForm
-                                ? 'bg-slate-50 border-slate-200 text-slate-500'
-                                : 'bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700'
-                        )}
-                    >
-                        {showNewForm ? (
-                            <>
-                                <X className="w-3.5 h-3.5" />
-                                Cancel
-                            </>
-                        ) : (
-                            <>
-                                <Plus className="w-3.5 h-3.5" />
-                                New debt
-                            </>
-                        )}
-                    </button>
+                <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
+                    <div className="flex items-center justify-between">
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                            {groups.length} {groups.length === 1 ? 'person' : 'people'}
+                        </p>
+                        <button
+                            type="button"
+                            onClick={() => setShowNewForm((prev) => !prev)}
+                            className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer"
+                        >
+                            <Plus className="w-3.5 h-3.5" />
+                            {showNewForm ? 'Close form' : 'New debt'}
+                        </button>
+                    </div>
 
-                    {showNewForm && <NewDebtForm onSaved={() => setShowNewForm(false)} />}
+                    {showNewForm && (
+                        <NewDebtForm
+                            onSaved={() => {
+                                setShowNewForm(false);
+                            }}
+                        />
+                    )}
 
                     {groups.length === 0 ? (
-                        <div className="text-center py-8 text-xs text-slate-500">
-                            No debts yet. Tap "New debt" to add one.
+                        <div className="text-center py-10 px-4 rounded-2xl bg-slate-50 border border-slate-200 border-dashed">
+                            <p className="text-xs font-medium text-slate-500">No debts recorded.</p>
+                            <p className="text-[11px] text-slate-400 mt-0.5">
+                                Tap "New debt" above to track money you lent or borrowed.
+                            </p>
                         </div>
                     ) : (
                         <div className="space-y-2">
                             {groups.map((g) => {
                                 const isExpanded = expandedKey === g.key;
                                 const net = g.receivables - g.payables;
-                                const itemCount = g.openDebts.length + g.resolvedDebts.length;
                                 const hasOpen = g.openDebts.length > 0;
 
                                 return (
                                     <div
                                         key={g.key}
-                                        className={cn(
-                                            'rounded-2xl border transition-colors overflow-hidden',
-                                            hasOpen
-                                                ? 'bg-white border-slate-200'
-                                                : 'bg-slate-50 border-slate-200'
-                                        )}
+                                        className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm"
                                     >
                                         <button
                                             type="button"
-                                            onClick={() => setExpandedKey(isExpanded ? null : g.key)}
-                                            className="w-full flex items-center justify-between p-3 cursor-pointer hover:bg-slate-50 transition-colors"
+                                            onClick={() =>
+                                                setExpandedKey(isExpanded ? null : g.key)
+                                            }
+                                            className="w-full flex items-center justify-between p-3.5 text-left cursor-pointer hover:bg-slate-50 transition-colors"
                                         >
                                             <div className="flex items-center gap-2.5 min-w-0">
-                                                <div
-                                                    className={cn(
-                                                        'w-8 h-8 rounded-xl flex items-center justify-center shrink-0',
-                                                        hasOpen
-                                                            ? 'bg-indigo-50 border border-indigo-200'
-                                                            : 'bg-slate-100 border border-slate-200'
-                                                    )}
-                                                >
-                                                    <span
-                                                        className={cn(
-                                                            'text-xs font-bold',
-                                                            hasOpen ? 'text-indigo-700' : 'text-slate-500'
-                                                        )}
-                                                    >
+                                                <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
+                                                    <span className="text-xs font-bold text-indigo-700">
                                                         {g.name.charAt(0).toUpperCase()}
                                                     </span>
                                                 </div>
-                                                <div className="min-w-0 text-left">
-                                                    <p
-                                                        className={cn(
-                                                            'text-xs font-semibold truncate',
-                                                            hasOpen ? 'text-slate-900' : 'text-slate-500'
-                                                        )}
-                                                    >
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-semibold text-slate-900 truncate">
                                                         {g.name}
                                                     </p>
-                                                    <p className="text-[10px] text-slate-500">
-                                                        {itemCount} {itemCount === 1 ? 'item' : 'items'}
-                                                        {!hasOpen && ' · settled'}
+                                                    <p className="text-[10px] text-slate-400">
+                                                        {g.openDebts.length} open · {g.resolvedDebts.length} resolved
                                                     </p>
                                                 </div>
                                             </div>
 
-                                            <div className="flex items-center gap-2 shrink-0 ml-2">
+                                            <div className="flex items-center gap-2 shrink-0">
                                                 <div className="text-right">
                                                     <p
                                                         className={cn(
                                                             'text-sm font-mono font-bold',
-                                                            !hasOpen
-                                                                ? 'text-slate-400'
-                                                                : net > 0
-                                                                    ? 'text-emerald-600'
-                                                                    : net < 0
-                                                                        ? 'text-rose-500'
-                                                                        : 'text-slate-500'
+                                                            net > 0
+                                                                ? 'text-emerald-600'
+                                                                : net < 0
+                                                                    ? 'text-rose-600'
+                                                                    : 'text-slate-500'
                                                         )}
                                                     >
-                                                        {hasOpen && net > 0 ? '+' : ''}
+                                                        {net > 0 ? '+' : ''}
                                                         {format(Math.abs(net))}
                                                     </p>
-                                                    <p className="text-[10px] text-slate-500">
-                                                        {!hasOpen
-                                                            ? 'settled'
-                                                            : net > 0
-                                                                ? 'owes you'
-                                                                : net < 0
-                                                                    ? 'you owe'
-                                                                    : 'even'}
+                                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">
+                                                        {net > 0 ? 'owes you' : net < 0 ? 'you owe' : 'settled'}
                                                     </p>
                                                 </div>
                                                 <ChevronDown
                                                     className={cn(
-                                                        'w-4 h-4 text-slate-400 transition-transform',
+                                                        'w-4 h-4 text-slate-400 transition-transform duration-200',
                                                         isExpanded && 'rotate-180'
                                                     )}
                                                 />
@@ -772,21 +743,24 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                                         </button>
 
                                         {isExpanded && (
-                                            <div className="px-3 pb-3 space-y-2 border-t border-slate-200 pt-3">
+                                            <div className="px-3.5 pb-3.5 pt-1 space-y-2.5 border-t border-slate-100 bg-slate-50/50">
                                                 {hasOpen && (
-                                                    <div className="grid grid-cols-2 gap-1.5">
+                                                    <div className="flex items-center justify-between pt-1">
+                                                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                                            Settle all
+                                                        </p>
                                                         <button
                                                             type="button"
                                                             onClick={() => handleSettleAll(g, 'Cash')}
-                                                            className="w-full py-2 rounded-xl bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-700 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                                                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 text-[10px] font-bold border border-teal-200 cursor-pointer"
                                                         >
-                                                            <CheckCheck className="w-3.5 h-3.5" />
+                                                            <Banknote className="w-3 h-3" />
                                                             All (Cash)
                                                         </button>
                                                         <button
                                                             type="button"
                                                             onClick={() => handleSettleAll(g, 'Card')}
-                                                            className="w-full py-2 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 text-[11px] font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                                                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold border border-rose-200 cursor-pointer"
                                                         >
                                                             <CheckCheck className="w-3.5 h-3.5" />
                                                             All (Bank)

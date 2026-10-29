@@ -21,6 +21,7 @@ export default defineSchema({
         walletNeutral: v.optional(v.boolean()),
         isDebtOrigin: v.optional(v.boolean()),
         isBigExpense: v.optional(v.boolean()),
+        isForgiveness: v.optional(v.boolean()),
         timestamp: v.string(),
         updatedAt: v.optional(v.string()),
         deleted: v.optional(v.boolean()),

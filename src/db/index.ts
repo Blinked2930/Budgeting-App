@@ -67,6 +67,7 @@ export interface RemoteExpense {
   walletNeutral?: boolean;
   isDebtOrigin?: boolean;
   isBigExpense?: boolean;
+  isForgiveness?: boolean;
   timestamp: string;
   updatedAt?: string;
   deleted?: boolean;
@@ -169,6 +170,14 @@ export async function deleteExpense(id: string): Promise<void> {
     return;
   }
 
+  // Also cascade if any debt has sourceExpenseId === id
+  const linkedDebts = await db.debts
+    .filter((d) => !d.deleted && d.sourceExpenseId === id)
+    .toArray();
+  for (const d of linkedDebts) {
+    await deleteDebt(d.id);
+  }
+
   await db.expenses.update(id, {
     deleted: true,
     isSynced: false,
@@ -254,6 +263,7 @@ export async function applyRemoteExpenses(remote: RemoteExpense[]): Promise<void
         walletNeutral: r.walletNeutral,
         isDebtOrigin: r.isDebtOrigin,
         isBigExpense: r.isBigExpense,
+        isForgiveness: r.isForgiveness,
         timestamp: r.timestamp,
         updatedAt: remoteUpdatedAt,
         deleted: r.deleted,
@@ -391,7 +401,7 @@ export async function addDebt(data: {
     note: data.note,
     status: 'open',
     sourceExpenseId: data.sourceExpenseId,
-    myShareAmountALL: data.myShareAmountALL, // <--- CRITICAL FIX: Saves the field so the warning works
+    myShareAmountALL: data.myShareAmountALL,
     createdAt: data.timestamp ?? now,
     isSynced: false,
     updatedAt: now,
@@ -490,7 +500,7 @@ export async function deleteDebt(id: string): Promise<void> {
   });
 
   const linkedExpenses = await db.expenses
-    .filter((e) => e.debtId === id && !e.deleted)
+    .filter((e) => !e.deleted && (e.debtId === id || (debt.sourceExpenseId ? e.id === debt.sourceExpenseId : false)))
     .toArray();
   for (const e of linkedExpenses) {
     await db.expenses.update(e.id, {
@@ -499,6 +509,22 @@ export async function deleteDebt(id: string): Promise<void> {
       updatedAt: new Date().toISOString(),
     });
   }
+}
+
+export async function hasLinkedExpenses(debt: DebtRecord): Promise<boolean> {
+  if (debt.sourceExpenseId || debt.myShareAmountALL !== undefined) return true;
+  const count = await db.expenses
+    .filter((e) => !e.deleted && e.debtId === debt.id)
+    .count();
+  return count > 0;
+}
+
+export async function hasLinkedDebt(expenseId: string, debtId?: string): Promise<boolean> {
+  if (debtId) return true;
+  const count = await db.debts
+    .filter((d) => !d.deleted && (d.sourceExpenseId === expenseId || d.id === debtId))
+    .count();
+  return count > 0;
 }
 
 export async function settleDebtCash(
@@ -543,7 +569,7 @@ export async function settleDebtCash(
 export async function settleDebtNonCash(
   debtId: string,
   amountALL: number,
-  paidWith: PaymentSource = 'Cash'
+  paidWith: PaymentSource
 ): Promise<void> {
   const debt = await getDebt(debtId);
   if (!debt || debt.status !== 'open') return;
@@ -561,7 +587,7 @@ export async function settleDebtNonCash(
       itemName: itemName,
       walletNeutral: true,
       debtId: debt.id,
-      debtRelated: false,
+      debtRelated: true,
     });
   } else {
     const baseName = `Offset to ${debt.counterparty}`;
@@ -605,27 +631,20 @@ export async function writeOffDebt(debtId: string): Promise<void> {
     return;
   }
 
-  if (debt.sourceExpenseId) {
-    const source = await db.expenses.get(debt.sourceExpenseId);
-    if (source && !source.deleted) {
-      const newBudget = Math.min(
-        source.amountInALL,
-        (source.budgetAmountALL ?? source.amountInALL) + amount
-      );
-      await updateExpense(source.id, { budgetAmountALL: newBudget });
-    }
-  } else {
-    const baseName = `Gift to ${debt.counterparty}`;
-    const itemName = debt.note ? `${baseName} (${debt.note})` : baseName;
-    await addExpense({
-      amount,
-      currency: 'ALL',
-      category: 'Other',
-      itemName: itemName,
-      walletNeutral: true,
-      debtId: debt.id,
-    });
-  }
+  // Debt is OwedToMe: create a new forgiveness entry dated today.
+  // This counts as consumed spending (the money is gone) and has no wallet movement today.
+  const baseName = `Forgiven to ${debt.counterparty}`;
+  const itemName = debt.note ? `${baseName} (${debt.note})` : baseName;
+
+  await addExpense({
+    amount,
+    currency: 'ALL',
+    category: 'Other',
+    itemName,
+    walletNeutral: true,
+    isForgiveness: true,
+    debtId: debt.id,
+  });
 
   await db.debts.update(debt.id, {
     remainingALL: 0,

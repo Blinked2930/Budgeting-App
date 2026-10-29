@@ -21,9 +21,10 @@ import {
   Gift,
   Scale,
   Ban,
+  TrendingDown,
 } from 'lucide-react';
 import type { ExpenseRecord, Category, TransferRecord } from '../types';
-import { deleteExpense, deleteTransfer } from '../db';
+import { deleteExpense, deleteTransfer, hasLinkedDebt } from '../db';
 import { useCurrency } from '../hooks/useCurrency';
 import { classifyExpense, budgetImpactOf, isReconciliationEntry } from '../utils/budget';
 import { cn } from '../utils/cn';
@@ -89,7 +90,7 @@ function dayLabel(key: string): string {
 
 // ---------------------------------------------------------------------------
 // Badges. Every entry gets three:
-//   1. WHAT it is        (Expense / Gift / Lent / Borrowed / Repaid / Offset / Big expense / Income / Reconciliation)
+//   1. WHAT it is        (Expense / Gift / Lent out / Borrowed / Repaid to me / I repaid / Offset / Big Expense / Income / Reconciliation)
 //   2. WHERE the money   (Cash / Card / No wallet)
 //   3. Does it count as spending (Spent / Not spent)  — same rule as the Budget tab
 // ---------------------------------------------------------------------------
@@ -99,7 +100,8 @@ type PrimaryKind =
   | 'gift'
   | 'lent'
   | 'borrowed'
-  | 'repaid'
+  | 'repaid_to_me'
+  | 'i_repaid'
   | 'offset'
   | 'big'
   | 'income'
@@ -107,29 +109,36 @@ type PrimaryKind =
 
 const PRIMARY_META: Record<PrimaryKind, { label: string; cls: string }> = {
   expense: { label: 'Expense', cls: 'bg-slate-100 text-slate-700' },
-  gift: { label: 'Gift', cls: 'bg-pink-50 text-pink-700' },
-  lent: { label: 'Lent', cls: 'bg-indigo-50 text-indigo-700' },
+  gift: { label: 'Gift', cls: 'bg-rose-50 text-rose-700' },
+  lent: { label: 'Lent out', cls: 'bg-indigo-50 text-indigo-700' },
   borrowed: { label: 'Borrowed', cls: 'bg-indigo-50 text-indigo-700' },
-  repaid: { label: 'Repaid', cls: 'bg-indigo-50 text-indigo-700' },
-  offset: { label: 'Offset', cls: 'bg-indigo-50 text-indigo-700' },
-  big: { label: 'Big expense', cls: 'bg-purple-50 text-purple-700' },
+  repaid_to_me: { label: 'Repaid to me', cls: 'bg-emerald-50 text-emerald-700' },
+  i_repaid: { label: 'I repaid', cls: 'bg-emerald-50 text-emerald-700' },
+  offset: { label: 'Offset', cls: 'bg-slate-100 text-slate-700' },
+  big: { label: 'Big Expense', cls: 'bg-purple-50 text-purple-700' },
   income: { label: 'Income', cls: 'bg-emerald-50 text-emerald-700' },
   reconciliation: { label: 'Reconciliation', cls: 'bg-amber-50 text-amber-700' },
 };
 
 function primaryKind(e: ExpenseRecord): PrimaryKind {
   const name = (e.itemName ?? '').trim();
+  const lowerName = name.toLowerCase();
 
   if (isReconciliationEntry(e)) return 'reconciliation';
   if (e.isBigExpense) return 'big';
 
-  if (e.isDebtOrigin || (e.debtRelated && (name.startsWith('Lent to ') || name.startsWith('Borrowed from ')))) {
+  if (e.isDebtOrigin || (e.debtRelated && (lowerName.startsWith('lent to ') || lowerName.startsWith('borrowed from ')))) {
     return e.amount < 0 ? 'borrowed' : 'lent';
   }
-  if (name.startsWith('Offset ')) return 'offset';
-  if (e.debtRelated) return 'repaid';
+  if (lowerName.startsWith('offset')) return 'offset';
+  if (e.debtRelated) {
+    if (lowerName.startsWith('repaid by ') || e.amount < 0) return 'repaid_to_me';
+    return 'i_repaid';
+  }
 
-  if (e.isForgiveness || (e.walletNeutral && name.startsWith('Gift to '))) return 'gift';
+  if (e.isForgiveness || lowerName.includes('gift to') || lowerName.includes('forgiven to') || lowerName.includes('bought by')) {
+    return 'gift';
+  }
   if (e.amount < 0) return 'income';
   return 'expense';
 }
@@ -227,25 +236,28 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
     e.stopPropagation();
     const record = expenses.find((x) => x.id === id);
 
-    if (record?.debtId) {
-      setConfirm({
-        isOpen: true,
-        title: 'Delete linked debt?',
-        message:
-          'This transaction is linked to a debt record. Deleting it will also remove the debt and every entry linked to it. Continue?',
-        confirmLabel: 'Delete all',
-        onConfirm: async () => {
-          await deleteExpense(id);
-          if (onDeleted) onDeleted();
-        },
-      });
-      return;
-    }
+    const checkAndConfirm = async () => {
+      const isLinked = await hasLinkedDebt(id, record?.debtId);
+      if (isLinked) {
+        setConfirm({
+          isOpen: true,
+          title: 'Delete both the transaction AND the debt?',
+          message:
+            'This transaction is linked to a debt record. Deleting it will also remove the debt and every entry linked to it. Continue?',
+          confirmLabel: 'Delete both',
+          onConfirm: async () => {
+            await deleteExpense(id);
+            if (onDeleted) onDeleted();
+          },
+        });
+        return;
+      }
 
-    (async () => {
       await deleteExpense(id);
       if (onDeleted) onDeleted();
-    })();
+    };
+
+    void checkAndConfirm();
   };
 
   const handleDeleteTransfer = async (id: string, e: React.MouseEvent) => {
@@ -350,7 +362,10 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                         <div className="flex items-center gap-1 flex-wrap mt-1">
                           <Pill className="bg-amber-50 text-amber-700">Transfer</Pill>
                           <Pill className="bg-slate-100 text-slate-600">Bank ↔ Cash</Pill>
-                          <Pill className="bg-white border border-slate-200 text-slate-400">Not spent</Pill>
+                          <Pill className="bg-slate-100 text-slate-500 border border-slate-200">
+                            <Ban className="w-2.5 h-2.5" />
+                            Not spent
+                          </Pill>
                         </div>
                         <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400">
                           <span>{formatRelativeTime(t.timestamp)}</span>
@@ -393,7 +408,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
               const isCash = expense.paidWith === 'Cash';
               const spent = isSpent(expense);
               const isIn = expense.amount < 0;
-              const moneyKinds: PrimaryKind[] = ['lent', 'borrowed', 'repaid', 'offset', 'reconciliation'];
+              const moneyKinds: PrimaryKind[] = ['lent', 'borrowed', 'repaid_to_me', 'i_repaid', 'offset', 'reconciliation'];
 
               // Amount text + colour
               let displayAmount: string;
@@ -419,11 +434,17 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                 icon = <Scale className="w-3.5 h-3.5 text-amber-600" />;
                 tile = 'bg-amber-50 border-amber-200';
               } else if (kind === 'gift') {
-                icon = <Gift className="w-3.5 h-3.5 text-pink-600" />;
-                tile = 'bg-pink-50 border-pink-200';
-              } else if (kind === 'lent' || kind === 'borrowed' || kind === 'repaid' || kind === 'offset') {
+                icon = <Gift className="w-3.5 h-3.5 text-rose-600" />;
+                tile = 'bg-rose-50 border-rose-200';
+              } else if (kind === 'lent' || kind === 'borrowed') {
                 icon = <HandCoins className="w-3.5 h-3.5 text-indigo-500" />;
                 tile = 'bg-indigo-50 border-indigo-200';
+              } else if (kind === 'repaid_to_me' || kind === 'i_repaid') {
+                icon = <HandCoins className="w-3.5 h-3.5 text-emerald-600" />;
+                tile = 'bg-emerald-50 border-emerald-200';
+              } else if (kind === 'offset') {
+                icon = <HandCoins className="w-3.5 h-3.5 text-slate-500" />;
+                tile = 'bg-slate-100 border-slate-200';
               } else if (kind === 'income') {
                 icon = <PlusCircle className="w-3.5 h-3.5 text-emerald-600" />;
                 tile = 'bg-emerald-50 border-emerald-200';
@@ -479,9 +500,15 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                         )}
 
                         {spent ? (
-                          <Pill className="bg-orange-50 text-orange-700">Spent</Pill>
+                          <Pill className="bg-emerald-50 text-emerald-700">
+                            <TrendingDown className="w-2.5 h-2.5" />
+                            Spent
+                          </Pill>
                         ) : (
-                          <Pill className="bg-white border border-slate-200 text-slate-400">Not spent</Pill>
+                          <Pill className="bg-slate-100 text-slate-500 border border-slate-200">
+                            <Ban className="w-2.5 h-2.5" />
+                            Not spent
+                          </Pill>
                         )}
                       </div>
 
