@@ -1,5 +1,6 @@
 // src/utils/insights.ts
 import type { Category, ExpenseRecord, PaymentSource } from '../types';
+import { classifyExpense } from './budget';
 
 export interface InsightFilters {
     category: Category | 'all';
@@ -18,15 +19,12 @@ export function isReconciliation(e: ExpenseRecord): boolean {
 }
 
 /**
- * Entries that are not spending. Wallet-neutral entries (written-off loans,
- * things someone else paid for) ARE spending, so they are no longer excluded here.
- * This matches classifyExpense in utils/budget.ts.
+ * Entries that are not spending: reconciliations, loans and repayments, debt offsets.
+ * Uses the same classifier as the Budget tab so the two can never disagree.
  */
 export function isNonSpending(e: ExpenseRecord): boolean {
-    if (e.debtRelated) return true;
-    if (e.isDebtOrigin) return true;
-    if (isReconciliation(e)) return true;
-    return false;
+    const bucket = classifyExpense(e);
+    return bucket === 'reconciliation' || bucket === 'debtSettlement' || bucket === 'debtOrigin';
 }
 
 export function monthKey(timestamp: string): string {

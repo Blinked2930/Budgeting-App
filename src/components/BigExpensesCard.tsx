@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { Plus, Landmark, TriangleAlert, CheckCircle2 } from 'lucide-react';
 import type { BudgetCycle, ExpenseRecord } from '../types';
 import { useCurrency } from '../hooks/useCurrency';
+import { classifyExpense, budgetImpactOf, cycleStartMs } from '../utils/budget';
 import { cn } from '../utils/cn';
 import { LogBigExpenseModal } from './LogBigExpenseModal';
 
@@ -17,11 +18,18 @@ export const BigExpensesCard: React.FC<BigExpensesCardProps> = ({ cycle, expense
 
     const planned = cycle.plannedBigExpensesALL ?? 0;
 
+    // Only count big expenses logged in THIS cycle, using the same rule as the budget math.
     const paid = useMemo(() => {
+        const startMs = cycleStartMs(cycle);
         return expenses
-            .filter((e) => !e.deleted && e.isBigExpense)
-            .reduce((sum, e) => sum + (e.budgetAmountALL ?? e.amountInALL), 0);
-    }, [expenses]);
+            .filter(
+                (e) =>
+                    !e.deleted &&
+                    new Date(e.timestamp).getTime() >= startMs &&
+                    classifyExpense(e) === 'big'
+            )
+            .reduce((sum, e) => sum + budgetImpactOf(e), 0);
+    }, [expenses, cycle]);
 
     const remaining = Math.max(0, planned - paid);
     const paidPct = planned > 0 ? Math.min(100, (paid / planned) * 100) : 0;
@@ -120,7 +128,7 @@ export const BigExpensesCard: React.FC<BigExpensesCardProps> = ({ cycle, expense
                 <button
                     type="button"
                     onClick={() => setIsModalOpen(true)}
-                    className="w-full py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
+                    className="w-full py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer active:scale-[0.98] transition-all shadow-sm"
                 >
                     <Plus className="w-3.5 h-3.5" />
                     Log Big Expense

@@ -54,6 +54,8 @@ export function isReconciliationEntry(e: ExpenseRecord): boolean {
 export function classifyExpense(e: ExpenseRecord): ExpenseBucket {
     if (isReconciliationEntry(e)) return 'reconciliation';
     if (e.debtRelated) return 'debtSettlement';
+    // Non-cash offset of money someone owed you: settles a debt, it is not spending.
+    if (e.walletNeutral && (e.itemName ?? '').trim().startsWith('Offset from ')) return 'debtSettlement';
     if (e.isDebtOrigin) return 'debtOrigin';
     if (e.isForgiveness) return 'forgiveness';
     if (e.category === 'Travel') return 'travel';
