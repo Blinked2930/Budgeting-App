@@ -13,6 +13,24 @@ export const DEFAULT_FILTERS: InsightFilters = {
     month: 'all',
 };
 
+/**
+ * Reconciliation entries are corrections (the app thought you had X, you
+ * actually had Y). They are NOT real expenses or real income — they're
+ * bookkeeping adjustments. We exclude them from every aggregate so that
+ * "how much did I spend" is never polluted by the correction deltas.
+ */
+function isReconciliation(e: ExpenseRecord): boolean {
+    return (e.itemName ?? '').trim().toLowerCase() === 'balance reconciliation';
+}
+
+/** Any entry that shouldn't count toward spending totals. */
+function isNonSpending(e: ExpenseRecord): boolean {
+    if (e.debtRelated) return true;
+    if (e.walletNeutral) return true;
+    if (isReconciliation(e)) return true;
+    return false;
+}
+
 export function monthKey(timestamp: string): string {
     const d = new Date(timestamp);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -29,7 +47,7 @@ export function monthLabel(key: string): string {
 export function getMonthOptions(expenses: ExpenseRecord[]): string[] {
     const keys = new Set<string>();
     for (const e of expenses) {
-        if (e.debtRelated || e.walletNeutral) continue;
+        if (isNonSpending(e)) continue;
         keys.add(monthKey(e.timestamp));
     }
     return Array.from(keys).sort().reverse();
@@ -40,7 +58,7 @@ export function filterExpenses(
     filters: InsightFilters
 ): ExpenseRecord[] {
     return expenses.filter((e) => {
-        if (e.debtRelated || e.walletNeutral) return false;
+        if (isNonSpending(e)) return false;
         if (filters.category !== 'all' && e.category !== filters.category) return false;
         if (filters.paidWith !== 'all' && (e.paidWith ?? 'Card') !== filters.paidWith) return false;
         if (filters.month !== 'all' && monthKey(e.timestamp) !== filters.month) return false;
@@ -59,7 +77,7 @@ export function aggregate(expenses: ExpenseRecord[]): Aggregate {
     let count = 0;
 
     for (const e of expenses) {
-        if (e.debtRelated || e.walletNeutral) continue;
+        if (isNonSpending(e)) continue;
         total += e.budgetAmountALL ?? e.amountInALL;
         count += 1;
     }
@@ -72,27 +90,27 @@ export function aggregate(expenses: ExpenseRecord[]): Aggregate {
 }
 
 /**
- * Spend Against Budget: matches the "spent" number on the Budget tab.
- * Skips Big Expenses (already pre-budgeted), wallet-neutral entries, and debt settlements.
+ * Spend Against Budget: matches the `consumed` number on the Budget tab.
+ * Skips Big Expenses (already pre-budgeted), wallet-neutral entries, debt
+ * settlements, and reconciliation corrections.
  */
 export function spendAgainstBudget(expenses: ExpenseRecord[]): number {
     return expenses
-        .filter((e) => !e.deleted && !e.walletNeutral && !e.isBigExpense && !e.debtRelated)
+        .filter((e) => !e.deleted && !isNonSpending(e) && !e.isBigExpense)
         .reduce((sum, e) => sum + (e.budgetAmountALL ?? e.amountInALL), 0);
 }
 
 /**
  * Total Outflow: every penny that actually left your wallet.
- * Includes regular expenses, Big Expenses, loans given.
- * Excludes repayments received (money in) and wallet-neutral entries.
+ * Includes regular expenses and Big Expenses.
+ * Excludes loans, forgiveness, transfers, reconciliation corrections,
+ * and any negative (income) entries.
  */
 export function totalOutflow(expenses: ExpenseRecord[]): number {
     return expenses
         .filter((e) => {
             if (e.deleted) return false;
-            if (e.walletNeutral) return false;
-            // Exclude income (repayments received), but keep everything else
-            // that represents real cash out.
+            if (isNonSpending(e)) return false;
             return e.amount > 0;
         })
         .reduce((sum, e) => sum + Math.abs(e.amountInALL), 0);
@@ -108,21 +126,15 @@ export function cashFlow(expenses: ExpenseRecord[]): { inALL: number; outALL: nu
     let outALL = 0;
 
     for (const e of expenses) {
-        if (e.deleted || e.walletNeutral) continue;
+        if (e.deleted) continue;
+        if (isReconciliation(e)) continue;
+        if (e.walletNeutral) continue;
 
         const amount = Math.abs(e.amountInALL);
 
-        // Repayment received by me (income)
-        if (e.debtRelated && e.amount < 0) {
-            inALL += amount;
-            continue;
-        }
-        // Repayment made by me (outflow)
-        if (e.debtRelated && e.amount > 0) {
-            outALL += amount;
-            continue;
-        }
-        // Origin of a lend/borrow
+        if (e.debtRelated && e.amount < 0) { inALL += amount; continue; }
+        if (e.debtRelated && e.amount > 0) { outALL += amount; continue; }
+
         if (e.isDebtOrigin) {
             if (e.amount < 0) inALL += amount;
             else outALL += amount;
@@ -144,7 +156,8 @@ export function aggregateByCategory(expenses: ExpenseRecord[]): CategoryStat[] {
     let grandTotal = 0;
 
     for (const e of expenses) {
-        if (e.debtRelated || e.walletNeutral || e.isBigExpense) continue;
+        if (isNonSpending(e)) continue;
+        if (e.isBigExpense) continue;
         const amount = e.budgetAmountALL ?? e.amountInALL;
         const existing = map.get(e.category) ?? { total: 0, count: 0 };
         existing.total += amount;
@@ -176,7 +189,8 @@ export function aggregatePaidWith(expenses: ExpenseRecord[]): PaidWithStat {
     let card = 0;
 
     for (const e of expenses) {
-        if (e.debtRelated || e.walletNeutral || e.isBigExpense) continue;
+        if (isNonSpending(e)) continue;
+        if (e.isBigExpense) continue;
         const amount = e.budgetAmountALL ?? e.amountInALL;
         if (e.paidWith === 'Cash') cash += amount;
         else card += amount;

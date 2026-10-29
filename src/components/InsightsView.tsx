@@ -171,7 +171,7 @@ const SpendPaceCard: React.FC = () => {
     const daysElapsed = stats.dayNumber;
     const daysTotal = stats.totalDays;
     const projectedByNow = (stats.cycleBudget / daysTotal) * daysElapsed;
-    const pace = projectedByNow > 0 ? (stats.spent / projectedByNow) * 100 : 0;
+    const pace = projectedByNow > 0 ? (stats.consumed / projectedByNow) * 100 : 0;
     const isOverPace = pace > 100;
     const barWidth = Math.min(100, Math.max(0, pace));
 
@@ -188,7 +188,7 @@ const SpendPaceCard: React.FC = () => {
                         {pace.toFixed(0)}%
                     </p>
                     <p className="text-[11px] text-slate-500 mt-1">
-                        {isOverPace ? 'ahead of' : 'behind'} pace by {format(Math.abs(stats.spent - projectedByNow))}
+                        {isOverPace ? 'ahead of' : 'behind'} pace by {format(Math.abs(stats.consumed - projectedByNow))}
                     </p>
                 </div>
                 <div className="text-right">
@@ -206,7 +206,7 @@ const SpendPaceCard: React.FC = () => {
                     />
                 </div>
                 <div className="flex justify-between text-[10px] font-mono text-slate-400">
-                    <span>{format(stats.spent)} spent</span>
+                    <span>{format(stats.consumed)} spent</span>
                     <span>{format(projectedByNow)} expected</span>
                 </div>
             </div>
@@ -503,22 +503,22 @@ export const InsightsView: React.FC = () => {
 
             <section>
                 <SectionTitle icon={<PieChart className="w-3.5 h-3.5 text-slate-400" />}>
-                    Total Outflow
+                    Outflow & Budget
                 </SectionTitle>
                 <Card className="space-y-2">
                     <div className="flex items-baseline justify-between">
-                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">All money out</span>
-                        <span className="text-lg font-mono font-bold text-slate-900">{format(outflow)}</span>
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Budgeted spend</span>
+                        <span className="text-lg font-mono font-bold text-slate-900">{format(spendBudget)}</span>
                     </div>
                     <p className="text-[10px] text-slate-500 leading-relaxed">
-                        Every penny that left your pocket: regular spending, rent, and loans given.
+                        Regular consumption this cycle (matches the "spent" number on the Budget tab). Excludes rent, loans, and reconciliation corrections.
                     </p>
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Budgeted spend</span>
-                        <span className="text-sm font-mono font-bold text-slate-700">{format(spendBudget)}</span>
+                        <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Total outflow</span>
+                        <span className="text-sm font-mono font-bold text-slate-700">{format(outflow)}</span>
                     </div>
                     <p className="text-[10px] text-slate-400">
-                        Matches the "Spent" number on the Budget tab. Excludes Big Expenses (rent) and loans.
+                        Every penny that left your wallet, including rent. Excludes loans and reconciliation.
                     </p>
                 </Card>
             </section>
