@@ -1,15 +1,60 @@
 // src/components/AuditPanel.tsx
 import React, { useMemo, useState } from 'react';
 import { X, Copy, Check } from 'lucide-react';
+import type { ExpenseRecord } from '../types';
 import { useExpenses } from '../hooks/useExpenses';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { useCurrency } from '../hooks/useCurrency';
 import { cn } from '../utils/cn';
+import { classifyExpense, budgetImpactOf, cycleStartMs } from '../utils/budget';
+import type { ExpenseBucket } from '../utils/budget';
 
 interface AuditPanelProps {
     isOpen: boolean;
     onClose: () => void;
 }
+
+const Row: React.FC<{
+    label: string;
+    value: string;
+    hint?: string;
+    bold?: boolean;
+    color?: string;
+}> = ({ label, value, hint, bold, color }) => (
+    <div className="flex items-start justify-between gap-3 py-1.5 border-b border-slate-100 last:border-0">
+        <div className="min-w-0">
+            <p className={cn('text-xs text-slate-700', bold ? 'font-bold' : 'font-semibold')}>{label}</p>
+            {hint && <p className="text-[10px] text-slate-400 leading-tight">{hint}</p>}
+        </div>
+        <p className={cn('text-xs font-mono font-bold shrink-0', color ?? 'text-slate-900')}>{value}</p>
+    </div>
+);
+
+const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">{children}</p>
+);
+
+const EMPTY_BUCKETS = (): Record<ExpenseBucket, ExpenseRecord[]> => ({
+    reconciliation: [],
+    debtSettlement: [],
+    debtOrigin: [],
+    forgiveness: [],
+    walletNeutral: [],
+    travel: [],
+    big: [],
+    regular: [],
+});
+
+const flagsOf = (e: ExpenseRecord): string => {
+    const flags: string[] = [];
+    if (e.debtRelated) flags.push('debtRelated');
+    if (e.isDebtOrigin) flags.push('isDebtOrigin');
+    if (e.walletNeutral) flags.push('walletNeutral');
+    if (e.isBigExpense) flags.push('isBigExpense');
+    if (e.isForgiveness) flags.push('isForgiveness');
+    if (e.budgetAmountALL !== undefined) flags.push(`budgetAmountALL=${Math.round(e.budgetAmountALL)}`);
+    return flags.length ? flags.join(',') : 'none';
+};
 
 export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
     const { expenses } = useExpenses();
@@ -17,105 +62,132 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
     const { format } = useCurrency();
     const [copied, setCopied] = useState(false);
 
-    const buckets = useMemo(() => {
-        const regular: typeof expenses = [];
-        const big: typeof expenses = [];
-        const travel: typeof expenses = [];
-        const loanOrigins: typeof expenses = [];
-        const loanRepayments: typeof expenses = [];
-        const forgiveness: typeof expenses = [];
-        const walletNeutralOther: typeof expenses = [];
-        const income: typeof expenses = [];
-
-        const startMs = cycle ? new Date(cycle.startDate).getTime() : 0;
-
-        for (const e of expenses) {
-            if (e.deleted) continue;
-            const whenMs = new Date(e.timestamp).getTime();
-            if (cycle && whenMs < startMs) continue;
-
-            if (e.isForgiveness) { forgiveness.push(e); continue; }
-            if (e.walletNeutral) { walletNeutralOther.push(e); continue; }
-            if (e.isBigExpense) { big.push(e); continue; }
-            if (e.category === 'Travel') { travel.push(e); continue; }
-            if (e.isDebtOrigin) { loanOrigins.push(e); continue; }
-            if (e.debtRelated) { loanRepayments.push(e); continue; }
-            if (e.amount < 0) { income.push(e); continue; }
-            regular.push(e);
-        }
-        return { regular, big, travel, loanOrigins, loanRepayments, forgiveness, walletNeutralOther, income };
+    // Same filters computeBudgetStats applies: not deleted, on/after local-midnight cycle start.
+    const inCycle = useMemo(() => {
+        const startMs = cycle ? cycleStartMs(cycle) : 0;
+        return expenses
+            .filter((e) => !e.deleted && (!cycle || new Date(e.timestamp).getTime() >= startMs))
+            .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
     }, [expenses, cycle]);
 
-    const sum = (arr: typeof expenses) =>
-        arr.reduce((s, e) => s + Math.abs(e.amountInALL), 0);
+    const buckets = useMemo(() => {
+        const b = EMPTY_BUCKETS();
+        for (const e of inCycle) b[classifyExpense(e)].push(e);
+        return b;
+    }, [inCycle]);
+
+    // Spending buckets: measured by budget impact (what computeBudgetStats uses).
+    const sumBudget = (arr: ExpenseRecord[]) => arr.reduce((s, e) => s + budgetImpactOf(e), 0);
+    // Wallet buckets: signed amount, positive = money out, negative = money in.
+    const sumOut = (arr: ExpenseRecord[]) => arr.reduce((s, e) => s + e.amountInALL, 0);
+
+    const regularSpend = buckets.regular.filter((e) => e.amount >= 0);
+    const refunds = buckets.regular.filter((e) => e.amount < 0);
 
     const consumedIdentity = stats
-        ? stats.consumed - (sum(buckets.regular) + sum(buckets.forgiveness))
+        ? stats.consumed - (sumBudget(buckets.regular) + sumBudget(buckets.forgiveness))
         : 0;
-    const bigIdentity = stats
-        ? stats.bigExpenseSpent - sum(buckets.big)
-        : 0;
+    const bigIdentity = stats ? stats.bigExpenseSpent - sumBudget(buckets.big) : 0;
+    const travelIdentity = stats ? stats.travelSpent - sumBudget(buckets.travel) : 0;
+
+    // Independent wallet recomputation: start balances + stipend - every wallet-moving entry.
+    // (Bank<->Cash transfers net to zero in the total, so they are not needed here.)
+    const walletIdentity = useMemo(() => {
+        if (!stats || !cycle) return 0;
+        const movedOut = inCycle
+            .filter((e) => !e.walletNeutral)
+            .reduce((s, e) => s + e.amountInALL, 0);
+        const expected =
+            cycle.startingRaiffeisenBalanceALL +
+            (cycle.startingCashALL ?? 0) +
+            cycle.stipendAmountALL -
+            movedOut;
+        return stats.walletTotal - expected;
+    }, [stats, cycle, inCycle]);
+
+    // Why "Wallet - unpaid rent" differs from "Remaining".
+    const gap = useMemo(() => {
+        if (!stats || !cycle) return null;
+        const unpaidBig = stats.plannedBig - stats.bigExpenseSpent;
+        const freeByWallet = stats.walletTotal - unpaidBig;
+        const total = freeByWallet - stats.remaining;
+        const startBalances = cycle.startingRaiffeisenBalanceALL + (cycle.startingCashALL ?? 0);
+        const buffer = cycle.bufferPoolALL;
+        const other = total - startBalances + buffer;
+        return { unpaidBig, freeByWallet, total, startBalances, buffer, other };
+    }, [stats, cycle]);
+
+    const ok = (n: number) => Math.abs(n) < 2;
+    const checkText = (n: number) => (ok(n) ? '✅ Match' : `❌ Off by ${format(Math.abs(n))}`);
 
     const handleCopy = () => {
-        if (!stats || !cycle) return;
+        if (!stats || !cycle || !gap) return;
 
-        const lines: string[] = [];
-        lines.push('=== LEKFLOW AUDIT REPORT ===');
-        lines.push(`Cycle: ${cycle.startDate} → ${cycle.targetEndDate}`);
-        lines.push('');
-        lines.push('--- BUDGET VIEW ---');
-        lines.push(`Stipend: ${format(cycle.stipendAmountALL)}`);
-        lines.push(`+ Buffer pool: ${format(cycle.bufferPoolALL)}`);
-        lines.push(`- Planned big: ${format(cycle.plannedBigExpensesALL ?? 0)}`);
-        lines.push(`= Cycle budget: ${format(stats.cycleBudget)}`);
-        lines.push(`- Consumed: ${format(stats.consumed)}`);
-        lines.push(`= Remaining: ${format(stats.remaining)}`);
-        lines.push('');
-        lines.push('--- WALLET VIEW ---');
-        lines.push(`Bank (est): ${format(stats.estimatedBankBalance)}`);
-        lines.push(`Cash (est): ${format(stats.estimatedCashBalance)}`);
-        lines.push(`= Wallet total: ${format(stats.walletTotal)}`);
-        lines.push(`+ Travel stash: ${format(stats.travelStashBalance)}`);
-        lines.push(`+ Owed to you: ${format(stats.receivablesALL)}`);
-        lines.push(`- You owe: ${format(stats.payablesALL)}`);
-        lines.push(`= Net worth: ${format(stats.netWorthALL)}`);
-        lines.push('');
-        lines.push('--- EXPENSE BUCKETS ---');
-        lines.push(`Regular (${buckets.regular.length}): ${format(sum(buckets.regular))}`);
-        lines.push(`Forgiven (${buckets.forgiveness.length}): ${format(sum(buckets.forgiveness))}`);
-        lines.push(`Big Expenses (${buckets.big.length}): ${format(sum(buckets.big))}`);
-        lines.push(`Travel (${buckets.travel.length}): ${format(sum(buckets.travel))}`);
-        lines.push(`Loans out/in (${buckets.loanOrigins.length}): ${format(sum(buckets.loanOrigins))}`);
-        lines.push(`Loan settlements (${buckets.loanRepayments.length}): ${format(sum(buckets.loanRepayments))}`);
-        lines.push(`Other wallet-neutral (${buckets.walletNeutralOther.length}): ${format(sum(buckets.walletNeutralOther))}`);
-        lines.push(`Income (${buckets.income.length}): ${format(sum(buckets.income))}`);
-        lines.push('');
-        lines.push('--- IDENTITY CHECKS ---');
-        lines.push(`Consumed = regular + forgiven? ${Math.abs(consumedIdentity) < 2 ? '✅ Match' : `❌ Off by ${format(Math.abs(consumedIdentity))}`}`);
-        lines.push(`Big spent = big bucket? ${Math.abs(bigIdentity) < 2 ? '✅ Match' : `❌ Off by ${format(Math.abs(bigIdentity))}`}`);
-        lines.push(`Wallet = bank + cash? ${Math.abs(stats.walletTotal - (stats.estimatedBankBalance + stats.estimatedCashBalance)) < 1 ? '✅ Match' : '❌ Mismatch'}`);
+        const L: string[] = [];
+        const n = (v: number) => String(Math.round(v));
 
-        navigator.clipboard.writeText(lines.join('\n')).then(() => {
+        L.push('=== LEKFLOW AUDIT REPORT ===');
+        L.push(`Cycle: ${cycle.startDate} → ${cycle.targetEndDate}`);
+        L.push('All numbers below in ALL (Lekë) unless formatted otherwise.');
+        L.push('');
+        L.push('--- BUDGET VIEW ---');
+        L.push(`Stipend: ${n(cycle.stipendAmountALL)}`);
+        L.push(`+ Buffer pool: ${n(cycle.bufferPoolALL)}`);
+        L.push(`- Planned big: ${n(cycle.plannedBigExpensesALL ?? 0)}`);
+        L.push(`= Cycle budget: ${n(stats.cycleBudget)}`);
+        L.push(`- Consumed: ${n(stats.consumed)}`);
+        L.push(`= Remaining: ${n(stats.remaining)}`);
+        L.push('');
+        L.push('--- WALLET VIEW ---');
+        L.push(`Start bank: ${n(cycle.startingRaiffeisenBalanceALL)}  Start cash: ${n(cycle.startingCashALL ?? 0)}`);
+        L.push(`Bank (est): ${n(stats.estimatedBankBalance)}`);
+        L.push(`Cash (est): ${n(stats.estimatedCashBalance)}`);
+        L.push(`= Wallet total: ${n(stats.walletTotal)}`);
+        L.push(`+ Travel stash: ${n(stats.travelStashBalance)}`);
+        L.push(`+ Owed to you: ${n(stats.receivablesALL)}`);
+        L.push(`- You owe: ${n(stats.payablesALL)}`);
+        L.push(`= Net worth: ${n(stats.netWorthALL)}`);
+        L.push('');
+        L.push('--- BUCKETS (budget impact for spending buckets; wallet outflow, + = out / - = in, for the rest) ---');
+        L.push(`Regular spending (${regularSpend.length}): ${n(sumBudget(regularSpend))}`);
+        L.push(`Refunds counted against spending (${refunds.length}): ${n(sumBudget(refunds))}`);
+        L.push(`Forgiven debts (${buckets.forgiveness.length}): ${n(sumBudget(buckets.forgiveness))}`);
+        L.push(`Big expenses (${buckets.big.length}): ${n(sumBudget(buckets.big))}`);
+        L.push(`Travel (${buckets.travel.length}): ${n(sumBudget(buckets.travel))}`);
+        L.push(`Reconciliations (${buckets.reconciliation.length}): ${n(sumOut(buckets.reconciliation))}`);
+        L.push(`Loan origins (${buckets.debtOrigin.length}): ${n(sumOut(buckets.debtOrigin))}`);
+        L.push(`Loan settlements (${buckets.debtSettlement.length}): ${n(sumOut(buckets.debtSettlement))}`);
+        L.push(`Other wallet-neutral (${buckets.walletNeutral.length}): ${n(sumOut(buckets.walletNeutral))}`);
+        L.push('');
+        L.push('--- IDENTITY CHECKS ---');
+        L.push(`Consumed = regular + refunds + forgiven? ${ok(consumedIdentity) ? 'MATCH' : `OFF by ${n(consumedIdentity)}`}`);
+        L.push(`Big spent = big bucket? ${ok(bigIdentity) ? 'MATCH' : `OFF by ${n(bigIdentity)}`}`);
+        L.push(`Travel spent = travel bucket? ${ok(travelIdentity) ? 'MATCH' : `OFF by ${n(travelIdentity)}`}`);
+        L.push(`Wallet = start + stipend - wallet-moving entries? ${ok(walletIdentity) ? 'MATCH' : `OFF by ${n(walletIdentity)}`}`);
+        L.push('');
+        L.push('--- WHY (WALLET - UNPAID BIG) != REMAINING ---');
+        L.push(`Wallet total: ${n(stats.walletTotal)}`);
+        L.push(`- Unpaid big expenses: ${n(gap.unpaidBig)}`);
+        L.push(`= Free by wallet: ${n(gap.freeByWallet)}`);
+        L.push(`Remaining (budget): ${n(stats.remaining)}`);
+        L.push(`Gap: ${n(gap.total)}`);
+        L.push(`  = starting balances ${n(gap.startBalances)}`);
+        L.push(`  - buffer pool ${n(gap.buffer)}`);
+        L.push(`  + net non-spending wallet movement ${n(gap.other)}`);
+        L.push('');
+        L.push('--- ENTRIES THIS CYCLE ---');
+        L.push('date | name | amountInALL | budgetImpact | category | paidWith | bucket | flags');
+        for (const e of inCycle) {
+            L.push(
+                `${e.timestamp.slice(0, 10)} | ${e.itemName || '(no name)'} | ${n(e.amountInALL)} | ${n(budgetImpactOf(e))} | ${e.category} | ${e.paidWith ?? '?'} | ${classifyExpense(e)} | ${flagsOf(e)}`
+            );
+        }
+
+        navigator.clipboard.writeText(L.join('\n')).then(() => {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         });
     };
-
-    const Row: React.FC<{
-        label: string;
-        value: string;
-        hint?: string;
-        bold?: boolean;
-        color?: string;
-    }> = ({ label, value, hint, bold, color }) => (
-        <div className="flex items-start justify-between gap-3 py-1.5 border-b border-slate-100 last:border-0">
-            <div className="min-w-0">
-                <p className={cn('text-xs text-slate-700', bold ? 'font-bold' : 'font-semibold')}>{label}</p>
-                {hint && <p className="text-[10px] text-slate-400 leading-tight">{hint}</p>}
-            </div>
-            <p className={cn('text-xs font-mono font-bold shrink-0', color ?? 'text-slate-900')}>{value}</p>
-        </div>
-    );
 
     if (!isOpen) return null;
 
@@ -147,20 +219,20 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
                     </div>
                 </div>
 
-                {cycle && stats ? (
+                {cycle && stats && gap ? (
                     <>
                         <div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Budget view</p>
+                            <SectionTitle>Budget view</SectionTitle>
                             <Row label="Stipend" value={format(cycle.stipendAmountALL)} />
                             <Row label="+ Buffer pool" value={format(cycle.bufferPoolALL)} />
                             <Row label="- Planned big" value={format(cycle.plannedBigExpensesALL ?? 0)} hint="Rent/bills you pre-budgeted" />
                             <Row label="= Cycle budget" value={format(stats.cycleBudget)} bold />
-                            <Row label="- Consumed" value={format(stats.consumed)} hint="Regular spending + forgiven gifts" />
+                            <Row label="- Consumed" value={format(stats.consumed)} hint="Regular spending + forgiven debts" />
                             <Row label="= Remaining to spend" value={format(stats.remaining)} bold />
                         </div>
 
                         <div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Wallet view</p>
+                            <SectionTitle>Wallet view</SectionTitle>
                             <Row label="Bank (estimated)" value={format(stats.estimatedBankBalance)} />
                             <Row label="Cash (estimated)" value={format(stats.estimatedCashBalance)} />
                             <Row label="= Wallet total" value={format(stats.walletTotal)} bold />
@@ -171,40 +243,36 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
                         </div>
 
                         <div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Expense buckets (this cycle)</p>
-                            <Row label={`Regular (${buckets.regular.length})`} value={format(sum(buckets.regular))} hint="Food, coffee, transport, etc." />
-                            <Row label={`Forgiven (${buckets.forgiveness.length})`} value={format(sum(buckets.forgiveness))} hint="Debts written off — counts as expense" />
-                            <Row label={`Big Expenses (${buckets.big.length})`} value={format(sum(buckets.big))} hint="Rent logged via Log Big Expense" />
-                            <Row label={`Travel (${buckets.travel.length})`} value={format(sum(buckets.travel))} hint="From travel stash" />
-                            <Row label={`Loans out/in (${buckets.loanOrigins.length})`} value={format(sum(buckets.loanOrigins))} hint="Money lent or borrowed" />
-                            <Row label={`Loan settlements (${buckets.loanRepayments.length})`} value={format(sum(buckets.loanRepayments))} hint="Repayments — not spending" />
-                            <Row label={`Other wallet-neutral (${buckets.walletNeutralOther.length})`} value={format(sum(buckets.walletNeutralOther))} hint="Offsets without cash movement" />
-                            <Row label={`Income (${buckets.income.length})`} value={format(sum(buckets.income))} hint="Refunds, money in" />
+                            <SectionTitle>Buckets (this cycle)</SectionTitle>
+                            <Row label={`Regular spending (${regularSpend.length})`} value={format(sumBudget(regularSpend))} hint="Counted at budget impact (split bills use your share)" />
+                            <Row label={`Refunds (${refunds.length})`} value={format(sumBudget(refunds))} hint="Negative entries that reduce spending" />
+                            <Row label={`Forgiven debts (${buckets.forgiveness.length})`} value={format(sumBudget(buckets.forgiveness))} hint="Written off — counts as spending" />
+                            <Row label={`Big expenses (${buckets.big.length})`} value={format(sumBudget(buckets.big))} hint="Rent etc. logged via Log Big Expense" />
+                            <Row label={`Travel (${buckets.travel.length})`} value={format(sumBudget(buckets.travel))} hint="Paid from the travel stash" />
+                            <Row label={`Reconciliations (${buckets.reconciliation.length})`} value={format(sumOut(buckets.reconciliation))} hint="Wallet corrections only. Negative = money added" />
+                            <Row label={`Loan origins (${buckets.debtOrigin.length})`} value={format(sumOut(buckets.debtOrigin))} hint="Money lent (+) or borrowed (−)" />
+                            <Row label={`Loan settlements (${buckets.debtSettlement.length})`} value={format(sumOut(buckets.debtSettlement))} hint="Repayments — not spending" />
+                            <Row label={`Other wallet-neutral (${buckets.walletNeutral.length})`} value={format(sumOut(buckets.walletNeutral))} hint="Bookkeeping only, no money moved" />
                         </div>
 
                         <div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Identity checks</p>
-                            <Row
-                                label="Consumed = regular + forgiven?"
-                                value={Math.abs(consumedIdentity) < 2
-                                    ? '✅ Match'
-                                    : `❌ Off by ${format(Math.abs(consumedIdentity))}`}
-                                hint="Should always be zero"
-                            />
-                            <Row
-                                label="Big spent = big bucket?"
-                                value={Math.abs(bigIdentity) < 2
-                                    ? '✅ Match'
-                                    : `❌ Off by ${format(Math.abs(bigIdentity))}`}
-                                hint="Should always be zero"
-                            />
-                            <Row
-                                label="Wallet = bank + cash?"
-                                value={Math.abs(stats.walletTotal - (stats.estimatedBankBalance + stats.estimatedCashBalance)) < 1
-                                    ? '✅ Match'
-                                    : '❌ Mismatch'}
-                                hint="Should always be zero"
-                            />
+                            <SectionTitle>Identity checks</SectionTitle>
+                            <Row label="Consumed = regular + refunds + forgiven?" value={checkText(consumedIdentity)} hint="Should always be zero" />
+                            <Row label="Big spent = big bucket?" value={checkText(bigIdentity)} hint="Should always be zero" />
+                            <Row label="Travel spent = travel bucket?" value={checkText(travelIdentity)} hint="Should always be zero" />
+                            <Row label="Wallet = start + stipend − wallet entries?" value={checkText(walletIdentity)} hint="Recomputed independently of the bank/cash split" />
+                        </div>
+
+                        <div>
+                            <SectionTitle>Why wallet − unpaid rent ≠ remaining</SectionTitle>
+                            <Row label="Wallet total" value={format(stats.walletTotal)} />
+                            <Row label="− Unpaid big expenses" value={format(gap.unpaidBig)} />
+                            <Row label="= Free by wallet" value={format(gap.freeByWallet)} bold />
+                            <Row label="Remaining (budget)" value={format(stats.remaining)} bold />
+                            <Row label="Gap" value={format(gap.total)} bold />
+                            <Row label="  starting balances" value={format(gap.startBalances)} hint="Not part of cycle budget yet" />
+                            <Row label="  − buffer pool" value={format(gap.buffer)} hint="Budget includes it, wallet doesn't" />
+                            <Row label="  + net non-spending wallet movement" value={format(gap.other)} hint="Reconciliations, loans, settlements, travel, split-bill differences" />
                         </div>
                     </>
                 ) : (

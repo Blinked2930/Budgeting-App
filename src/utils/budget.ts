@@ -31,6 +31,47 @@ export function daysBetween(start: Date, end: Date): number {
     return Math.round((endMs - startMs) / MS_PER_DAY);
 }
 
+// ---------------------------------------------------------------------------
+// Shared classification. computeBudgetStats AND the Audit panel both use these,
+// so the two can never disagree about where an entry belongs.
+// ---------------------------------------------------------------------------
+
+export type ExpenseBucket =
+    | 'reconciliation' // "Balance Reconciliation" entries: wallet only, never spending
+    | 'debtSettlement' // debtRelated: wallet only, never spending
+    | 'debtOrigin' // initial lend/borrow wallet movement: wallet only
+    | 'forgiveness' // written-off debt: counts as spending, no wallet movement
+    | 'walletNeutral' // bookkeeping only: no wallet movement, no spending
+    | 'travel' // paid from the travel stash
+    | 'big' // pre-budgeted big expense (rent etc.)
+    | 'regular'; // normal consumption (negative amounts are refunds)
+
+export function isReconciliationEntry(e: ExpenseRecord): boolean {
+    return (e.itemName ?? '').trim().toLowerCase() === 'balance reconciliation';
+}
+
+/** Order matters. First match wins. */
+export function classifyExpense(e: ExpenseRecord): ExpenseBucket {
+    if (isReconciliationEntry(e)) return 'reconciliation';
+    if (e.debtRelated) return 'debtSettlement';
+    if (e.isDebtOrigin) return 'debtOrigin';
+    if (e.isForgiveness) return 'forgiveness';
+    if (e.walletNeutral) return 'walletNeutral';
+    if (e.category === 'Travel') return 'travel';
+    if (e.isBigExpense) return 'big';
+    return 'regular';
+}
+
+/** How much of this entry counts against the budget. */
+export function budgetImpactOf(e: ExpenseRecord): number {
+    return e.budgetAmountALL ?? e.amountInALL;
+}
+
+/** Cycle start as local midnight (same convention computeBudgetStats uses). */
+export function cycleStartMs(cycle: BudgetCycle): number {
+    return parseLocalDate(cycle.startDate).getTime();
+}
+
 export interface BudgetStats {
     cycleBudget: number;
     consumed: number;
@@ -66,10 +107,6 @@ export interface BudgetStats {
     spentToday: number; // alias for consumedToday
     estimatedTotalBalance: number;
     projectedSurplus: number;
-}
-
-function isReconciliationEntry(e: ExpenseRecord): boolean {
-    return (e.itemName ?? '').trim().toLowerCase() === 'balance reconciliation';
 }
 
 export function computeBudgetStats(
@@ -115,36 +152,38 @@ export function computeBudgetStats(
             else cardDelta -= amt;
         }
 
-        // Skip anything that isn't real consumption.
-        // THE FIX: walletNeutral is now skipped from consumed.
-        if (
-            isReconciliationEntry(e) ||
-            e.debtRelated ||
-            e.isDebtOrigin ||
-            e.walletNeutral
-        ) continue;
+        const bucket = classifyExpense(e);
+        const budgetImpact = budgetImpactOf(e);
 
-        const budgetImpact = e.budgetAmountALL ?? e.amountInALL;
-        if (e.category === 'Travel') {
-            travelSpent += budgetImpact;
-            continue;
-        }
-        if (e.isBigExpense) {
-            bigExpenseSpent += budgetImpact;
-            continue;
-        }
+        switch (bucket) {
+            case 'reconciliation':
+            case 'debtSettlement':
+            case 'debtOrigin':
+            case 'walletNeutral':
+                // Not consumption.
+                break;
 
-        if (e.isForgiveness) {
-            consumed += budgetImpact;
-            forgivenSpent += budgetImpact;
-            if (whenMs >= todayMs) consumedToday += budgetImpact;
-            else consumedBeforeToday += budgetImpact;
-            continue;
-        }
+            case 'travel':
+                travelSpent += budgetImpact;
+                break;
 
-        consumed += budgetImpact;
-        if (whenMs >= todayMs) consumedToday += budgetImpact;
-        else consumedBeforeToday += budgetImpact;
+            case 'big':
+                bigExpenseSpent += budgetImpact;
+                break;
+
+            case 'forgiveness':
+                consumed += budgetImpact;
+                forgivenSpent += budgetImpact;
+                if (whenMs >= todayMs) consumedToday += budgetImpact;
+                else consumedBeforeToday += budgetImpact;
+                break;
+
+            case 'regular':
+                consumed += budgetImpact;
+                if (whenMs >= todayMs) consumedToday += budgetImpact;
+                else consumedBeforeToday += budgetImpact;
+                break;
+        }
     }
 
     let bankToCash = 0;
@@ -163,6 +202,8 @@ export function computeBudgetStats(
             cardDelta += t.amountALL;
         }
     }
+    void bankToCash;
+    void cashToBank;
 
     const plannedBig = cycle.plannedBigExpensesALL ?? 0;
     const cycleBudget = cycle.stipendAmountALL + cycle.bufferPoolALL - plannedBig;
