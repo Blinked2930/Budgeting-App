@@ -37,7 +37,6 @@ export const LogBigExpenseModal: React.FC<LogBigExpenseModalProps> = ({
     const { format, currency } = useCurrency();
     const todayStr = toDateInputValue(new Date());
 
-    // Pre-fill with whatever is left to pay
     const [amountStr, setAmountStr] = useState(String(Math.max(0, plannedTotal - alreadyPaid) || defaultAmount));
     const [label, setLabel] = useState('Rent');
     const [category, setCategory] = useState<Category>('Utilities');
@@ -95,11 +94,11 @@ export const LogBigExpenseModal: React.FC<LogBigExpenseModalProps> = ({
 
     return (
         <div
-            className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm"
             onClick={onClose}
         >
             <div
-                className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-5 space-y-4"
+                className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between">
