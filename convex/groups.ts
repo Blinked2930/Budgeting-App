@@ -1,190 +1,206 @@
-// convex/groups.ts
-import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { query, mutation } from "./_generated/server";
 
-export const getMyGroups = query({
-    handler: async (ctx) => {
-        const identity = await ctx.auth.getUserIdentity();
-        if (!identity) return [];
-        const userId = identity.subject;
+// ---------------------------------------------------------------------------
+// Queries
+// ---------------------------------------------------------------------------
 
-        // Find memberships
-        const memberships = await ctx.db
-            .query("groupMembers")
-            .withIndex("by_userId", (q) => q.eq("userId", userId))
-            .collect();
+export const listGroups = query({
+  args: {
+    userId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject ?? args.userId;
 
-        const groupIds = new Set(memberships.map((m) => m.groupId));
+    if (!userId) {
+      return [];
+    }
 
-        // Also include groups created by this user
-        const created = await ctx.db
-            .query("groups")
-            .withIndex("by_createdBy", (q) => q.eq("createdBy", userId))
-            .collect();
-        for (const g of created) {
-            groupIds.add(g._id);
-        }
+    // Find member records for user
+    const memberRecords = await ctx.db
+      .query("groupMembers")
+      .withIndex("by_userId", (q) => q.eq("userId", userId))
+      .collect();
 
-        const groups = [];
-        for (const gId of groupIds) {
-            const g = await ctx.db
-                .query("groups")
-                .filter((q) => q.and(q.eq(q.field("_id"), gId), q.neq(q.field("deleted"), true)))
-                .first();
-            if (g) groups.push(g);
-        }
+    const groupIds = memberRecords.map((m) => m.groupId);
 
-        return groups.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    },
-});
+    // Fetch matching active groups
+    const groups = [];
+    for (const groupId of groupIds) {
+      const group = await ctx.db.get(groupId);
+      if (group && !group.deleted) {
+        groups.push(group);
+      }
+    }
 
-export const createGroup = mutation({
-    args: {
-        name: v.string(),
-        currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
-        description: v.optional(v.string()),
-        creatorName: v.string(),
-    },
-    handler: async (ctx, args) => {
-        const identity = await ctx.auth.getUserIdentity();
-        if (!identity) throw new Error("Unauthorized: Sign in required");
-        const userId = identity.subject;
-        const now = new Date().toISOString();
-
-        const groupId = await ctx.db.insert("groups", {
-            name: args.name.trim(),
-            currency: args.currency,
-            description: args.description?.trim(),
-            createdBy: userId,
-            createdAt: now,
-        });
-
-        // Add creator as first member
-        await ctx.db.insert("groupMembers", {
-            groupId,
-            userId,
-            name: args.creatorName.trim(),
-            email: identity.email,
-            avatarUrl: identity.pictureUrl,
-            joinedAt: now,
-        });
-
-        return groupId;
-    },
-});
-
-export const addMember = mutation({
-    args: {
-        groupId: v.string(),
-        name: v.string(),
-        email: v.optional(v.string()),
-        userId: v.optional(v.string()),
-    },
-    handler: async (ctx, args) => {
-        const identity = await ctx.auth.getUserIdentity();
-        if (!identity) throw new Error("Unauthorized");
-
-        return await ctx.db.insert("groupMembers", {
-            groupId: args.groupId,
-            name: args.name.trim(),
-            email: args.email?.trim(),
-            userId: args.userId,
-            joinedAt: new Date().toISOString(),
-        });
-    },
+    // Numeric timestamp sorting (newest first)
+    return groups.sort((a, b) => b.createdAt - a.createdAt);
+  },
 });
 
 export const getGroupDetails = query({
-    args: { groupId: v.string() },
-    handler: async (ctx, args) => {
-        const identity = await ctx.auth.getUserIdentity();
-        if (!identity) return null;
+  args: {
+    groupId: v.id("groups"),
+  },
+  handler: async (ctx, args) => {
+    const group = await ctx.db.get(args.groupId);
+    if (!group || group.deleted) {
+      return null;
+    }
 
-        const group = await ctx.db
-            .query("groups")
-            .filter((q) => q.eq(q.field("_id"), args.groupId))
-            .first();
+    const members = await ctx.db
+      .query("groupMembers")
+      .withIndex("by_groupId", (q) => q.eq("groupId", args.groupId))
+      .collect();
 
-        if (!group || group.deleted) return null;
+    const expenses = await ctx.db
+      .query("groupExpenses")
+      .withIndex("by_groupId", (q) => q.eq("groupId", args.groupId))
+      .filter((q) => q.neq(q.field("deleted"), true))
+      .collect();
 
-        const members = await ctx.db
-            .query("groupMembers")
-            .withIndex("by_groupId", (q) => q.eq("groupId", args.groupId))
-            .collect();
+    const settlements = await ctx.db
+      .query("groupSettlements")
+      .withIndex("by_groupId", (q) => q.eq("groupId", args.groupId))
+      .filter((q) => q.neq(q.field("deleted"), true))
+      .collect();
 
-        const expenses = await ctx.db
-            .query("groupExpenses")
-            .withIndex("by_groupId", (q) => q.eq("groupId", args.groupId))
-            .filter((q) => q.neq(q.field("deleted"), true))
-            .collect();
-
-        const settlements = await ctx.db
-            .query("groupSettlements")
-            .withIndex("by_groupId", (q) => q.eq("groupId", args.groupId))
-            .filter((q) => q.neq(q.field("deleted"), true))
-            .collect();
-
-        return {
-            group,
-            members,
-            expenses: expenses.sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
-            settlements: settlements.sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
-        };
-    },
+    return {
+      group,
+      members,
+      expenses: expenses.sort((a, b) => b.timestamp - a.timestamp),
+      settlements: settlements.sort((a, b) => b.timestamp - a.timestamp),
+    };
+  },
 });
 
-export const addGroupExpense = mutation({
-    args: {
-        groupId: v.string(),
-        title: v.string(),
-        amount: v.number(),
-        currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
-        amountInALL: v.number(),
-        category: v.optional(v.string()),
-        paidByMemberId: v.string(),
-        paidByUserId: v.optional(v.string()),
-        splitType: v.union(v.literal("equal"), v.literal("exact"), v.literal("shares")),
-        splits: v.array(
-            v.object({
-                memberId: v.string(),
-                userId: v.optional(v.string()),
-                amountALL: v.number(),
-            })
-        ),
-        timestamp: v.string(),
-    },
-    handler: async (ctx, args) => {
-        const identity = await ctx.auth.getUserIdentity();
-        if (!identity) throw new Error("Unauthorized");
-        const now = new Date().toISOString();
+// ---------------------------------------------------------------------------
+// Mutations
+// ---------------------------------------------------------------------------
 
-        return await ctx.db.insert("groupExpenses", {
-            ...args,
-            createdAt: now,
-        });
-    },
+export const createGroup = mutation({
+  args: {
+    name: v.string(),
+    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    description: v.optional(v.string()),
+    memberName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject ?? "anonymous";
+    const now = Date.now();
+
+    const groupId = await ctx.db.insert("groups", {
+      name: args.name,
+      currency: args.currency,
+      description: args.description,
+      createdBy: userId,
+      createdAt: now,
+    });
+
+    // Add creator as the first member
+    const memberId = await ctx.db.insert("groupMembers", {
+      groupId,
+      userId,
+      name: args.memberName,
+      joinedAt: now,
+    });
+
+    return { groupId, memberId };
+  },
 });
 
-export const settleGroupDebt = mutation({
-    args: {
-        groupId: v.string(),
-        fromMemberId: v.string(),
-        toMemberId: v.string(),
-        fromUserId: v.optional(v.string()),
-        toUserId: v.optional(v.string()),
+export const addMember = mutation({
+  args: {
+    groupId: v.id("groups"),
+    name: v.string(),
+    email: v.optional(v.string()),
+    userId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const memberId = await ctx.db.insert("groupMembers", {
+      groupId: args.groupId,
+      name: args.name,
+      email: args.email,
+      userId: args.userId,
+      joinedAt: now,
+    });
+
+    return memberId;
+  },
+});
+
+export const addExpense = mutation({
+  args: {
+    groupId: v.id("groups"),
+    title: v.string(),
+    amount: v.number(),
+    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    amountInALL: v.number(),
+    category: v.optional(v.string()),
+    paidByMemberId: v.id("groupMembers"),
+    paidByUserId: v.optional(v.string()),
+    splitType: v.union(v.literal("equal"), v.literal("exact"), v.literal("shares")),
+    splits: v.array(
+      v.object({
+        memberId: v.id("groupMembers"),
+        userId: v.optional(v.string()),
         amountALL: v.number(),
-        currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
-        timestamp: v.string(),
-    },
-    handler: async (ctx, args) => {
-        const identity = await ctx.auth.getUserIdentity();
-        if (!identity) throw new Error("Unauthorized");
-        const now = new Date().toISOString();
+      })
+    ),
+    timestamp: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
 
-        return await ctx.db.insert("groupSettlements", {
-            ...args,
-            createdAt: now,
-        });
-    },
+    const expenseId = await ctx.db.insert("groupExpenses", {
+      groupId: args.groupId,
+      title: args.title,
+      amount: args.amount,
+      currency: args.currency,
+      amountInALL: args.amountInALL,
+      category: args.category,
+      paidByMemberId: args.paidByMemberId,
+      paidByUserId: args.paidByUserId,
+      splitType: args.splitType,
+      splits: args.splits,
+      timestamp: args.timestamp ?? now,
+      createdAt: now,
+    });
+
+    return expenseId;
+  },
 });
 
+export const addSettlement = mutation({
+  args: {
+    groupId: v.id("groups"),
+    fromMemberId: v.id("groupMembers"),
+    toMemberId: v.id("groupMembers"),
+    fromUserId: v.optional(v.string()),
+    toUserId: v.optional(v.string()),
+    amountALL: v.number(),
+    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    timestamp: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+
+    const settlementId = await ctx.db.insert("groupSettlements", {
+      groupId: args.groupId,
+      fromMemberId: args.fromMemberId,
+      toMemberId: args.toMemberId,
+      fromUserId: args.fromUserId,
+      toUserId: args.toUserId,
+      amountALL: args.amountALL,
+      currency: args.currency,
+      timestamp: args.timestamp ?? now,
+      createdAt: now,
+    });
+
+    return settlementId;
+  },
+});
