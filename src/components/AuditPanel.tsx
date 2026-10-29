@@ -1,6 +1,6 @@
 // src/components/AuditPanel.tsx
-import React, { useMemo } from 'react';
-import { X } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { X, Copy, Check } from 'lucide-react';
 import { useExpenses } from '../hooks/useExpenses';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { useCurrency } from '../hooks/useCurrency';
@@ -15,6 +15,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
     const { expenses } = useExpenses();
     const { stats, cycle } = useBudgetCycle();
     const { format } = useCurrency();
+    const [copied, setCopied] = useState(false);
 
     const buckets = useMemo(() => {
         const regular: typeof expenses = [];
@@ -48,6 +49,58 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
     const sum = (arr: typeof expenses) =>
         arr.reduce((s, e) => s + Math.abs(e.amountInALL), 0);
 
+    const consumedIdentity = stats
+        ? stats.consumed - (sum(buckets.regular) + sum(buckets.forgiveness))
+        : 0;
+    const bigIdentity = stats
+        ? stats.bigExpenseSpent - sum(buckets.big)
+        : 0;
+
+    const handleCopy = () => {
+        if (!stats || !cycle) return;
+
+        const lines: string[] = [];
+        lines.push('=== LEKFLOW AUDIT REPORT ===');
+        lines.push(`Cycle: ${cycle.startDate} → ${cycle.targetEndDate}`);
+        lines.push('');
+        lines.push('--- BUDGET VIEW ---');
+        lines.push(`Stipend: ${format(cycle.stipendAmountALL)}`);
+        lines.push(`+ Buffer pool: ${format(cycle.bufferPoolALL)}`);
+        lines.push(`- Planned big: ${format(cycle.plannedBigExpensesALL ?? 0)}`);
+        lines.push(`= Cycle budget: ${format(stats.cycleBudget)}`);
+        lines.push(`- Consumed: ${format(stats.consumed)}`);
+        lines.push(`= Remaining: ${format(stats.remaining)}`);
+        lines.push('');
+        lines.push('--- WALLET VIEW ---');
+        lines.push(`Bank (est): ${format(stats.estimatedBankBalance)}`);
+        lines.push(`Cash (est): ${format(stats.estimatedCashBalance)}`);
+        lines.push(`= Wallet total: ${format(stats.walletTotal)}`);
+        lines.push(`+ Travel stash: ${format(stats.travelStashBalance)}`);
+        lines.push(`+ Owed to you: ${format(stats.receivablesALL)}`);
+        lines.push(`- You owe: ${format(stats.payablesALL)}`);
+        lines.push(`= Net worth: ${format(stats.netWorthALL)}`);
+        lines.push('');
+        lines.push('--- EXPENSE BUCKETS ---');
+        lines.push(`Regular (${buckets.regular.length}): ${format(sum(buckets.regular))}`);
+        lines.push(`Forgiven (${buckets.forgiveness.length}): ${format(sum(buckets.forgiveness))}`);
+        lines.push(`Big Expenses (${buckets.big.length}): ${format(sum(buckets.big))}`);
+        lines.push(`Travel (${buckets.travel.length}): ${format(sum(buckets.travel))}`);
+        lines.push(`Loans out/in (${buckets.loanOrigins.length}): ${format(sum(buckets.loanOrigins))}`);
+        lines.push(`Loan settlements (${buckets.loanRepayments.length}): ${format(sum(buckets.loanRepayments))}`);
+        lines.push(`Other wallet-neutral (${buckets.walletNeutralOther.length}): ${format(sum(buckets.walletNeutralOther))}`);
+        lines.push(`Income (${buckets.income.length}): ${format(sum(buckets.income))}`);
+        lines.push('');
+        lines.push('--- IDENTITY CHECKS ---');
+        lines.push(`Consumed = regular + forgiven? ${Math.abs(consumedIdentity) < 2 ? '✅ Match' : `❌ Off by ${format(Math.abs(consumedIdentity))}`}`);
+        lines.push(`Big spent = big bucket? ${Math.abs(bigIdentity) < 2 ? '✅ Match' : `❌ Off by ${format(Math.abs(bigIdentity))}`}`);
+        lines.push(`Wallet = bank + cash? ${Math.abs(stats.walletTotal - (stats.estimatedBankBalance + stats.estimatedCashBalance)) < 1 ? '✅ Match' : '❌ Mismatch'}`);
+
+        navigator.clipboard.writeText(lines.join('\n')).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
+
     const Row: React.FC<{
         label: string;
         value: string;
@@ -66,30 +119,32 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
 
     if (!isOpen) return null;
 
-    const consumedIdentity = stats
-        ? stats.consumed - (sum(buckets.regular) + sum(buckets.forgiveness))
-        : 0;
-    const bigIdentity = stats
-        ? stats.bigExpenseSpent - sum(buckets.big)
-        : 0;
-
     return (
         <div
             className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
             onClick={onClose}
         >
             <div
-                className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-3xl shadow-2xl p-5 space-y-4"
+                className="w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-3xl shadow-2xl p-5 space-y-4 select-text"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between">
                     <h3 className="text-base font-bold text-slate-900">📊 Audit</h3>
-                    <button
-                        onClick={onClose}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleCopy}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors cursor-pointer text-xs font-semibold"
+                        >
+                            {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                            {copied ? 'Copied!' : 'Copy report'}
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
                 </div>
 
                 {cycle && stats ? (
@@ -98,9 +153,9 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
                             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Budget view</p>
                             <Row label="Stipend" value={format(cycle.stipendAmountALL)} />
                             <Row label="+ Buffer pool" value={format(cycle.bufferPoolALL)} />
-                            <Row label="− Planned big" value={format(cycle.plannedBigExpensesALL ?? 0)} hint="Rent/bills you pre-budgeted" />
+                            <Row label="- Planned big" value={format(cycle.plannedBigExpensesALL ?? 0)} hint="Rent/bills you pre-budgeted" />
                             <Row label="= Cycle budget" value={format(stats.cycleBudget)} bold />
-                            <Row label="− Consumed" value={format(stats.consumed)} hint="Regular spending + forgiven gifts" />
+                            <Row label="- Consumed" value={format(stats.consumed)} hint="Regular spending + forgiven gifts" />
                             <Row label="= Remaining to spend" value={format(stats.remaining)} bold />
                         </div>
 
@@ -111,7 +166,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
                             <Row label="= Wallet total" value={format(stats.walletTotal)} bold />
                             <Row label="+ Travel stash" value={format(stats.travelStashBalance)} />
                             <Row label="+ Owed to you" value={format(stats.receivablesALL)} />
-                            <Row label="− You owe" value={format(stats.payablesALL)} color="text-rose-600" />
+                            <Row label="- You owe" value={format(stats.payablesALL)} color="text-rose-600" />
                             <Row label="= Net worth" value={format(stats.netWorthALL)} bold />
                         </div>
 
