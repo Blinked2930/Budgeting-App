@@ -171,6 +171,36 @@ export const getActivityFeed = query({
   },
 });
 
+export const getUnclaimedMembers = query({
+  args: {
+    groupId: v.id("groups"),
+  },
+  handler: async (ctx, args) => {
+    const group = await ctx.db.get(args.groupId);
+    if (!group || group.deleted) {
+      return null;
+    }
+
+    const members = await ctx.db
+      .query("groupMembers")
+      .filter((q) => q.eq(q.field("groupId"), args.groupId))
+      .collect();
+
+    const unclaimedMembers = members.filter(
+      (m) => !m.userId || m.userId === "anonymous"
+    );
+
+    return {
+      groupName: group.name,
+      currency: group.currency,
+      unclaimedMembers: unclaimedMembers.map((m) => ({
+        _id: m._id,
+        name: m.name,
+      })),
+    };
+  },
+});
+
 // ---------------------------------------------------------------------------
 // MUTATIONS
 // ---------------------------------------------------------------------------
@@ -271,6 +301,30 @@ export const joinGroup = mutation({
   },
 });
 
+export const claimMember = mutation({
+  args: {
+    memberId: v.id("groupMembers"),
+    name: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject ?? "anonymous";
+
+    const member = await ctx.db.get(args.memberId);
+    if (!member) {
+      throw new Error("Member profile not found");
+    }
+
+    const patchData: { userId: string; name?: string } = { userId };
+    if (args.name?.trim()) {
+      patchData.name = args.name.trim();
+    }
+
+    await ctx.db.patch(args.memberId, patchData);
+    return { groupId: member.groupId, memberId: args.memberId };
+  },
+});
+
 export const addMember = mutation({
   args: {
     groupId: v.id("groups"),
@@ -336,6 +390,41 @@ export const addExpense = mutation({
 });
 
 export const addGroupExpense = addExpense;
+
+export const updateExpense = mutation({
+  args: {
+    expenseId: v.id("groupExpenses"),
+    title: v.string(),
+    amount: v.number(),
+    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    amountInALL: v.number(),
+    category: v.optional(v.string()),
+    paidByMemberId: v.id("groupMembers"),
+    splitType: v.union(v.literal("equal"), v.literal("exact"), v.literal("shares")),
+    splits: v.array(
+      v.object({
+        memberId: v.id("groupMembers"),
+        userId: v.optional(v.string()),
+        amountALL: v.number(),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { expenseId, ...updates } = args;
+    await ctx.db.patch(expenseId, updates);
+  },
+});
+
+export const deleteExpense = mutation({
+  args: {
+    expenseId: v.id("groupExpenses"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.expenseId, {
+      deleted: true,
+    });
+  },
+});
 
 export const settleGroupDebt = mutation({
   args: {
