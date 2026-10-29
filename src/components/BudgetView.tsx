@@ -132,7 +132,7 @@ const TravelStashModal: React.FC<{
                         />
                     </Field>
                     <p className="text-[10px] text-slate-500 leading-relaxed">
-                        Adding to your stash moves money out of your available daily budget. Withdrawing moves it back. Neither action affects your Raiffeisen or Cash balances — Travel expenses will still deduct from Raiffeisen as usual.
+                        Adding to your stash holds that money back from "Free to spend". Withdrawing releases it. Neither action changes your Raiffeisen or Cash balances — Travel expenses still deduct from Raiffeisen as usual.
                     </p>
                     <div className="grid grid-cols-2 gap-2 pt-1">
                         <button
@@ -174,6 +174,8 @@ const ReconcileRow: React.FC<{
     const hasActual = actualStr.trim() !== '' && !Number.isNaN(actual);
     const variance = hasActual ? actual - estimated : 0;
     const matches = hasActual && Math.abs(variance) < 1;
+    // amountToLog > 0: you have LESS than expected (logged as money out).
+    // amountToLog < 0: you have MORE than expected (logged as money in).
     const amountToLog = hasActual ? estimated - actual : 0;
     const hasDiscrepancy = hasActual && !matches && Math.abs(amountToLog) >= 1;
 
@@ -272,12 +274,16 @@ const ReconcileRow: React.FC<{
                         </div>
 
                         <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200">
-                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Adjustment</p>
+                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Effect on your {label.toLowerCase()} balance</p>
                             <p className={cn('text-lg font-mono font-bold mt-0.5', amountToLog > 0 ? 'text-rose-600' : 'text-emerald-600')}>
                                 {amountToLog > 0 ? '−' : '+'}
                                 {format(Math.abs(amountToLog))}
                             </p>
-                            <p className="text-[10px] text-slate-500 mt-1">Logs as a {paidWith.toLowerCase()} entry.</p>
+                            <p className="text-[10px] text-slate-500 mt-1">
+                                {amountToLog > 0
+                                    ? `Records money you spent or lost that wasn't logged. Free to spend goes down by this amount. Saved as a ${paidWith.toLowerCase()} entry.`
+                                    : `Records money you had that wasn't logged. Free to spend goes up by this amount. Saved as a ${paidWith.toLowerCase()} entry.`}
+                            </p>
                         </div>
 
                         <div className="grid grid-cols-2 gap-2">
@@ -446,7 +452,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 min-w-0">
-                <Field label="Budget Additions" hint="Optional initial extra cash block.">
+                <Field label="Budget Additions" hint="Legacy field. No longer changes Free to spend. Real extra money belongs in Bank/Cash at start.">
                     <input
                         type="number"
                         inputMode="decimal"
@@ -457,7 +463,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
                         className={inputClass}
                     />
                 </Field>
-                <Field label="Travel stash (L)" hint="Balance at cycle start.">
+                <Field label="Travel stash (L)" hint="Balance at cycle start. Held back from Free to spend.">
                     <input
                         type="number"
                         inputMode="decimal"
@@ -472,7 +478,7 @@ const CycleForm: React.FC<CycleFormProps> = ({
 
             <Field
                 label="Planned big expenses (L)"
-                hint="Rent, utilities, insurance — total for the whole cycle. Pre-budgeted so your daily allowance stays honest from day one."
+                hint="Rent, utilities, insurance — total for the whole cycle. Held back from Free to spend until you log them as paid."
             >
                 <input
                     type="number"
@@ -666,16 +672,11 @@ export const BudgetView: React.FC = () => {
 
     const hasDebts = stats.receivablesALL > 0 || stats.payablesALL > 0;
 
-    // "Where is my money?" reconciliation
     const walletTotal = stats.walletTotal;
     const travelStash = stats.travelStashBalance;
     const receivables = stats.receivablesALL;
     const payables = stats.payablesALL;
     const grandTotal = stats.netWorthALL;
-
-    // Progress bar: consumed (regular + forgiven) out of cycleBudget
-    const actualStipend = cycle.stipendAmountALL + cycle.bufferPoolALL;
-    const displayedSpent = stats.consumed + stats.bigExpenseSpent;
 
     return (
         <div className="w-full max-w-md mx-auto px-3 sm:px-4 py-4 space-y-3.5">
@@ -702,7 +703,7 @@ export const BudgetView: React.FC = () => {
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
                         Left to spend today
                     </p>
-                    <button onClick={() => setInfoModal({ title: 'Left to Spend Today', description: 'Your daily allowance is capped at your total budget divided by the total cycle days. If you overspend, this number shrinks to help you stay on track. If you underspend, the extra money goes into your Buffer Pool and is saved for the end of the cycle rather than increasing your future daily allowance. Big expenses (like rent) are subtracted upfront so they do not spike or crash this number.' })}>
+                    <button onClick={() => setInfoModal({ title: 'Left to Spend Today', description: 'Your daily allowance is your free-to-spend money divided by the days left, capped at an even share of your cycle budget. If you overspend, this number shrinks to keep you on track. If you underspend, the extra goes into your Buffer Pool rather than raising your future daily allowance. Unpaid rent and bills are held back first, so they do not spike or crash this number.' })}>
                         <Info className="w-3.5 h-3.5 text-slate-400" />
                     </button>
                 </div>
@@ -727,8 +728,8 @@ export const BudgetView: React.FC = () => {
                         />
                     </div>
                     <div className="flex justify-between mt-1.5 text-[10px] font-mono text-slate-400">
-                        <span>{format(displayedSpent)} spent</span>
-                        <span>{format(actualStipend)} total</span>
+                        <span>{format(stats.consumed)} spent</span>
+                        <span>{format(stats.cycleBudget)} budget</span>
                     </div>
                 </div>
             </div>
@@ -810,10 +811,10 @@ export const BudgetView: React.FC = () => {
                     icon={<Wallet className="w-3.5 h-3.5 text-emerald-600" />}
                     label="Remaining"
                     value={format(stats.remaining)}
-                    sub="budget left this cycle"
+                    sub="free to spend"
                     negative={stats.remaining < 0}
                     showInfo
-                    onClick={() => setInfoModal({ title: 'Remaining Budget', description: 'This is your BUDGET remaining — how much you can still spend on regular daily life before your stipend runs out. It is NOT your bank balance. It excludes: rent you already planned for, money you have lent out, and travel stash you have set aside. To see your actual wallet total, look at the "Where is my money?" card below.' })}
+                    onClick={() => setInfoModal({ title: 'Remaining = Free to spend', description: 'The money you can still spend before your next payday: your wallet total (bank + cash), minus rent/bills you have planned but not yet paid, minus debts you owe, minus travel stash held back. Because it starts from your real wallet, reconciliations, loans and repayments are all reflected. Spending is already inside the wallet figure, so it is not subtracted a second time. See the breakdown in the "Where is my money?" card below.' })}
                 />
                 <StatTile
                     icon={<CalendarDays className="w-3.5 h-3.5 text-cyan-600" />}
@@ -829,7 +830,7 @@ export const BudgetView: React.FC = () => {
                     value={format(stats.bufferPool)}
                     sub="unspent from logged days"
                     showInfo
-                    onClick={() => setInfoModal({ title: 'Buffer Pool', description: 'Money you saved by spending less than the expected daily burn rate. This is automatically added to your budget for the next cycle (or rolls into your Travel Stash). It does not increase your daily allowance.' })}
+                    onClick={() => setInfoModal({ title: 'Buffer Pool', description: 'Money you saved by spending less than the expected daily burn rate. It does not increase your daily allowance.' })}
                 />
                 <StatTile
                     icon={<PiggyBank className="w-3.5 h-3.5 text-rose-600" />}
@@ -847,7 +848,7 @@ export const BudgetView: React.FC = () => {
                 </p>
             )}
 
-            {/* Where is my money? — reconciliation */}
+            {/* Where is my money? */}
             <div className="p-4 sm:p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-3">
                 <div className="flex items-center justify-between">
                     <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
@@ -861,6 +862,7 @@ export const BudgetView: React.FC = () => {
                         Audit
                     </button>
                 </div>
+
                 <div className="space-y-1.5 text-[11px] font-mono">
                     <div className="flex justify-between">
                         <span className="text-slate-500">Bank</span>
@@ -874,12 +876,44 @@ export const BudgetView: React.FC = () => {
                         <span className="text-slate-700 font-semibold">= Wallet total</span>
                         <span className="text-slate-900 font-bold">{format(walletTotal)}</span>
                     </div>
-                    {travelStash > 0 && (
+                </div>
+
+                <div className="space-y-1.5 text-[11px] font-mono pt-2 border-t border-slate-100">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider font-sans">Free to spend</p>
+                    <div className="flex justify-between">
+                        <span className="text-slate-500">Wallet total</span>
+                        <span className="text-slate-900">{format(walletTotal)}</span>
+                    </div>
+                    {stats.unpaidBig > 0 && (
                         <div className="flex justify-between">
-                            <span className="text-slate-500">+ Travel stash (earmarked)</span>
-                            <span className="text-slate-900">{format(travelStash)}</span>
+                            <span className="text-slate-500">− Rent/bills still to pay</span>
+                            <span className="text-slate-900">{format(stats.unpaidBig)}</span>
                         </div>
                     )}
+                    {payables > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-slate-500">− You owe</span>
+                            <span className="text-rose-600">{format(payables)}</span>
+                        </div>
+                    )}
+                    {stats.travelStashHeld > 0 && (
+                        <div className="flex justify-between">
+                            <span className="text-slate-500">− Travel stash (held back)</span>
+                            <span className="text-slate-900">{format(stats.travelStashHeld)}</span>
+                        </div>
+                    )}
+                    <div className="flex justify-between pt-1.5 border-t border-slate-100">
+                        <span className="text-slate-700 font-semibold">= Free to spend</span>
+                        <span className={cn('font-bold', stats.freeToSpend < 0 ? 'text-rose-600' : 'text-emerald-600')}>{format(stats.freeToSpend)}</span>
+                    </div>
+                </div>
+
+                <div className="space-y-1.5 text-[11px] font-mono pt-2 border-t border-slate-100">
+                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider font-sans">Net worth</p>
+                    <div className="flex justify-between">
+                        <span className="text-slate-500">Wallet total</span>
+                        <span className="text-slate-900">{format(walletTotal)}</span>
+                    </div>
                     {receivables > 0 && (
                         <div className="flex justify-between">
                             <span className="text-slate-500">+ Owed to you</span>
@@ -896,9 +930,15 @@ export const BudgetView: React.FC = () => {
                         <span className="text-slate-700 font-semibold">= Net worth</span>
                         <span className="text-slate-900 font-bold">{format(grandTotal)}</span>
                     </div>
+                    {travelStash > 0 && (
+                        <p className="text-[10px] text-slate-400 font-sans pt-0.5">
+                            Your {format(travelStash)} travel stash is part of the wallet total, not extra money.
+                        </p>
+                    )}
                 </div>
+
                 <p className="text-[10px] text-slate-400 leading-relaxed pt-1">
-                    This is what you actually have, if you opened your bank app right now. If it doesn't match your real balance, tap Audit or use the Bank/Cash reconciliation fields above to log the difference.
+                    Wallet total is what you'd see if you opened your bank app and counted your cash. If it doesn't match, use the Bank/Cash fields above to log the difference, or tap Audit.
                 </p>
             </div>
 

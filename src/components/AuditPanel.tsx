@@ -105,23 +105,11 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
         return stats.walletTotal - expected;
     }, [stats, cycle, inCycle]);
 
-    // Why "Wallet - unpaid rent" differs from "Remaining".
-    const gap = useMemo(() => {
-        if (!stats || !cycle) return null;
-        const unpaidBig = stats.plannedBig - stats.bigExpenseSpent;
-        const freeByWallet = stats.walletTotal - unpaidBig;
-        const total = freeByWallet - stats.remaining;
-        const startBalances = cycle.startingRaiffeisenBalanceALL + (cycle.startingCashALL ?? 0);
-        const buffer = cycle.bufferPoolALL;
-        const other = total - startBalances + buffer;
-        return { unpaidBig, freeByWallet, total, startBalances, buffer, other };
-    }, [stats, cycle]);
-
     const ok = (n: number) => Math.abs(n) < 2;
     const checkText = (n: number) => (ok(n) ? '✅ Match' : `❌ Off by ${format(Math.abs(n))}`);
 
     const handleCopy = () => {
-        if (!stats || !cycle || !gap) return;
+        if (!stats || !cycle) return;
 
         const L: string[] = [];
         const n = (v: number) => String(Math.round(v));
@@ -130,20 +118,22 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
         L.push(`Cycle: ${cycle.startDate} → ${cycle.targetEndDate}`);
         L.push('All numbers below in ALL (Lekë) unless formatted otherwise.');
         L.push('');
-        L.push('--- BUDGET VIEW ---');
-        L.push(`Stipend: ${n(cycle.stipendAmountALL)}`);
-        L.push(`+ Buffer pool: ${n(cycle.bufferPoolALL)}`);
-        L.push(`- Planned big: ${n(cycle.plannedBigExpensesALL ?? 0)}`);
+        L.push('--- FREE TO SPEND (Remaining) ---');
+        L.push(`Wallet total: ${n(stats.walletTotal)}`);
+        L.push(`- Unpaid big expenses: ${n(stats.unpaidBig)}  (planned ${n(stats.plannedBig)}, paid ${n(stats.bigExpenseSpent)})`);
+        L.push(`- You owe: ${n(stats.payablesALL)}`);
+        L.push(`- Travel stash held back: ${n(stats.travelStashHeld)}`);
+        L.push(`= Free to spend: ${n(stats.freeToSpend)}`);
+        L.push(`+ Consumed so far: ${n(stats.consumed)}`);
         L.push(`= Cycle budget: ${n(stats.cycleBudget)}`);
-        L.push(`- Consumed: ${n(stats.consumed)}`);
-        L.push(`= Remaining: ${n(stats.remaining)}`);
+        L.push(`Stipend: ${n(cycle.stipendAmountALL)}  Planned big: ${n(cycle.plannedBigExpensesALL ?? 0)}`);
         L.push('');
         L.push('--- WALLET VIEW ---');
         L.push(`Start bank: ${n(cycle.startingRaiffeisenBalanceALL)}  Start cash: ${n(cycle.startingCashALL ?? 0)}`);
         L.push(`Bank (est): ${n(stats.estimatedBankBalance)}`);
         L.push(`Cash (est): ${n(stats.estimatedCashBalance)}`);
         L.push(`= Wallet total: ${n(stats.walletTotal)}`);
-        L.push(`+ Travel stash: ${n(stats.travelStashBalance)}`);
+        L.push(`Travel stash balance (inside wallet): ${n(stats.travelStashBalance)}`);
         L.push(`+ Owed to you: ${n(stats.receivablesALL)}`);
         L.push(`- You owe: ${n(stats.payablesALL)}`);
         L.push(`= Net worth: ${n(stats.netWorthALL)}`);
@@ -164,16 +154,6 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
         L.push(`Big spent = big bucket? ${ok(bigIdentity) ? 'MATCH' : `OFF by ${n(bigIdentity)}`}`);
         L.push(`Travel spent = travel bucket? ${ok(travelIdentity) ? 'MATCH' : `OFF by ${n(travelIdentity)}`}`);
         L.push(`Wallet = start + stipend - wallet-moving entries? ${ok(walletIdentity) ? 'MATCH' : `OFF by ${n(walletIdentity)}`}`);
-        L.push('');
-        L.push('--- WHY (WALLET - UNPAID BIG) != REMAINING ---');
-        L.push(`Wallet total: ${n(stats.walletTotal)}`);
-        L.push(`- Unpaid big expenses: ${n(gap.unpaidBig)}`);
-        L.push(`= Free by wallet: ${n(gap.freeByWallet)}`);
-        L.push(`Remaining (budget): ${n(stats.remaining)}`);
-        L.push(`Gap: ${n(gap.total)}`);
-        L.push(`  = starting balances ${n(gap.startBalances)}`);
-        L.push(`  - buffer pool ${n(gap.buffer)}`);
-        L.push(`  + net non-spending wallet movement ${n(gap.other)}`);
         L.push('');
         L.push('--- ENTRIES THIS CYCLE ---');
         L.push('date | name | amountInALL | budgetImpact | category | paidWith | bucket | flags');
@@ -219,16 +199,17 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
                     </div>
                 </div>
 
-                {cycle && stats && gap ? (
+                {cycle && stats ? (
                     <>
                         <div>
-                            <SectionTitle>Budget view</SectionTitle>
-                            <Row label="Stipend" value={format(cycle.stipendAmountALL)} />
-                            <Row label="+ Buffer pool" value={format(cycle.bufferPoolALL)} />
-                            <Row label="- Planned big" value={format(cycle.plannedBigExpensesALL ?? 0)} hint="Rent/bills you pre-budgeted" />
-                            <Row label="= Cycle budget" value={format(stats.cycleBudget)} bold />
-                            <Row label="- Consumed" value={format(stats.consumed)} hint="Regular spending + forgiven debts" />
-                            <Row label="= Remaining to spend" value={format(stats.remaining)} bold />
+                            <SectionTitle>Free to spend (Remaining)</SectionTitle>
+                            <Row label="Wallet total" value={format(stats.walletTotal)} hint="Bank + cash, from your logged entries" />
+                            <Row label="− Unpaid big expenses" value={format(stats.unpaidBig)} hint="Rent/bills planned but not yet logged as paid" />
+                            <Row label="− You owe" value={format(stats.payablesALL)} hint="Open debts you will have to pay" />
+                            <Row label="− Travel stash held back" value={format(stats.travelStashHeld)} hint="Earmarked money that sits inside your bank balance" />
+                            <Row label="= Free to spend" value={format(stats.freeToSpend)} bold />
+                            <Row label="+ Consumed so far" value={format(stats.consumed)} hint="Regular spending + forgiven debts" />
+                            <Row label="= Cycle budget" value={format(stats.cycleBudget)} bold hint="Free to spend + spent. Drives your daily allowance" />
                         </div>
 
                         <div>
@@ -236,7 +217,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
                             <Row label="Bank (estimated)" value={format(stats.estimatedBankBalance)} />
                             <Row label="Cash (estimated)" value={format(stats.estimatedCashBalance)} />
                             <Row label="= Wallet total" value={format(stats.walletTotal)} bold />
-                            <Row label="+ Travel stash" value={format(stats.travelStashBalance)} />
+                            <Row label="Travel stash (inside wallet)" value={format(stats.travelStashBalance)} hint="Informational: already part of the wallet total" />
                             <Row label="+ Owed to you" value={format(stats.receivablesALL)} />
                             <Row label="- You owe" value={format(stats.payablesALL)} color="text-rose-600" />
                             <Row label="= Net worth" value={format(stats.netWorthALL)} bold />
@@ -263,17 +244,6 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
                             <Row label="Wallet = start + stipend − wallet entries?" value={checkText(walletIdentity)} hint="Recomputed independently of the bank/cash split" />
                         </div>
 
-                        <div>
-                            <SectionTitle>Why wallet − unpaid rent ≠ remaining</SectionTitle>
-                            <Row label="Wallet total" value={format(stats.walletTotal)} />
-                            <Row label="− Unpaid big expenses" value={format(gap.unpaidBig)} />
-                            <Row label="= Free by wallet" value={format(gap.freeByWallet)} bold />
-                            <Row label="Remaining (budget)" value={format(stats.remaining)} bold />
-                            <Row label="Gap" value={format(gap.total)} bold />
-                            <Row label="  starting balances" value={format(gap.startBalances)} hint="Not part of cycle budget yet" />
-                            <Row label="  − buffer pool" value={format(gap.buffer)} hint="Budget includes it, wallet doesn't" />
-                            <Row label="  + net non-spending wallet movement" value={format(gap.other)} hint="Reconciliations, loans, settlements, travel, split-bill differences" />
-                        </div>
                     </>
                 ) : (
                     <p className="text-xs text-slate-500">No cycle set up yet.</p>

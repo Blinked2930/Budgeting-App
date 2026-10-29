@@ -72,6 +72,16 @@ export function cycleStartMs(cycle: BudgetCycle): number {
     return parseLocalDate(cycle.startDate).getTime();
 }
 
+/**
+ * Where does the travel stash physically live?
+ * The stash is an earmark on money already sitting in your bank (travel spending
+ * is paid from the bank, and "Next cycle" carries the bank balance forward as-is).
+ * true  -> stash is part of walletTotal: it is held back from "free to spend"
+ *          and is NOT added again to net worth.
+ * false -> stash is separate money: not held back, added on top of net worth.
+ */
+export const TRAVEL_STASH_IS_INSIDE_WALLET = true;
+
 export interface BudgetStats {
     cycleBudget: number;
     consumed: number;
@@ -81,6 +91,12 @@ export interface BudgetStats {
 
     plannedBig: number;
     bigExpenseSpent: number;
+    /** Planned big expenses not yet paid (never negative). */
+    unpaidBig: number;
+    /** Travel stash held back from free money (0 if the stash is separate). */
+    travelStashHeld: number;
+    /** walletTotal - unpaidBig - payables - travelStashHeld. Equals `remaining`. */
+    freeToSpend: number;
 
     travelSpent: number;
     travelStashBalance: number;
@@ -205,19 +221,7 @@ export function computeBudgetStats(
     void bankToCash;
     void cashToBank;
 
-    const plannedBig = cycle.plannedBigExpensesALL ?? 0;
-    const cycleBudget = cycle.stipendAmountALL + cycle.bufferPoolALL - plannedBig;
-    const remaining = cycleBudget - consumed;
-    const percentConsumed = cycleBudget > 0
-        ? Math.min(100, (consumed / cycleBudget) * 100)
-        : 0;
-
-    const baseDaily = cycleBudget / totalDays;
-    const rawAllowance = (remaining + consumedToday) / daysLeft;
-    const dailyAllowance = Math.min(baseDaily, rawAllowance);
-    const leftToday = dailyAllowance - consumedToday;
-    const bufferPool = Math.max(0, baseDaily * daysElapsed - consumedBeforeToday);
-
+    // ---- Wallet side (what you actually have) ----
     const startingCash = cycle.startingCashALL ?? 0;
     const estimatedBankBalance = cycle.startingRaiffeisenBalanceALL + cycle.stipendAmountALL + cardDelta;
     const estimatedCashBalance = startingCash + cashDelta;
@@ -233,6 +237,28 @@ export function computeBudgetStats(
     const netOfDebtsALL = receivablesALL - payablesALL;
     const travelStashBalance = cycle.travelStashALL - travelSpent;
 
+    // ---- Free to spend: anchored to the wallet, so every real money movement
+    // (reconciliations, loans, settlements, transfers) is reflected automatically.
+    // The wallet is already net of everything spent, so consumption is NOT
+    // subtracted again here. Receivables are not spendable, so they are ignored.
+    const plannedBig = cycle.plannedBigExpensesALL ?? 0;
+    const unpaidBig = Math.max(0, plannedBig - bigExpenseSpent);
+    const travelStashHeld = TRAVEL_STASH_IS_INSIDE_WALLET ? Math.max(0, travelStashBalance) : 0;
+    const freeToSpend = walletTotal - unpaidBig - payablesALL - travelStashHeld;
+
+    // "Cycle budget" = everything that was spendable this cycle = what is left + what is spent.
+    const remaining = freeToSpend;
+    const cycleBudget = freeToSpend + consumed;
+    const percentConsumed = cycleBudget > 0
+        ? Math.min(100, (consumed / cycleBudget) * 100)
+        : 0;
+
+    const baseDaily = cycleBudget / totalDays;
+    const rawAllowance = (remaining + consumedToday) / daysLeft;
+    const dailyAllowance = Math.min(baseDaily, rawAllowance);
+    const leftToday = dailyAllowance - consumedToday;
+    const bufferPool = Math.max(0, baseDaily * daysElapsed - consumedBeforeToday);
+
     return {
         cycleBudget,
         consumed,
@@ -241,6 +267,9 @@ export function computeBudgetStats(
         percentConsumed,
         plannedBig,
         bigExpenseSpent,
+        unpaidBig,
+        travelStashHeld,
+        freeToSpend,
         travelSpent,
         travelStashBalance,
         totalDays,
@@ -257,7 +286,7 @@ export function computeBudgetStats(
         receivablesALL,
         payablesALL,
         netOfDebtsALL,
-        netWorthALL: walletTotal + travelStashBalance + netOfDebtsALL,
+        netWorthALL: walletTotal + (TRAVEL_STASH_IS_INSIDE_WALLET ? 0 : travelStashBalance) + netOfDebtsALL,
         spent: consumed,
         spentToday: consumedToday,
         estimatedTotalBalance: walletTotal,
