@@ -1,6 +1,6 @@
 // src/components/LogBigExpenseModal.tsx
 import React, { useState } from 'react';
-import { X, TriangleAlert, Check, Building2, Zap, Wifi, Shield, MoreHorizontal } from 'lucide-react';
+import { X, TriangleAlert, Check, Building2, Zap, Wifi, Shield, MoreHorizontal, CreditCard, Banknote } from 'lucide-react';
 import { addExpense } from '../db';
 import { useCurrency } from '../hooks/useCurrency';
 import type { Category } from '../types';
@@ -40,6 +40,7 @@ export const LogBigExpenseModal: React.FC<LogBigExpenseModalProps> = ({
     const [amountStr, setAmountStr] = useState(String(Math.max(0, plannedTotal - alreadyPaid) || defaultAmount));
     const [label, setLabel] = useState('Rent');
     const [category, setCategory] = useState<Category>('Utilities');
+    const [paidWith, setPaidWith] = useState<'Card' | 'Cash'>('Card');
     const [dateOverride, setDateOverride] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -77,12 +78,13 @@ export const LogBigExpenseModal: React.FC<LogBigExpenseModalProps> = ({
                 category,
                 itemName: label.trim(),
                 isBigExpense: true,
-                paidWith: 'Card',
+                paidWith,
                 timestamp,
             });
             setAmountStr('');
             setLabel('Rent');
             setCategory('Utilities');
+            setPaidWith('Card');
             setIsSaving(false);
             onClose();
         } catch (err) {
@@ -98,7 +100,7 @@ export const LogBigExpenseModal: React.FC<LogBigExpenseModalProps> = ({
             onClick={onClose}
         >
             <div
-                className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+                className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto font-sans"
                 onClick={(e) => e.stopPropagation()}
             >
                 <div className="flex items-center justify-between">
@@ -165,6 +167,40 @@ export const LogBigExpenseModal: React.FC<LogBigExpenseModalProps> = ({
                         placeholder="0"
                         className={inputClass}
                     />
+                </div>
+
+                <div>
+                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                        Paid With
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setPaidWith('Card')}
+                            className={cn(
+                                'flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer',
+                                paidWith === 'Card'
+                                    ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                                    : 'bg-white border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300'
+                            )}
+                        >
+                            <CreditCard className="w-3.5 h-3.5" />
+                            Card
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setPaidWith('Cash')}
+                            className={cn(
+                                'flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-xs font-semibold transition-colors cursor-pointer',
+                                paidWith === 'Cash'
+                                    ? 'bg-emerald-50 border-emerald-500 text-emerald-700'
+                                    : 'bg-white border-slate-200 text-slate-500 hover:text-slate-900 hover:border-slate-300'
+                            )}
+                        >
+                            <Banknote className="w-3.5 h-3.5" />
+                            Cash
+                        </button>
+                    </div>
                 </div>
 
                 <div>
