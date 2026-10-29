@@ -40,10 +40,10 @@ export type ExpenseBucket =
     | 'reconciliation' // "Balance Reconciliation" entries: wallet only, never spending
     | 'debtSettlement' // debtRelated: wallet only, never spending
     | 'debtOrigin' // initial lend/borrow wallet movement: wallet only
-    | 'forgiveness' // written-off debt: counts as spending, no wallet movement
-    | 'walletNeutral' // bookkeeping only: no wallet movement, no spending
+    | 'forgiveness' // written-off debt (isForgiveness): counts as spending, no wallet movement
     | 'travel' // paid from the travel stash
     | 'big' // pre-budgeted big expense (rent etc.)
+    | 'noWalletSpending' // real spending that moved no wallet money: written-off loans ("Gift to ..."), things someone else paid for
     | 'regular'; // normal consumption (negative amounts are refunds)
 
 export function isReconciliationEntry(e: ExpenseRecord): boolean {
@@ -56,9 +56,13 @@ export function classifyExpense(e: ExpenseRecord): ExpenseBucket {
     if (e.debtRelated) return 'debtSettlement';
     if (e.isDebtOrigin) return 'debtOrigin';
     if (e.isForgiveness) return 'forgiveness';
-    if (e.walletNeutral) return 'walletNeutral';
     if (e.category === 'Travel') return 'travel';
     if (e.isBigExpense) return 'big';
+    // Wallet-neutral entries are real spending whose money either left the wallet earlier
+    // (a lend that was later written off) or was paid by someone else. They count as
+    // spending but never touch the wallet. To go back to ignoring them, return a
+    // non-spending bucket here instead.
+    if (e.walletNeutral) return 'noWalletSpending';
     return 'regular';
 }
 
@@ -175,7 +179,6 @@ export function computeBudgetStats(
             case 'reconciliation':
             case 'debtSettlement':
             case 'debtOrigin':
-            case 'walletNeutral':
                 // Not consumption.
                 break;
 
@@ -195,6 +198,7 @@ export function computeBudgetStats(
                 break;
 
             case 'regular':
+            case 'noWalletSpending':
                 consumed += budgetImpact;
                 if (whenMs >= todayMs) consumedToday += budgetImpact;
                 else consumedBeforeToday += budgetImpact;

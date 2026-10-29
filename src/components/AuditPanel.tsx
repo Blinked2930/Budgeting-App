@@ -39,7 +39,7 @@ const EMPTY_BUCKETS = (): Record<ExpenseBucket, ExpenseRecord[]> => ({
     debtSettlement: [],
     debtOrigin: [],
     forgiveness: [],
-    walletNeutral: [],
+    noWalletSpending: [],
     travel: [],
     big: [],
     regular: [],
@@ -85,7 +85,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
     const refunds = buckets.regular.filter((e) => e.amount < 0);
 
     const consumedIdentity = stats
-        ? stats.consumed - (sumBudget(buckets.regular) + sumBudget(buckets.forgiveness))
+        ? stats.consumed - (sumBudget(buckets.regular) + sumBudget(buckets.noWalletSpending) + sumBudget(buckets.forgiveness))
         : 0;
     const bigIdentity = stats ? stats.bigExpenseSpent - sumBudget(buckets.big) : 0;
     const travelIdentity = stats ? stats.travelSpent - sumBudget(buckets.travel) : 0;
@@ -147,10 +147,10 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
         L.push(`Reconciliations (${buckets.reconciliation.length}): ${n(sumOut(buckets.reconciliation))}`);
         L.push(`Loan origins (${buckets.debtOrigin.length}): ${n(sumOut(buckets.debtOrigin))}`);
         L.push(`Loan settlements (${buckets.debtSettlement.length}): ${n(sumOut(buckets.debtSettlement))}`);
-        L.push(`Other wallet-neutral (${buckets.walletNeutral.length}): ${n(sumOut(buckets.walletNeutral))}`);
+        L.push(`Spent without wallet movement (${buckets.noWalletSpending.length}): ${n(sumBudget(buckets.noWalletSpending))}`);
         L.push('');
         L.push('--- IDENTITY CHECKS ---');
-        L.push(`Consumed = regular + refunds + forgiven? ${ok(consumedIdentity) ? 'MATCH' : `OFF by ${n(consumedIdentity)}`}`);
+        L.push(`Consumed = regular + no-wallet + forgiven? ${ok(consumedIdentity) ? 'MATCH' : `OFF by ${n(consumedIdentity)}`}`);
         L.push(`Big spent = big bucket? ${ok(bigIdentity) ? 'MATCH' : `OFF by ${n(bigIdentity)}`}`);
         L.push(`Travel spent = travel bucket? ${ok(travelIdentity) ? 'MATCH' : `OFF by ${n(travelIdentity)}`}`);
         L.push(`Wallet = start + stipend - wallet-moving entries? ${ok(walletIdentity) ? 'MATCH' : `OFF by ${n(walletIdentity)}`}`);
@@ -208,7 +208,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
                             <Row label="− You owe" value={format(stats.payablesALL)} hint="Open debts you will have to pay" />
                             <Row label="− Travel stash held back" value={format(stats.travelStashHeld)} hint="Earmarked money that sits inside your bank balance" />
                             <Row label="= Free to spend" value={format(stats.freeToSpend)} bold />
-                            <Row label="+ Consumed so far" value={format(stats.consumed)} hint="Regular spending + forgiven debts" />
+                            <Row label="+ Consumed so far" value={format(stats.consumed)} hint="Regular + no-wallet spending + forgiven debts" />
                             <Row label="= Cycle budget" value={format(stats.cycleBudget)} bold hint="Free to spend + spent. Drives your daily allowance" />
                         </div>
 
@@ -233,12 +233,12 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
                             <Row label={`Reconciliations (${buckets.reconciliation.length})`} value={format(sumOut(buckets.reconciliation))} hint="Wallet corrections only. Negative = money added" />
                             <Row label={`Loan origins (${buckets.debtOrigin.length})`} value={format(sumOut(buckets.debtOrigin))} hint="Money lent (+) or borrowed (−)" />
                             <Row label={`Loan settlements (${buckets.debtSettlement.length})`} value={format(sumOut(buckets.debtSettlement))} hint="Repayments — not spending" />
-                            <Row label={`Other wallet-neutral (${buckets.walletNeutral.length})`} value={format(sumOut(buckets.walletNeutral))} hint="Bookkeeping only, no money moved" />
+                            <Row label={`Spent without wallet movement (${buckets.noWalletSpending.length})`} value={format(sumBudget(buckets.noWalletSpending))} hint="Written-off loans, things others paid for. Counts as spending" />
                         </div>
 
                         <div>
                             <SectionTitle>Identity checks</SectionTitle>
-                            <Row label="Consumed = regular + refunds + forgiven?" value={checkText(consumedIdentity)} hint="Should always be zero" />
+                            <Row label="Consumed = regular + no-wallet + forgiven?" value={checkText(consumedIdentity)} hint="Should always be zero" />
                             <Row label="Big spent = big bucket?" value={checkText(bigIdentity)} hint="Should always be zero" />
                             <Row label="Travel spent = travel bucket?" value={checkText(travelIdentity)} hint="Should always be zero" />
                             <Row label="Wallet = start + stipend − wallet entries?" value={checkText(walletIdentity)} hint="Recomputed independently of the bank/cash split" />

@@ -17,9 +17,14 @@ export function isReconciliation(e: ExpenseRecord): boolean {
     return (e.itemName ?? '').trim().toLowerCase() === 'balance reconciliation';
 }
 
+/**
+ * Entries that are not spending. Wallet-neutral entries (written-off loans,
+ * things someone else paid for) ARE spending, so they are no longer excluded here.
+ * This matches classifyExpense in utils/budget.ts.
+ */
 export function isNonSpending(e: ExpenseRecord): boolean {
     if (e.debtRelated) return true;
-    if (e.walletNeutral) return true;
+    if (e.isDebtOrigin) return true;
     if (isReconciliation(e)) return true;
     return false;
 }
