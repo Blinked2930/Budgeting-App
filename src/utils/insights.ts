@@ -13,18 +13,12 @@ export const DEFAULT_FILTERS: InsightFilters = {
     month: 'all',
 };
 
-/**
- * Reconciliation entries are corrections (the app thought you had X, you
- * actually had Y). They are NOT real expenses or real income — they're
- * bookkeeping adjustments. We exclude them from every aggregate so that
- * "how much did I spend" is never polluted by the correction deltas.
- */
-function isReconciliation(e: ExpenseRecord): boolean {
+// --- NEW HELPER FUNCTIONS ---
+export function isReconciliation(e: ExpenseRecord): boolean {
     return (e.itemName ?? '').trim().toLowerCase() === 'balance reconciliation';
 }
 
-/** Any entry that shouldn't count toward spending totals. */
-function isNonSpending(e: ExpenseRecord): boolean {
+export function isNonSpending(e: ExpenseRecord): boolean {
     if (e.debtRelated) return true;
     if (e.walletNeutral) return true;
     if (isReconciliation(e)) return true;
@@ -89,23 +83,12 @@ export function aggregate(expenses: ExpenseRecord[]): Aggregate {
     };
 }
 
-/**
- * Spend Against Budget: matches the `consumed` number on the Budget tab.
- * Skips Big Expenses (already pre-budgeted), wallet-neutral entries, debt
- * settlements, and reconciliation corrections.
- */
 export function spendAgainstBudget(expenses: ExpenseRecord[]): number {
     return expenses
         .filter((e) => !e.deleted && !isNonSpending(e) && !e.isBigExpense)
         .reduce((sum, e) => sum + (e.budgetAmountALL ?? e.amountInALL), 0);
 }
 
-/**
- * Total Outflow: every penny that actually left your wallet.
- * Includes regular expenses and Big Expenses.
- * Excludes loans, forgiveness, transfers, reconciliation corrections,
- * and any negative (income) entries.
- */
 export function totalOutflow(expenses: ExpenseRecord[]): number {
     return expenses
         .filter((e) => {
@@ -116,11 +99,6 @@ export function totalOutflow(expenses: ExpenseRecord[]): number {
         .reduce((sum, e) => sum + Math.abs(e.amountInALL), 0);
 }
 
-/**
- * Cash Flow: loans & repayments only. Excludes regular expenses entirely.
- * In = repayments received + loans borrowed.
- * Out = loans given.
- */
 export function cashFlow(expenses: ExpenseRecord[]): { inALL: number; outALL: number; netALL: number } {
     let inALL = 0;
     let outALL = 0;
