@@ -107,14 +107,22 @@ export function computeBudgetStats(
         const whenMs = new Date(e.timestamp).getTime();
         if (whenMs < startMs) continue;
 
+        // Wallet movement: wallet-neutral entries do not move money.
+        // Signed amount: positive = outflow, negative = inflow.
         if (!e.walletNeutral) {
             const amt = e.amountInALL;
             if (e.paidWith === 'Cash') cashDelta -= amt;
             else cardDelta -= amt;
         }
 
-        if (isReconciliationEntry(e)) continue;
-        if (e.debtRelated || e.isDebtOrigin) continue;
+        // Skip anything that isn't real consumption.
+        // THE FIX: walletNeutral is now skipped from consumed.
+        if (
+            isReconciliationEntry(e) ||
+            e.debtRelated ||
+            e.isDebtOrigin ||
+            e.walletNeutral
+        ) continue;
 
         const budgetImpact = e.budgetAmountALL ?? e.amountInALL;
         if (e.category === 'Travel') {

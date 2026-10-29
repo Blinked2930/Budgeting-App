@@ -13,7 +13,6 @@ export const DEFAULT_FILTERS: InsightFilters = {
     month: 'all',
 };
 
-// --- NEW HELPER FUNCTIONS ---
 export function isReconciliation(e: ExpenseRecord): boolean {
     return (e.itemName ?? '').trim().toLowerCase() === 'balance reconciliation';
 }
