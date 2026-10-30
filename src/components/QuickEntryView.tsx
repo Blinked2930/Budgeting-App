@@ -527,12 +527,9 @@ export const QuickEntryView: React.FC = () => {
               value={amountStr}
               onChange={(e) => setAmountStr(e.target.value)}
               placeholder="0"
-              className="w-full max-w-[240px] bg-transparent text-center font-mono text-5xl font-extrabold text-slate-900 placeholder-slate-300 focus:outline-none tracking-tight selection:bg-emerald-500/20"
+              className="w-full max-w-[280px] bg-transparent text-center font-mono text-5xl font-extrabold text-slate-900 placeholder-slate-300 focus:outline-none tracking-tight selection:bg-emerald-500/20"
               autoFocus
             />
-            <span className="text-sm font-mono font-bold text-slate-400 self-end pb-2">
-              {defaultAppCurrency}
-            </span>
           </div>
 
           {isExpression && parsedAmount > 0 && (
