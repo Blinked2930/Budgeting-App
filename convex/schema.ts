@@ -82,9 +82,13 @@ export default defineSchema({
   groups: defineTable({
     name: v.string(),
     currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    allowedCurrencies: v.optional(
+      v.array(v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")))
+    ),
     description: v.optional(v.string()),
     createdBy: v.string(),
     createdAt: v.number(),
+    inviteCode: v.optional(v.string()),
     deleted: v.optional(v.boolean()),
   })
     .index("by_createdBy", ["createdBy"])

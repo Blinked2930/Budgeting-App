@@ -1,6 +1,8 @@
 // src/components/DebtsPanel.tsx
 import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import {
     X,
     Plus,
@@ -16,6 +18,7 @@ import {
     Save,
     CheckCheck,
     TriangleAlert,
+    Users,
 } from 'lucide-react';
 import { useDebts } from '../hooks/useDebts';
 import {
@@ -552,10 +555,13 @@ const ResolvedDebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord)
 
 export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
     const { debts } = useDebts();
+    const [tab, setTab] = useState<'personal' | 'splitup'>('personal');
     const [showNewForm, setShowNewForm] = useState(false);
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<ConfirmState | null>(null);
     const { format } = useCurrency();
+
+    const convexGroups = useQuery((api as any).groups?.getMyGroups || (api as any).groups?.listGroups, {});
 
     const groups = useMemo<CounterpartyGroup[]>(() => {
         const map = new Map<string, CounterpartyGroup>();
@@ -592,7 +598,6 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
         group: CounterpartyGroup,
         paidWith: PaymentSource
     ) => {
-        // FIFO: settle oldest first
         const sorted = [...group.openDebts].sort(
             (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         );
@@ -638,7 +643,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                         <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center">
                             <HandCoins className="w-4 h-4 text-indigo-600" />
                         </div>
-                        <h2 className="text-base font-bold text-slate-900">Debts</h2>
+                        <h2 className="text-base font-bold text-slate-900">Debts & Splitting</h2>
                     </div>
                     <button
                         type="button"
@@ -649,146 +654,222 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                     </button>
                 </div>
 
+                {/* Subnav Tabs */}
+                <div className="p-1 bg-slate-100 mx-4 mt-3 rounded-2xl grid grid-cols-2 text-xs font-bold">
+                    <button
+                        type="button"
+                        onClick={() => setTab('personal')}
+                        className={cn(
+                            'py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5',
+                            tab === 'personal'
+                                ? 'bg-white text-slate-900 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-700'
+                        )}
+                    >
+                        <HandCoins className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Personal</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setTab('splitup')}
+                        className={cn(
+                            'py-2 rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5',
+                            tab === 'splitup'
+                                ? 'bg-white text-slate-900 shadow-sm'
+                                : 'text-slate-500 hover:text-slate-700'
+                        )}
+                    >
+                        <Users className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>Splitup Groups ({convexGroups?.length || 0})</span>
+                    </button>
+                </div>
+
                 <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3.5">
-                    <div className="flex items-center justify-between">
-                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                            {groups.length} {groups.length === 1 ? 'person' : 'people'}
-                        </p>
-                        <button
-                            type="button"
-                            onClick={() => setShowNewForm((prev) => !prev)}
-                            className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer"
-                        >
-                            <Plus className="w-3.5 h-3.5" />
-                            {showNewForm ? 'Close form' : 'New debt'}
-                        </button>
-                    </div>
+                    {tab === 'personal' ? (
+                        <>
+                            <div className="flex items-center justify-between">
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                    {groups.length} {groups.length === 1 ? 'person' : 'people'}
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowNewForm((prev) => !prev)}
+                                    className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-700 cursor-pointer"
+                                >
+                                    <Plus className="w-3.5 h-3.5" />
+                                    {showNewForm ? 'Close form' : 'New debt'}
+                                </button>
+                            </div>
 
-                    {showNewForm && (
-                        <NewDebtForm
-                            onSaved={() => {
-                                setShowNewForm(false);
-                            }}
-                        />
-                    )}
+                            {showNewForm && (
+                                <NewDebtForm
+                                    onSaved={() => {
+                                        setShowNewForm(false);
+                                    }}
+                                />
+                            )}
 
-                    {groups.length === 0 ? (
-                        <div className="text-center py-10 px-4 rounded-2xl bg-slate-50 border border-slate-200 border-dashed">
-                            <p className="text-xs font-medium text-slate-500">No debts recorded.</p>
-                            <p className="text-[11px] text-slate-400 mt-0.5">
-                                Tap "New debt" above to track money you lent or borrowed.
-                            </p>
-                        </div>
-                    ) : (
-                        <div className="space-y-2">
-                            {groups.map((g) => {
-                                const isExpanded = expandedKey === g.key;
-                                const net = g.receivables - g.payables;
-                                const hasOpen = g.openDebts.length > 0;
+                            {groups.length === 0 ? (
+                                <div className="text-center py-10 px-4 rounded-2xl bg-slate-50 border border-slate-200 border-dashed">
+                                    <p className="text-xs font-medium text-slate-500">No debts recorded.</p>
+                                    <p className="text-[11px] text-slate-400 mt-0.5">
+                                        Tap "New debt" above to track money you lent or borrowed.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {groups.map((g) => {
+                                        const isExpanded = expandedKey === g.key;
+                                        const net = g.receivables - g.payables;
+                                        const hasOpen = g.openDebts.length > 0;
 
-                                return (
-                                    <div
-                                        key={g.key}
-                                        className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm"
-                                    >
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                setExpandedKey(isExpanded ? null : g.key)
-                                            }
-                                            className="w-full flex items-center justify-between p-3.5 text-left cursor-pointer hover:bg-slate-50 transition-colors"
-                                        >
-                                            <div className="flex items-center gap-2.5 min-w-0">
-                                                <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
-                                                    <span className="text-xs font-bold text-indigo-700">
-                                                        {g.name.charAt(0).toUpperCase()}
-                                                    </span>
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-semibold text-slate-900 truncate">
-                                                        {g.name}
-                                                    </p>
-                                                    <p className="text-[10px] text-slate-400">
-                                                        {g.openDebts.length} open · {g.resolvedDebts.length} resolved
-                                                    </p>
-                                                </div>
-                                            </div>
+                                        return (
+                                            <div
+                                                key={g.key}
+                                                className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm"
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        setExpandedKey(isExpanded ? null : g.key)
+                                                    }
+                                                    className="w-full flex items-center justify-between p-3.5 text-left cursor-pointer hover:bg-slate-50 transition-colors"
+                                                >
+                                                    <div className="flex items-center gap-2.5 min-w-0">
+                                                        <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
+                                                            <span className="text-xs font-bold text-indigo-700">
+                                                                {g.name.charAt(0).toUpperCase()}
+                                                            </span>
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-semibold text-slate-900 truncate">
+                                                                {g.name}
+                                                            </p>
+                                                            <p className="text-[10px] text-slate-400">
+                                                                {g.openDebts.length} open · {g.resolvedDebts.length} resolved
+                                                            </p>
+                                                        </div>
+                                                    </div>
 
-                                            <div className="flex items-center gap-2 shrink-0">
-                                                <div className="text-right">
-                                                    <p
-                                                        className={cn(
-                                                            'text-sm font-mono font-bold',
-                                                            net > 0
-                                                                ? 'text-emerald-600'
-                                                                : net < 0
-                                                                    ? 'text-rose-600'
-                                                                    : 'text-slate-500'
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <div className="text-right">
+                                                            <p
+                                                                className={cn(
+                                                                    'text-sm font-mono font-bold',
+                                                                    net > 0
+                                                                        ? 'text-emerald-600'
+                                                                        : net < 0
+                                                                            ? 'text-rose-600'
+                                                                            : 'text-slate-500'
+                                                                )}
+                                                            >
+                                                                {net > 0 ? '+' : ''}
+                                                                {format(Math.abs(net))}
+                                                            </p>
+                                                            <p className="text-[10px] text-slate-400 uppercase tracking-wider">
+                                                                {net > 0 ? 'owes you' : net < 0 ? 'you owe' : 'settled'}
+                                                            </p>
+                                                        </div>
+                                                        <ChevronDown
+                                                            className={cn(
+                                                                'w-4 h-4 text-slate-400 transition-transform duration-200',
+                                                                isExpanded && 'rotate-180'
+                                                            )}
+                                                        />
+                                                    </div>
+                                                </button>
+
+                                                {isExpanded && (
+                                                    <div className="px-3.5 pb-3.5 pt-1 space-y-2.5 border-t border-slate-100 bg-slate-50/50">
+                                                        {hasOpen && (
+                                                            <div className="flex items-center justify-between pt-1">
+                                                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                                                    Settle all
+                                                                </p>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleSettleAll(g, 'Cash')}
+                                                                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 text-[10px] font-bold border border-teal-200 cursor-pointer"
+                                                                >
+                                                                    <Banknote className="w-3 h-3" />
+                                                                    All (Cash)
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => handleSettleAll(g, 'Card')}
+                                                                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold border border-rose-200 cursor-pointer"
+                                                                >
+                                                                    <CheckCheck className="w-3.5 h-3.5" />
+                                                                    All (Bank)
+                                                                </button>
+                                                            </div>
                                                         )}
-                                                    >
-                                                        {net > 0 ? '+' : ''}
-                                                        {format(Math.abs(net))}
-                                                    </p>
-                                                    <p className="text-[10px] text-slate-400 uppercase tracking-wider">
-                                                        {net > 0 ? 'owes you' : net < 0 ? 'you owe' : 'settled'}
-                                                    </p>
-                                                </div>
-                                                <ChevronDown
-                                                    className={cn(
-                                                        'w-4 h-4 text-slate-400 transition-transform duration-200',
-                                                        isExpanded && 'rotate-180'
-                                                    )}
-                                                />
-                                            </div>
-                                        </button>
 
-                                        {isExpanded && (
-                                            <div className="px-3.5 pb-3.5 pt-1 space-y-2.5 border-t border-slate-100 bg-slate-50/50">
-                                                {hasOpen && (
-                                                    <div className="flex items-center justify-between pt-1">
-                                                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                                                            Settle all
-                                                        </p>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleSettleAll(g, 'Cash')}
-                                                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 text-[10px] font-bold border border-teal-200 cursor-pointer"
-                                                        >
-                                                            <Banknote className="w-3 h-3" />
-                                                            All (Cash)
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleSettleAll(g, 'Card')}
-                                                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 text-[10px] font-bold border border-rose-200 cursor-pointer"
-                                                        >
-                                                            <CheckCheck className="w-3.5 h-3.5" />
-                                                            All (Bank)
-                                                        </button>
+                                                        {g.openDebts.map((d) => (
+                                                            <DebtRow key={d.id} debt={d} onDelete={handleDeleteDebt} />
+                                                        ))}
+
+                                                        {g.resolvedDebts.length > 0 && (
+                                                            <>
+                                                                {g.openDebts.length > 0 && (
+                                                                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider pt-1">
+                                                                        Resolved
+                                                                    </p>
+                                                                )}
+                                                                {g.resolvedDebts.map((d) => (
+                                                                    <ResolvedDebtRow key={d.id} debt={d} onDelete={handleDeleteDebt} />
+                                                                ))}
+                                                            </>
+                                                        )}
                                                     </div>
                                                 )}
-
-                                                {g.openDebts.map((d) => (
-                                                    <DebtRow key={d.id} debt={d} onDelete={handleDeleteDebt} />
-                                                ))}
-
-                                                {g.resolvedDebts.length > 0 && (
-                                                    <>
-                                                        {g.openDebts.length > 0 && (
-                                                            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider pt-1">
-                                                                Resolved
-                                                            </p>
-                                                        )}
-                                                        {g.resolvedDebts.map((d) => (
-                                                            <ResolvedDebtRow key={d.id} debt={d} onDelete={handleDeleteDebt} />
-                                                        ))}
-                                                    </>
-                                                )}
                                             </div>
-                                        )}
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                                    Convex Splitup Backend
+                                </p>
+                            </div>
+
+                            {convexGroups === undefined ? (
+                                <div className="p-8 text-center text-xs text-slate-400">Loading Splitup groups...</div>
+                            ) : convexGroups.length === 0 ? (
+                                <div className="text-center py-10 px-4 rounded-2xl bg-slate-50 border border-slate-200 border-dashed space-y-2">
+                                    <p className="text-xs font-bold text-slate-700">No active Splitup groups</p>
+                                    <p className="text-[11px] text-slate-400">
+                                        Open Splitup to create a trip group or join using an invite code.
+                                    </p>
+                                </div>
+                            ) : (
+                                convexGroups.map((cg: any) => (
+                                    <div
+                                        key={cg._id}
+                                        className="p-4 rounded-2xl border border-slate-200 bg-white shadow-sm flex items-center justify-between"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                                                👥
+                                            </div>
+                                            <div>
+                                                <h4 className="font-bold text-slate-900 text-sm">{cg.name}</h4>
+                                                <p className="text-[10px] text-slate-400 font-mono">
+                                                    Invite Code: {cg.inviteCode || cg._id.slice(-6).toUpperCase()}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl">
+                                            {cg.currency}
+                                        </span>
                                     </div>
-                                );
-                            })}
+                                ))
+                            )}
                         </div>
                     )}
                 </div>

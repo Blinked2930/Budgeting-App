@@ -1,6 +1,15 @@
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
+function generateInviteCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let result = "";
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // QUERIES
 // ---------------------------------------------------------------------------
@@ -70,7 +79,10 @@ export const getGroupDetails = query({
       .collect();
 
     return {
-      group,
+      group: {
+        ...group,
+        allowedCurrencies: (group as any).allowedCurrencies || ["ALL", "EUR", "USD"],
+      },
       members,
       expenses: expenses.sort((a, b) => b.timestamp - a.timestamp),
       settlements: settlements.sort((a, b) => b.timestamp - a.timestamp),
@@ -173,17 +185,24 @@ export const getActivityFeed = query({
 
 export const getUnclaimedMembers = query({
   args: {
-    groupId: v.id("groups"),
+    groupIdOrCode: v.string(),
   },
   handler: async (ctx, args) => {
-    const group = await ctx.db.get(args.groupId);
-    if (!group || group.deleted) {
-      return null;
-    }
+    const queryStr = args.groupIdOrCode.trim().toUpperCase();
+
+    const allGroups = await ctx.db.query("groups").collect();
+    const group = allGroups.find(
+      (g) =>
+        !g.deleted &&
+        (g._id === args.groupIdOrCode ||
+          (g as any).inviteCode?.toUpperCase() === queryStr)
+    );
+
+    if (!group) return null;
 
     const members = await ctx.db
       .query("groupMembers")
-      .filter((q) => q.eq(q.field("groupId"), args.groupId))
+      .filter((q) => q.eq(q.field("groupId"), group._id))
       .collect();
 
     const unclaimedMembers = members.filter(
@@ -191,8 +210,10 @@ export const getUnclaimedMembers = query({
     );
 
     return {
+      groupId: group._id,
       groupName: group.name,
       currency: group.currency,
+      inviteCode: (group as any).inviteCode || group._id.slice(-6).toUpperCase(),
       unclaimedMembers: unclaimedMembers.map((m) => ({
         _id: m._id,
         name: m.name,
@@ -209,6 +230,9 @@ export const createGroup = mutation({
   args: {
     name: v.string(),
     currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    allowedCurrencies: v.optional(
+      v.array(v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")))
+    ),
     description: v.optional(v.string()),
     memberName: v.string(),
     additionalMembers: v.optional(v.array(v.string())),
@@ -217,25 +241,30 @@ export const createGroup = mutation({
     const identity = await ctx.auth.getUserIdentity();
     const userId = identity?.subject ?? "anonymous";
     const now = Date.now();
+    const inviteCode = generateInviteCode();
 
     const groupData: {
       name: string;
       currency: "ALL" | "EUR" | "USD";
+      allowedCurrencies: string[];
       description?: string;
       createdBy: string;
       createdAt: number;
+      inviteCode: string;
     } = {
       name: args.name,
       currency: args.currency,
+      allowedCurrencies: args.allowedCurrencies || ["ALL", "EUR", "USD"],
       createdBy: userId,
       createdAt: now,
+      inviteCode,
     };
 
     if (args.description?.trim()) {
       groupData.description = args.description.trim();
     }
 
-    const groupId = await ctx.db.insert("groups", groupData);
+    const groupId = await ctx.db.insert("groups", groupData as any);
 
     const creatorMemberId = await ctx.db.insert("groupMembers", {
       groupId,
@@ -257,13 +286,31 @@ export const createGroup = mutation({
       }
     }
 
-    return { groupId, memberId: creatorMemberId };
+    return { groupId, inviteCode, memberId: creatorMemberId };
+  },
+});
+
+export const updateGroupSettings = mutation({
+  args: {
+    groupId: v.id("groups"),
+    name: v.string(),
+    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    allowedCurrencies: v.array(
+      v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD"))
+    ),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.groupId, {
+      name: args.name.trim(),
+      currency: args.currency,
+      allowedCurrencies: args.allowedCurrencies as any,
+    });
   },
 });
 
 export const joinGroup = mutation({
   args: {
-    groupId: v.id("groups"),
+    groupIdOrCode: v.string(),
     memberName: v.string(),
   },
   handler: async (ctx, args) => {
@@ -271,33 +318,41 @@ export const joinGroup = mutation({
     const userId = identity?.subject ?? "anonymous";
     const now = Date.now();
 
-    const group = await ctx.db.get(args.groupId);
-    if (!group || group.deleted) {
-      throw new Error("Group not found");
+    const queryStr = args.groupIdOrCode.trim().toUpperCase();
+    const allGroups = await ctx.db.query("groups").collect();
+    const group = allGroups.find(
+      (g) =>
+        !g.deleted &&
+        (g._id === args.groupIdOrCode ||
+          (g as any).inviteCode?.toUpperCase() === queryStr)
+    );
+
+    if (!group) {
+      throw new Error("Group not found with that Invite Code or ID.");
     }
 
     const existingMembers = await ctx.db
       .query("groupMembers")
       .filter((q) =>
         q.and(
-          q.eq(q.field("groupId"), args.groupId),
+          q.eq(q.field("groupId"), group._id),
           q.eq(q.field("userId"), userId)
         )
       )
       .collect();
 
     if (existingMembers.length > 0) {
-      return { groupId: args.groupId, memberId: existingMembers[0]._id };
+      return { groupId: group._id, memberId: existingMembers[0]._id };
     }
 
     const memberId = await ctx.db.insert("groupMembers", {
-      groupId: args.groupId,
+      groupId: group._id,
       userId,
       name: args.memberName.trim(),
       joinedAt: now,
     });
 
-    return { groupId: args.groupId, memberId };
+    return { groupId: group._id, memberId };
   },
 });
 
@@ -329,7 +384,6 @@ export const addMember = mutation({
   args: {
     groupId: v.id("groups"),
     name: v.string(),
-    email: v.optional(v.string()),
     userId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -338,7 +392,6 @@ export const addMember = mutation({
     const memberId = await ctx.db.insert("groupMembers", {
       groupId: args.groupId,
       name: args.name.trim(),
-      email: args.email,
       userId: args.userId ?? "anonymous",
       joinedAt: now,
     });
