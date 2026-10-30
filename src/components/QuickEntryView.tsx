@@ -22,6 +22,7 @@ import {
   TriangleAlert,
   Handshake,
   Calculator,
+  ChevronDown,
 } from 'lucide-react';
 import {
   type Category,
@@ -30,6 +31,7 @@ import {
   type TransferDirection,
   type DebtDirection,
   type ExpenseRecord,
+  type Currency,
 } from '../types';
 import { RecentTransactions } from './RecentTransactions';
 import { DebtsPanel } from './DebtsPanel';
@@ -52,6 +54,17 @@ import { cn } from '../utils/cn';
 
 type EntryMode = 'expense' | 'withdraw' | 'lend' | 'settle';
 type PayMethod = 'Cash' | 'Card' | 'SomeoneElse';
+
+const ACTIVE_CURRENCIES: { code: Currency; symbol: string; label: string }[] = [
+  { code: 'ALL', symbol: 'L', label: 'Albanian Lek' },
+  { code: 'EUR', symbol: '€', label: 'Euro' },
+  { code: 'USD', symbol: '$', label: 'US Dollar' },
+  { code: 'GBP', symbol: '£', label: 'British Pound' },
+  { code: 'CHF', symbol: 'CHF', label: 'Swiss Franc' },
+  { code: 'CAD', symbol: 'CA$', label: 'Canadian Dollar' },
+  { code: 'AUD', symbol: 'A$', label: 'Australian Dollar' },
+  { code: 'JPY', symbol: '¥', label: 'Japanese Yen' },
+];
 
 const MODES: { id: EntryMode; label: string; icon: React.ReactNode }[] = [
   { id: 'expense', label: 'Expense', icon: <Zap className="w-3.5 h-3.5" /> },
@@ -142,7 +155,10 @@ export const QuickEntryView: React.FC = () => {
   const { transfers } = useTransfers();
   const { openDebts, debts } = useDebts();
   const { stats } = useBudgetCycle();
-  const { currency, format } = useCurrency();
+  const { currency: defaultAppCurrency, format } = useCurrency();
+
+  const [selectedCurrency, setSelectedCurrency] = useState<Currency>(defaultAppCurrency);
+  const [showCurrencyPopover, setShowCurrencyPopover] = useState(false);
 
   const [amountStr, setAmountStr] = useState<string>('');
   const [mode, setMode] = useState<EntryMode>('expense');
@@ -204,11 +220,18 @@ export const QuickEntryView: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    setSelectedCurrency(defaultAppCurrency);
+  }, [defaultAppCurrency]);
+
+  useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
 
   const parsedAmount = useMemo(() => {
@@ -222,10 +245,10 @@ export const QuickEntryView: React.FC = () => {
   }, [amountStr]);
 
   const isExpression = /[+\-*/()]/.test(amountStr) && amountStr.trim().length > 0;
-  const normalizedALL = convertToALL(parsedAmount, currency);
+  const normalizedALL = convertToALL(parsedAmount, selectedCurrency);
 
   const shareAmount = parseFloat(shareAmountStr) || 0;
-  const normalizedShareALL = convertToALL(shareAmount, currency);
+  const normalizedShareALL = convertToALL(shareAmount, selectedCurrency);
 
   const hasShare = shareAmount > 0;
 
@@ -288,6 +311,7 @@ export const QuickEntryView: React.FC = () => {
     setEditingId(expense.id);
     setEditingIsDebt(Boolean(expense.debtId));
     setAmountStr(String(expense.amount));
+    setSelectedCurrency(expense.currency || 'ALL');
     setCategory(expense.category);
     setPayMethod((expense.paidWith as PayMethod) ?? 'Card');
     setItemName(expense.itemName ?? '');
@@ -313,7 +337,7 @@ export const QuickEntryView: React.FC = () => {
 
   const handleSelectGroup = (key: string) => {
     setSettleGroupKey(key);
-    const g = debtGroups.find(x => x.key === key);
+    const g = debtGroups.find((x) => x.key === key);
     if (g && (!amountStr || parseFloat(amountStr) === 0)) {
       setAmountStr(String(Math.abs(g.net)));
     }
@@ -333,7 +357,7 @@ export const QuickEntryView: React.FC = () => {
       if (mode === 'expense') {
         const baseData = {
           amount: parsedAmount,
-          currency,
+          currency: selectedCurrency,
           category,
           itemName: itemName.trim() || undefined,
         };
@@ -341,7 +365,7 @@ export const QuickEntryView: React.FC = () => {
         if (editingId) {
           const updates: Partial<Omit<ExpenseRecord, 'id'>> = {
             ...baseData,
-            paidWith: payMethod === 'SomeoneElse' ? 'Cash' : payMethod
+            paidWith: payMethod === 'SomeoneElse' ? 'Cash' : payMethod,
           };
           const dateChanged = dateOverride !== originalDateOverride;
           if (dateChanged) {
@@ -372,19 +396,19 @@ export const QuickEntryView: React.FC = () => {
             });
             const latencyMs = Math.round(performance.now() - startTime);
             setFeedback(
-              `Logged ${formatCurrency(myShareDisplay, currency)} for you owed to ${payerName} in ${latencyMs}ms ⚡`
+              `Logged ${formatCurrency(myShareDisplay, selectedCurrency)} for you owed to ${payerName} in ${latencyMs}ms ⚡`
             );
           } else {
             await addExpense({
               ...baseData,
               paidWith: payMethod as PaymentSource,
-              timestamp
+              timestamp,
             });
             const latencyMs = Math.round(performance.now() - startTime);
             setFeedback(
               dateOverride
-                ? `Logged ${formatCurrency(parsedAmount, currency)} for ${dateOverride}`
-                : `Logged ${formatCurrency(parsedAmount, currency)} in ${latencyMs}ms ⚡`
+                ? `Logged ${formatCurrency(parsedAmount, selectedCurrency)} for ${dateOverride}`
+                : `Logged ${formatCurrency(parsedAmount, selectedCurrency)} in ${latencyMs}ms ⚡`
             );
           }
         }
@@ -393,30 +417,30 @@ export const QuickEntryView: React.FC = () => {
         setOriginalDateOverride(null);
       } else if (mode === 'withdraw') {
         await addTransfer({
-          amountALL: parsedAmount,
+          amountALL: normalizedALL,
           direction: withdrawDirection,
         });
         setFeedback(
-          `${withdrawDirection === 'BankToCash' ? 'Withdrew' : 'Deposited'} ${formatCurrency(parsedAmount, currency)}`
+          `${withdrawDirection === 'BankToCash' ? 'Withdrew' : 'Deposited'} ${formatCurrency(parsedAmount, selectedCurrency)}`
         );
       } else if (mode === 'lend') {
         await addDebt({
           counterparty: lendPerson,
           direction: lendDirection,
-          amountALL: parsedAmount,
+          amountALL: normalizedALL,
           note: lendNote.trim() || undefined,
           moveWalletWith: payMethod === 'SomeoneElse' ? 'Cash' : (payMethod as PaymentSource),
         });
         setFeedback(
           lendDirection === 'OwedToMe'
-            ? `Lent ${formatCurrency(parsedAmount, currency)} to ${lendPerson}`
-            : `Borrowed ${formatCurrency(parsedAmount, currency)} from ${lendPerson}`
+            ? `Lent ${formatCurrency(parsedAmount, selectedCurrency)} to ${lendPerson}`
+            : `Borrowed ${formatCurrency(parsedAmount, selectedCurrency)} from ${lendPerson}`
         );
       } else if (mode === 'settle' && settleGroupKey) {
-        const personDebts = openDebts.filter(d => d.counterpartyKey === settleGroupKey);
+        const personDebts = openDebts.filter((d) => d.counterpartyKey === settleGroupKey);
         personDebts.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
-        let remaining = parsedAmount;
+        let remaining = normalizedALL;
         for (const d of personDebts) {
           if (remaining <= 0) break;
           const amt = Math.min(d.remainingALL, remaining);
@@ -424,7 +448,7 @@ export const QuickEntryView: React.FC = () => {
           remaining -= amt;
         }
 
-        setFeedback(`Settled ${formatCurrency(parsedAmount, currency)} with ${selectedGroup?.name}`);
+        setFeedback(`Settled ${formatCurrency(parsedAmount, selectedCurrency)} with ${selectedGroup?.name}`);
       }
 
       setTimeout(() => setFeedback(null), 2500);
@@ -439,8 +463,7 @@ export const QuickEntryView: React.FC = () => {
   const spentThisCycle = stats?.spent ?? 0;
 
   return (
-    <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6">
-      
+    <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6 font-sans">
       <div className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 shadow-sm">
         <div className="flex flex-col">
           <div className="flex items-center gap-2">
@@ -450,16 +473,18 @@ export const QuickEntryView: React.FC = () => {
             </span>
           </div>
           <div className="flex items-baseline gap-1 mt-0.5">
-            <span className={cn(
-              "text-sm font-mono font-bold tracking-tight",
-              stats && stats.spentToday > stats.dailyAllowance ? 'text-rose-600' : 'text-emerald-600'
-            )}>
+            <span
+              className={cn(
+                'text-sm font-mono font-bold tracking-tight',
+                stats && stats.spentToday > stats.dailyAllowance ? 'text-rose-600' : 'text-emerald-600'
+              )}
+            >
               {stats ? format(stats.spentToday) : '—'}
             </span>
             <span className="text-[10px] text-slate-400">/ {stats ? format(stats.dailyAllowance) : '—'}</span>
           </div>
         </div>
-        
+
         <div className="text-right">
           <div className="text-right">
             <span className="text-sm font-mono font-bold text-slate-900 tracking-tight">
@@ -478,15 +503,19 @@ export const QuickEntryView: React.FC = () => {
         className="relative bg-white border border-slate-200 rounded-3xl p-6 shadow-xl shadow-slate-200/50 space-y-5"
       >
         {editingId && (
-          <div className={cn(
-            "flex flex-col gap-2 p-3 rounded-2xl border text-xs",
-            editingIsDebt ? "bg-indigo-50 border-indigo-200" : "bg-amber-50 border-amber-200"
-          )}>
+          <div
+            className={cn(
+              'flex flex-col gap-2 p-3 rounded-2xl border text-xs',
+              editingIsDebt ? 'bg-indigo-50 border-indigo-200' : 'bg-amber-50 border-amber-200'
+            )}
+          >
             <div className="flex items-center justify-between">
-              <div className={cn(
-                "flex items-center gap-1.5 font-medium",
-                editingIsDebt ? "text-indigo-700" : "text-amber-700"
-              )}>
+              <div
+                className={cn(
+                  'flex items-center gap-1.5 font-medium',
+                  editingIsDebt ? 'text-indigo-700' : 'text-amber-700'
+                )}
+              >
                 <Pencil className="w-3.5 h-3.5" />
                 <span>Editing {editingIsDebt ? 'debt entry' : 'expense'}</span>
               </div>
@@ -494,8 +523,8 @@ export const QuickEntryView: React.FC = () => {
                 type="button"
                 onClick={handleCancelEdit}
                 className={cn(
-                  "hover:underline cursor-pointer flex items-center gap-1",
-                  editingIsDebt ? "text-indigo-700" : "text-amber-700"
+                  'hover:underline cursor-pointer flex items-center gap-1',
+                  editingIsDebt ? 'text-indigo-700' : 'text-amber-700'
                 )}
               >
                 <X className="w-3 h-3" />
@@ -512,12 +541,7 @@ export const QuickEntryView: React.FC = () => {
         )}
 
         <div className="text-center py-1">
-          <div className="inline-flex items-baseline justify-center gap-2 max-w-full">
-            {currency !== 'ALL' && (
-              <span className="text-2xl font-mono font-medium text-slate-400 select-none">
-                {currency === 'EUR' ? '€' : '$'}
-              </span>
-            )}
+          <div className="inline-flex items-center justify-center gap-2 max-w-full">
             <input
               ref={inputRef}
               type="text"
@@ -525,25 +549,34 @@ export const QuickEntryView: React.FC = () => {
               value={amountStr}
               onChange={(e) => setAmountStr(e.target.value)}
               placeholder="0"
-              className="w-full max-w-[280px] bg-transparent text-center font-mono text-5xl font-extrabold text-slate-900 placeholder-slate-300 focus:outline-none tracking-tight selection:bg-emerald-500/20"
+              className="w-full max-w-[220px] bg-transparent text-center font-mono text-5xl font-extrabold text-slate-900 placeholder-slate-300 focus:outline-none tracking-tight selection:bg-emerald-500/20"
               autoFocus
             />
+
+            <button
+              type="button"
+              onClick={() => setShowCurrencyPopover(true)}
+              className="px-2.5 py-1.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-mono font-bold flex items-center gap-1 transition-all cursor-pointer border border-slate-200 shrink-0"
+            >
+              <span>{selectedCurrency}</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </button>
           </div>
 
           {isExpression && parsedAmount > 0 && (
             <p className="text-xs font-mono text-emerald-600 mt-1 font-semibold flex items-center justify-center gap-1">
-              <Calculator className="w-3 h-3" />= {format(convertToALL(parsedAmount, currency))}
+              <Calculator className="w-3 h-3" />= {format(convertToALL(parsedAmount, selectedCurrency))}
             </p>
           )}
 
-          {!isExpression && currency !== 'ALL' && parsedAmount > 0 && (
+          {!isExpression && selectedCurrency !== 'ALL' && parsedAmount > 0 && (
             <p className="text-xs font-mono text-emerald-600 mt-1 font-semibold">
               ≈ {formatCurrency(normalizedALL, 'ALL')} base Lek
             </p>
           )}
 
           <div className="flex items-center justify-center gap-1.5 mt-3 flex-wrap">
-            {(currency === 'ALL' ? [50, 100, 200, 500, 1000] : [1, 2, 5, 10, 20]).map((step) => (
+            {(selectedCurrency === 'ALL' ? [50, 100, 200, 500, 1000] : [1, 2, 5, 10, 20]).map((step) => (
               <button
                 key={step}
                 type="button"
@@ -719,7 +752,7 @@ export const QuickEntryView: React.FC = () => {
                   value={payerName}
                   onSelect={setPayerName}
                 />
-                
+
                 <div className="flex items-center justify-between gap-2 pt-1">
                   <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
                     Your share:
@@ -734,13 +767,13 @@ export const QuickEntryView: React.FC = () => {
                       placeholder="0"
                       className="w-24 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
                     />
-                    <span className="text-xs font-medium text-slate-500">L</span>
+                    <span className="text-xs font-medium text-slate-500">{selectedCurrency}</span>
                   </div>
                 </div>
 
                 {hasShare && (
                   <p className="text-[10px] text-slate-500 leading-relaxed px-1 pt-0.5">
-                    You owe {payerName || 'them'} {formatCurrency(shareAmount, currency)}.
+                    You owe {payerName || 'them'} {formatCurrency(shareAmount, selectedCurrency)}.
                   </p>
                 )}
               </div>
@@ -952,7 +985,7 @@ export const QuickEntryView: React.FC = () => {
                             </p>
                           </div>
                         </div>
-                        <p className={cn("text-sm font-mono shrink-0", g.net > 0 ? "text-emerald-600" : g.net < 0 ? "text-rose-600" : "text-slate-400")}>
+                        <p className={cn('text-sm font-mono shrink-0', g.net > 0 ? 'text-emerald-600' : g.net < 0 ? 'text-rose-600' : 'text-slate-400')}>
                           {format(Math.abs(g.net))}
                         </p>
                       </button>
@@ -1046,6 +1079,55 @@ export const QuickEntryView: React.FC = () => {
           </div>
         )}
       </form>
+
+      {showCurrencyPopover && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
+          onClick={() => setShowCurrencyPopover(false)}
+        >
+          <div
+            className="w-full max-w-xs bg-white rounded-3xl border border-slate-200 shadow-2xl p-4 space-y-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-2 pb-1">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Select Currency
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowCurrencyPopover(false)}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-1 max-h-60 overflow-y-auto">
+              {ACTIVE_CURRENCIES.map((c) => (
+                <button
+                  key={c.code}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCurrency(c.code);
+                    setShowCurrencyPopover(false);
+                  }}
+                  className={cn(
+                    'w-full text-left px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between',
+                    selectedCurrency === c.code
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-slate-400 w-8">{c.symbol}</span>
+                    <span>{c.code} - {c.label}</span>
+                  </div>
+                  {selectedCurrency === c.code && <Check className="w-4 h-4 text-emerald-600" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <DebtsPanel isOpen={isDebtsPanelOpen} onClose={() => setIsDebtsPanelOpen(false)} />
 
