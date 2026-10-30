@@ -1,4 +1,3 @@
-// src/components/QuickEntryView.tsx
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   ArrowRight,
@@ -22,7 +21,6 @@ import {
   TriangleAlert,
   Handshake,
   Calculator,
-  ChevronDown,
 } from 'lucide-react';
 import {
   type Category,
@@ -31,7 +29,6 @@ import {
   type TransferDirection,
   type DebtDirection,
   type ExpenseRecord,
-  type Currency,
 } from '../types';
 import { RecentTransactions } from './RecentTransactions';
 import { DebtsPanel } from './DebtsPanel';
@@ -54,17 +51,6 @@ import { cn } from '../utils/cn';
 
 type EntryMode = 'expense' | 'withdraw' | 'lend' | 'settle';
 type PayMethod = 'Cash' | 'Card' | 'SomeoneElse';
-
-const ACTIVE_CURRENCIES: { code: Currency; symbol: string; label: string }[] = [
-  { code: 'ALL', symbol: 'L', label: 'Albanian Lek' },
-  { code: 'EUR', symbol: '€', label: 'Euro' },
-  { code: 'USD', symbol: '$', label: 'US Dollar' },
-  { code: 'GBP', symbol: '£', label: 'British Pound' },
-  { code: 'CHF', symbol: 'CHF', label: 'Swiss Franc' },
-  { code: 'CAD', symbol: 'CA$', label: 'Canadian Dollar' },
-  { code: 'AUD', symbol: 'A$', label: 'Australian Dollar' },
-  { code: 'JPY', symbol: '¥', label: 'Japanese Yen' },
-];
 
 const MODES: { id: EntryMode; label: string; icon: React.ReactNode }[] = [
   { id: 'expense', label: 'Expense', icon: <Zap className="w-3.5 h-3.5" /> },
@@ -157,9 +143,6 @@ export const QuickEntryView: React.FC = () => {
   const { stats } = useBudgetCycle();
   const { currency: defaultAppCurrency, format } = useCurrency();
 
-  const [selectedCurrency, setSelectedCurrency] = useState<Currency>(defaultAppCurrency);
-  const [showCurrencyPopover, setShowCurrencyPopover] = useState(false);
-
   const [amountStr, setAmountStr] = useState<string>('');
   const [mode, setMode] = useState<EntryMode>('expense');
 
@@ -172,7 +155,7 @@ export const QuickEntryView: React.FC = () => {
 
   const [itemName, setItemName] = useState<string>('');
   const [isItemFocused, setIsItemFocused] = useState(false);
-  
+
   const [shareAmountStr, setShareAmountStr] = useState<string>('');
 
   const [withdrawDirection, setWithdrawDirection] = useState<TransferDirection>('BankToCash');
@@ -220,10 +203,6 @@ export const QuickEntryView: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    setSelectedCurrency(defaultAppCurrency);
-  }, [defaultAppCurrency]);
-
-  useEffect(() => {
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
@@ -245,10 +224,10 @@ export const QuickEntryView: React.FC = () => {
   }, [amountStr]);
 
   const isExpression = /[+\-*/()]/.test(amountStr) && amountStr.trim().length > 0;
-  const normalizedALL = convertToALL(parsedAmount, selectedCurrency);
+  const normalizedALL = convertToALL(parsedAmount, defaultAppCurrency);
 
   const shareAmount = parseFloat(shareAmountStr) || 0;
-  const normalizedShareALL = convertToALL(shareAmount, selectedCurrency);
+  const normalizedShareALL = convertToALL(shareAmount, defaultAppCurrency);
 
   const hasShare = shareAmount > 0;
 
@@ -311,7 +290,6 @@ export const QuickEntryView: React.FC = () => {
     setEditingId(expense.id);
     setEditingIsDebt(Boolean(expense.debtId));
     setAmountStr(String(expense.amount));
-    setSelectedCurrency(expense.currency || 'ALL');
     setCategory(expense.category);
     setPayMethod((expense.paidWith as PayMethod) ?? 'Card');
     setItemName(expense.itemName ?? '');
@@ -357,7 +335,7 @@ export const QuickEntryView: React.FC = () => {
       if (mode === 'expense') {
         const baseData = {
           amount: parsedAmount,
-          currency: selectedCurrency,
+          currency: defaultAppCurrency,
           category,
           itemName: itemName.trim() || undefined,
         };
@@ -396,7 +374,7 @@ export const QuickEntryView: React.FC = () => {
             });
             const latencyMs = Math.round(performance.now() - startTime);
             setFeedback(
-              `Logged ${formatCurrency(myShareDisplay, selectedCurrency)} for you owed to ${payerName} in ${latencyMs}ms ⚡`
+              `Logged ${formatCurrency(myShareDisplay, defaultAppCurrency)} for you owed to ${payerName} in ${latencyMs}ms ⚡`
             );
           } else {
             await addExpense({
@@ -407,8 +385,8 @@ export const QuickEntryView: React.FC = () => {
             const latencyMs = Math.round(performance.now() - startTime);
             setFeedback(
               dateOverride
-                ? `Logged ${formatCurrency(parsedAmount, selectedCurrency)} for ${dateOverride}`
-                : `Logged ${formatCurrency(parsedAmount, selectedCurrency)} in ${latencyMs}ms ⚡`
+                ? `Logged ${formatCurrency(parsedAmount, defaultAppCurrency)} for ${dateOverride}`
+                : `Logged ${formatCurrency(parsedAmount, defaultAppCurrency)} in ${latencyMs}ms ⚡`
             );
           }
         }
@@ -421,7 +399,7 @@ export const QuickEntryView: React.FC = () => {
           direction: withdrawDirection,
         });
         setFeedback(
-          `${withdrawDirection === 'BankToCash' ? 'Withdrew' : 'Deposited'} ${formatCurrency(parsedAmount, selectedCurrency)}`
+          `${withdrawDirection === 'BankToCash' ? 'Withdrew' : 'Deposited'} ${formatCurrency(parsedAmount, defaultAppCurrency)}`
         );
       } else if (mode === 'lend') {
         await addDebt({
@@ -433,8 +411,8 @@ export const QuickEntryView: React.FC = () => {
         });
         setFeedback(
           lendDirection === 'OwedToMe'
-            ? `Lent ${formatCurrency(parsedAmount, selectedCurrency)} to ${lendPerson}`
-            : `Borrowed ${formatCurrency(parsedAmount, selectedCurrency)} from ${lendPerson}`
+            ? `Lent ${formatCurrency(parsedAmount, defaultAppCurrency)} to ${lendPerson}`
+            : `Borrowed ${formatCurrency(parsedAmount, defaultAppCurrency)} from ${lendPerson}`
         );
       } else if (mode === 'settle' && settleGroupKey) {
         const personDebts = openDebts.filter((d) => d.counterpartyKey === settleGroupKey);
@@ -448,7 +426,7 @@ export const QuickEntryView: React.FC = () => {
           remaining -= amt;
         }
 
-        setFeedback(`Settled ${formatCurrency(parsedAmount, selectedCurrency)} with ${selectedGroup?.name}`);
+        setFeedback(`Settled ${formatCurrency(parsedAmount, defaultAppCurrency)} with ${selectedGroup?.name}`);
       }
 
       setTimeout(() => setFeedback(null), 2500);
@@ -549,34 +527,28 @@ export const QuickEntryView: React.FC = () => {
               value={amountStr}
               onChange={(e) => setAmountStr(e.target.value)}
               placeholder="0"
-              className="w-full max-w-[220px] bg-transparent text-center font-mono text-5xl font-extrabold text-slate-900 placeholder-slate-300 focus:outline-none tracking-tight selection:bg-emerald-500/20"
+              className="w-full max-w-[240px] bg-transparent text-center font-mono text-5xl font-extrabold text-slate-900 placeholder-slate-300 focus:outline-none tracking-tight selection:bg-emerald-500/20"
               autoFocus
             />
-
-            <button
-              type="button"
-              onClick={() => setShowCurrencyPopover(true)}
-              className="px-2.5 py-1.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-mono font-bold flex items-center gap-1 transition-all cursor-pointer border border-slate-200 shrink-0"
-            >
-              <span>{selectedCurrency}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
-            </button>
+            <span className="text-sm font-mono font-bold text-slate-400 self-end pb-2">
+              {defaultAppCurrency}
+            </span>
           </div>
 
           {isExpression && parsedAmount > 0 && (
             <p className="text-xs font-mono text-emerald-600 mt-1 font-semibold flex items-center justify-center gap-1">
-              <Calculator className="w-3 h-3" />= {format(convertToALL(parsedAmount, selectedCurrency))}
+              <Calculator className="w-3 h-3" />= {format(convertToALL(parsedAmount, defaultAppCurrency))}
             </p>
           )}
 
-          {!isExpression && selectedCurrency !== 'ALL' && parsedAmount > 0 && (
+          {!isExpression && defaultAppCurrency !== 'ALL' && parsedAmount > 0 && (
             <p className="text-xs font-mono text-emerald-600 mt-1 font-semibold">
               ≈ {formatCurrency(normalizedALL, 'ALL')} base Lek
             </p>
           )}
 
           <div className="flex items-center justify-center gap-1.5 mt-3 flex-wrap">
-            {(selectedCurrency === 'ALL' ? [50, 100, 200, 500, 1000] : [1, 2, 5, 10, 20]).map((step) => (
+            {(defaultAppCurrency === 'ALL' ? [50, 100, 200, 500, 1000] : [1, 2, 5, 10, 20]).map((step) => (
               <button
                 key={step}
                 type="button"
@@ -767,13 +739,13 @@ export const QuickEntryView: React.FC = () => {
                       placeholder="0"
                       className="w-24 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
                     />
-                    <span className="text-xs font-medium text-slate-500">{selectedCurrency}</span>
+                    <span className="text-xs font-medium text-slate-500">{defaultAppCurrency}</span>
                   </div>
                 </div>
 
                 {hasShare && (
                   <p className="text-[10px] text-slate-500 leading-relaxed px-1 pt-0.5">
-                    You owe {payerName || 'them'} {formatCurrency(shareAmount, selectedCurrency)}.
+                    You owe {payerName || 'them'} {formatCurrency(shareAmount, defaultAppCurrency)}.
                   </p>
                 )}
               </div>
@@ -1079,55 +1051,6 @@ export const QuickEntryView: React.FC = () => {
           </div>
         )}
       </form>
-
-      {showCurrencyPopover && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
-          onClick={() => setShowCurrencyPopover(false)}
-        >
-          <div
-            className="w-full max-w-xs bg-white rounded-3xl border border-slate-200 shadow-2xl p-4 space-y-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between px-2 pb-1">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                Select Currency
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowCurrencyPopover(false)}
-                className="p-1 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="space-y-1 max-h-60 overflow-y-auto">
-              {ACTIVE_CURRENCIES.map((c) => (
-                <button
-                  key={c.code}
-                  type="button"
-                  onClick={() => {
-                    setSelectedCurrency(c.code);
-                    setShowCurrencyPopover(false);
-                  }}
-                  className={cn(
-                    'w-full text-left px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between',
-                    selectedCurrency === c.code
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                      : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-slate-400 w-8">{c.symbol}</span>
-                    <span>{c.code} - {c.label}</span>
-                  </div>
-                  {selectedCurrency === c.code && <Check className="w-4 h-4 text-emerald-600" />}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
 
       <DebtsPanel isOpen={isDebtsPanelOpen} onClose={() => setIsDebtsPanelOpen(false)} />
 

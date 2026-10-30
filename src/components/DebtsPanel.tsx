@@ -833,7 +833,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                         <div className="space-y-3">
                             <div className="flex items-center justify-between">
                                 <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
-                                    Convex Splitup Backend
+                                    Convex Splitup Groups
                                 </p>
                             </div>
 
@@ -847,28 +847,42 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                                     </p>
                                 </div>
                             ) : (
-                                convexGroups.map((cg: any) => (
-                                    <div
-                                        key={cg._id}
-                                        className="p-4 rounded-2xl border border-slate-200 bg-white shadow-sm flex items-center justify-between"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                                                👥
+                                convexGroups.map((cg: any) => {
+                                    const net = cg.myNetBalanceALL ?? cg.netBalanceALL ?? cg.netBalance ?? 0;
+                                    return (
+                                        <div
+                                            key={cg._id}
+                                            className="p-4 rounded-2xl border border-slate-200 bg-white shadow-sm flex items-center justify-between"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                                                    👥
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-bold text-slate-900 text-sm">{cg.name}</h4>
+                                                    <p className="text-[10px] text-slate-400 font-mono">
+                                                        Invite Code: {cg.inviteCode || cg._id.slice(-6).toUpperCase()}
+                                                    </p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <h4 className="font-bold text-slate-900 text-sm">{cg.name}</h4>
-                                                <p className="text-[10px] text-slate-400 font-mono">
-                                                    Invite Code: {cg.inviteCode || cg._id.slice(-6).toUpperCase()}
+
+                                            <div className="text-right">
+                                                <p
+                                                    className={cn(
+                                                        'text-xs font-mono font-bold',
+                                                        net > 0 ? 'text-emerald-600' : net < 0 ? 'text-rose-600' : 'text-slate-400'
+                                                    )}
+                                                >
+                                                    {net > 0 ? '+' : ''}
+                                                    {format(Math.abs(net))}
+                                                </p>
+                                                <p className="text-[10px] text-slate-400 font-medium">
+                                                    {net > 0 ? 'get back' : net < 0 ? 'you owe' : 'settled'}
                                                 </p>
                                             </div>
                                         </div>
-
-                                        <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-xl">
-                                            {cg.currency}
-                                        </span>
-                                    </div>
-                                ))
+                                    );
+                                })
                             )}
                         </div>
                     )}
