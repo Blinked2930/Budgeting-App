@@ -7,9 +7,8 @@ export function convertToALL(
   rates: ExchangeRates = DEFAULT_EXCHANGE_RATES
 ): number {
   if (currency === 'ALL') return Math.round(amount);
-  if (currency === 'EUR') return Math.round(amount * rates.EUR);
-  if (currency === 'USD') return Math.round(amount * rates.USD);
-  return Math.round(amount);
+  const rate = rates[currency] ?? 1;
+  return Math.round(amount * rate);
 }
 
 export function formatCurrency(amount: number, currency: Currency = 'ALL'): string {
@@ -25,6 +24,8 @@ export function formatCurrency(amount: number, currency: Currency = 'ALL'): stri
       return `€${formatted}`;
     case 'USD':
       return `$${formatted}`;
+    case 'GBP':
+      return `£${formatted}`;
     default:
       return `${formatted} ${currency}`;
   }

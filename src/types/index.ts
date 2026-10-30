@@ -1,5 +1,5 @@
 // src/types/index.ts
-export type Currency = 'ALL' | 'EUR' | 'USD';
+export type Currency = 'ALL' | 'EUR' | 'USD' | (string & {});
 
 export type Category =
   | 'Food'
@@ -150,13 +150,18 @@ export interface BudgetCycle {
 export interface ExchangeRates {
   EUR: number;
   USD: number;
-  ALL: number;
+  [key: string]: number;
 }
 
 export const DEFAULT_EXCHANGE_RATES: ExchangeRates = {
+  ALL: 1,
   EUR: 100,
   USD: 90,
-  ALL: 1,
+  GBP: 118,
+  CHF: 105,
+  CAD: 68,
+  AUD: 60,
+  JPY: 0.62,
 };
 
 export const CATEGORIES: Category[] = [

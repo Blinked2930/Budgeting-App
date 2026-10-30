@@ -47,7 +47,7 @@ export function useConvexSync() {
                 const convexId = await upsertExpenseMutation({
                     localId: item.id,
                     amount: item.amount,
-                    currency: item.currency,
+                    currency: item.currency as any,
                     amountInALL: item.amountInALL,
                     category: item.category,
                     vendorType: item.vendorType,
@@ -219,28 +219,28 @@ export function useConvexSync() {
 
     useEffect(() => {
         if (!remoteExpenses) return;
-        applyRemoteExpenses(remoteExpenses).catch((err) => {
+        applyRemoteExpenses(remoteExpenses as any).catch((err) => {
             console.error('Failed to apply remote expenses:', err);
         });
     }, [remoteExpenses]);
 
     useEffect(() => {
         if (!remoteBudgetCycles) return;
-        applyRemoteBudgetCycles(remoteBudgetCycles).catch((err) => {
+        applyRemoteBudgetCycles(remoteBudgetCycles as any).catch((err) => {
             console.error('Failed to apply remote cycles:', err);
         });
     }, [remoteBudgetCycles]);
 
     useEffect(() => {
         if (!remoteTransfers) return;
-        applyRemoteTransfers(remoteTransfers).catch((err) => {
+        applyRemoteTransfers(remoteTransfers as any).catch((err) => {
             console.error('Failed to apply remote transfers:', err);
         });
     }, [remoteTransfers]);
 
     useEffect(() => {
         if (!remoteDebts) return;
-        applyRemoteDebts(remoteDebts).catch((err) => {
+        applyRemoteDebts(remoteDebts as any).catch((err) => {
             console.error('Failed to apply remote debts:', err);
         });
     }, [remoteDebts]);

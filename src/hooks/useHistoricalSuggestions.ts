@@ -1,6 +1,7 @@
+// src/hooks/useHistoricalSuggestions.ts
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../db';
-import type { Category, FoodType, VendorType } from '../types';
+import type { Category, Currency, FoodType, VendorType } from '../types';
 
 export interface ItemSuggestion {
   itemName: string;
@@ -8,7 +9,7 @@ export interface ItemSuggestion {
   vendorType?: VendorType;
   foodType?: FoodType;
   lastAmount?: number;
-  lastCurrency?: 'ALL' | 'EUR' | 'USD';
+  lastCurrency?: Currency;
 }
 
 export function useHistoricalSuggestions(searchQuery: string = '') {

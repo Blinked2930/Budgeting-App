@@ -7,7 +7,7 @@ export default defineSchema({
     localId: v.string(),
     userId: v.optional(v.string()),
     amount: v.number(),
-    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    currency: v.string(),
     amountInALL: v.number(),
     category: v.string(),
     vendorType: v.optional(v.string()),
@@ -81,10 +81,8 @@ export default defineSchema({
   // ---------- Splitup Shared Group Tables ----------
   groups: defineTable({
     name: v.string(),
-    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
-    allowedCurrencies: v.optional(
-      v.array(v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")))
-    ),
+    currency: v.string(),
+    allowedCurrencies: v.optional(v.array(v.string())),
     description: v.optional(v.string()),
     createdBy: v.string(),
     createdAt: v.number(),
@@ -110,7 +108,7 @@ export default defineSchema({
     groupId: v.id("groups"),
     title: v.string(),
     amount: v.number(),
-    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    currency: v.string(),
     amountInALL: v.number(),
     category: v.optional(v.string()),
     paidByMemberId: v.id("groupMembers"),
@@ -137,7 +135,7 @@ export default defineSchema({
     fromUserId: v.optional(v.string()),
     toUserId: v.optional(v.string()),
     amountALL: v.number(),
-    currency: v.union(v.literal("ALL"), v.literal("EUR"), v.literal("USD")),
+    currency: v.string(),
     timestamp: v.number(),
     createdAt: v.number(),
     deleted: v.optional(v.boolean()),

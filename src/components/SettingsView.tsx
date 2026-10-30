@@ -4,7 +4,7 @@ import { FileSpreadsheet, FileJson, Lock, CheckCircle2, Trash2, Cloud } from 'lu
 import { db, exportToCSV, exportToJSON } from '../db';
 import { downloadFile } from '../utils/export';
 import { useLock } from '../hooks/useLock';
-import { DEFAULT_EXCHANGE_RATES, type Currency } from '../types';
+import { DEFAULT_EXCHANGE_RATES, type Currency, type ExchangeRates } from '../types';
 import { cn } from '../utils/cn';
 
 import { SignInButton, UserButton, useAuth, useUser } from '@clerk/clerk-react';
@@ -63,19 +63,26 @@ const ClerkAccountSection: React.FC = () => {
 export const SettingsView: React.FC = () => {
     const { lock } = useLock();
     const [toast, setToast] = useState<string | null>(null);
-    const [rates, setRates] = useState({ EUR: 100, USD: 90 });
+    const [rates, setRates] = useState<ExchangeRates>(DEFAULT_EXCHANGE_RATES);
     const [defaultCurrency, setDefaultCurrency] = useState<Currency>('ALL');
 
     useEffect(() => {
         const savedRates = localStorage.getItem('lekflow:rates');
-        if (savedRates) setRates(JSON.parse(savedRates));
-        else setRates(DEFAULT_EXCHANGE_RATES);
+        if (savedRates) {
+            try {
+                setRates(JSON.parse(savedRates));
+            } catch {
+                setRates(DEFAULT_EXCHANGE_RATES);
+            }
+        } else {
+            setRates(DEFAULT_EXCHANGE_RATES);
+        }
 
         const savedCurrency = localStorage.getItem('lekflow:currency') as Currency;
         if (savedCurrency) setDefaultCurrency(savedCurrency);
     }, []);
 
-    const saveRates = (newRates: typeof rates) => {
+    const saveRates = (newRates: ExchangeRates) => {
         setRates(newRates);
         localStorage.setItem('lekflow:rates', JSON.stringify(newRates));
         window.dispatchEvent(new Event('lekflow:currency-changed'));
@@ -188,14 +195,24 @@ export const SettingsView: React.FC = () => {
                     <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-slate-700">1 EUR =</span>
                         <div className="flex items-center gap-2">
-                            <input type="number" value={rates.EUR} onChange={(e) => saveRates({ ...rates, EUR: Number(e.target.value) })} className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-right font-mono text-sm focus:outline-none focus:border-emerald-500" />
+                            <input
+                                type="number"
+                                value={rates.EUR}
+                                onChange={(e) => saveRates({ ...rates, EUR: Number(e.target.value) })}
+                                className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-right font-mono text-sm focus:outline-none focus:border-emerald-500"
+                            />
                             <span className="text-xs text-slate-500 font-mono">ALL</span>
                         </div>
                     </div>
                     <div className="flex items-center justify-between">
                         <span className="text-sm font-medium text-slate-700">1 USD =</span>
                         <div className="flex items-center gap-2">
-                            <input type="number" value={rates.USD} onChange={(e) => saveRates({ ...rates, USD: Number(e.target.value) })} className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-right font-mono text-sm focus:outline-none focus:border-emerald-500" />
+                            <input
+                                type="number"
+                                value={rates.USD}
+                                onChange={(e) => saveRates({ ...rates, USD: Number(e.target.value) })}
+                                className="w-20 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-right font-mono text-sm focus:outline-none focus:border-emerald-500"
+                            />
                             <span className="text-xs text-slate-500 font-mono">ALL</span>
                         </div>
                     </div>
