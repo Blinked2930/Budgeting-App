@@ -11,6 +11,10 @@ function generateInviteCode(): string {
   return result;
 }
 
+function normalizeName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
 const currencyValidator = v.union(
   v.literal("ALL"),
   v.literal("EUR"),
@@ -91,6 +95,7 @@ export const getMyGroups = query({
         status: groupStatus,
         memberCount: members.length,
         myNetBalanceALL: Math.round(net),
+        isOwner: group.createdBy === userId,
       });
     }
 
@@ -145,6 +150,41 @@ export const getGroupDetails = query({
       expenses: expenses.sort((a, b) => b.timestamp - a.timestamp),
       settlements: settlements.sort((a, b) => b.timestamp - a.timestamp),
     };
+  },
+});
+
+/**
+ * Returns whether a group name is available to the calling user.
+ * A name is unavailable if the caller already OWNS another group with the
+ * same name (case-insensitive, trimmed). Names owned by other users do not
+ * block — you can both have a "Tirana Trip".
+ *
+ * `excludeGroupId` lets GroupSettingsModal reuse this check when renaming.
+ */
+export const checkGroupNameAvailable = query({
+  args: {
+    name: v.string(),
+    excludeGroupId: v.optional(v.id("groups")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject ?? "anonymous";
+
+    const normalized = normalizeName(args.name);
+    if (!normalized) return { available: false, reason: "empty" as const };
+
+    const allGroups = await ctx.db.query("groups").collect();
+    const conflict = allGroups.find(
+      (g) =>
+        !g.deleted &&
+        g.createdBy === userId &&
+        normalizeName(g.name) === normalized &&
+        g._id !== args.excludeGroupId
+    );
+
+    return conflict
+      ? { available: false, reason: "duplicate" as const, conflictGroupName: conflict.name }
+      : { available: true, reason: "ok" as const };
   },
 });
 
@@ -307,6 +347,27 @@ export const createGroup = mutation({
     const now = Date.now();
     const inviteCode = generateInviteCode();
 
+    const normalized = normalizeName(args.name);
+    if (!normalized) {
+      throw new Error("Group name cannot be empty.");
+    }
+
+    // Owner-scoped uniqueness: reject if THIS user already owns a group
+    // with the same name (case-insensitive). Other users may own groups
+    // with the same name — names are not globally unique.
+    const allGroups = await ctx.db.query("groups").collect();
+    const ownedDuplicate = allGroups.find(
+      (g) =>
+        !g.deleted &&
+        g.createdBy === userId &&
+        normalizeName(g.name) === normalized
+    );
+    if (ownedDuplicate) {
+      throw new Error(
+        `You already own a group called "${ownedDuplicate.name}". Pick a different name.`
+      );
+    }
+
     const groupData: {
       name: string;
       currency: string;
@@ -317,7 +378,7 @@ export const createGroup = mutation({
       inviteCode: string;
       status: "active" | "archived";
     } = {
-      name: args.name,
+      name: args.name.trim(),
       currency: args.currency,
       allowedCurrencies: args.allowedCurrencies || ["ALL", "EUR", "USD"],
       createdBy: userId,
@@ -364,6 +425,36 @@ export const updateGroupSettings = mutation({
     allowedCurrencies: v.array(currencyValidator),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject ?? "anonymous";
+
+    const group = await ctx.db.get(args.groupId);
+    if (!group || group.deleted) {
+      throw new Error("Group not found.");
+    }
+    if (group.createdBy !== userId) {
+      throw new Error("Only the group owner can change settings.");
+    }
+
+    // Owner-scoped duplicate check on rename (excludes this group).
+    const normalized = normalizeName(args.name);
+    if (!normalized) {
+      throw new Error("Group name cannot be empty.");
+    }
+    const allGroups = await ctx.db.query("groups").collect();
+    const ownedDuplicate = allGroups.find(
+      (g) =>
+        !g.deleted &&
+        g.createdBy === userId &&
+        g._id !== args.groupId &&
+        normalizeName(g.name) === normalized
+    );
+    if (ownedDuplicate) {
+      throw new Error(
+        `You already own a group called "${ownedDuplicate.name}". Pick a different name.`
+      );
+    }
+
     await ctx.db.patch(args.groupId, {
       name: args.name.trim(),
       currency: args.currency,
@@ -383,6 +474,49 @@ export const unarchiveGroup = mutation({
   args: { groupId: v.id("groups") },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.groupId, { status: "active" });
+  },
+});
+
+/**
+ * Hard-deletes a group and every dependent row (settlements, expenses,
+ * members). Only the creator can delete. Non-owners should archive instead.
+ * Order matters: children before the parent so no orphaned rows survive.
+ */
+export const deleteGroup = mutation({
+  args: { groupId: v.id("groups") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject ?? "anonymous";
+
+    const group = await ctx.db.get(args.groupId);
+    if (!group || group.deleted) {
+      throw new Error("Group not found.");
+    }
+    if (group.createdBy !== userId) {
+      throw new Error("Only the group owner can delete a group. Archive it instead.");
+    }
+
+    const settlements = await ctx.db
+      .query("groupSettlements")
+      .filter((q) => q.eq(q.field("groupId"), args.groupId))
+      .collect();
+    for (const s of settlements) await ctx.db.delete(s._id);
+
+    const expenses = await ctx.db
+      .query("groupExpenses")
+      .filter((q) => q.eq(q.field("groupId"), args.groupId))
+      .collect();
+    for (const e of expenses) await ctx.db.delete(e._id);
+
+    const members = await ctx.db
+      .query("groupMembers")
+      .filter((q) => q.eq(q.field("groupId"), args.groupId))
+      .collect();
+    for (const m of members) await ctx.db.delete(m._id);
+
+    await ctx.db.delete(args.groupId);
+
+    return { deleted: true, groupId: args.groupId };
   },
 });
 

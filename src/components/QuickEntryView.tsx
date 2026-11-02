@@ -25,6 +25,7 @@ import {
   TriangleAlert,
   Handshake,
   Calculator,
+  ChevronsUpDown,
 } from 'lucide-react';
 import {
   type Category,
@@ -142,6 +143,93 @@ const SuggestionChips: React.FC<{
   );
 };
 
+/**
+ * Styled dropdown that replaces a native <select>. Matches the design system.
+ * Click the trigger → opens a centered glassmorphic popover with the options.
+ */
+const StyledSelect: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  options: Array<{ value: string; label: string; emoji?: string }>;
+}> = ({ value, onChange, placeholder, options }) => {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm font-medium text-left flex items-center justify-between hover:border-slate-300 transition-colors cursor-pointer"
+      >
+        <span className={cn('truncate', selected ? 'text-slate-900' : 'text-slate-400')}>
+          {selected
+            ? `${selected.emoji ? selected.emoji + ' ' : ''}${selected.label}`
+            : placeholder}
+        </span>
+        <ChevronsUpDown className="w-4 h-4 text-slate-400 shrink-0 ml-2" />
+      </button>
+
+      {open && (
+        <div
+          onClick={() => setOpen(false)}
+          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xs bg-white rounded-3xl border border-slate-200 shadow-2xl p-4 space-y-2 font-sans"
+          >
+            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2 mb-2">
+              {placeholder}
+            </h4>
+            <div className="space-y-1 max-h-60 overflow-y-auto">
+              <button
+                type="button"
+                onClick={() => {
+                  onChange('');
+                  setOpen(false);
+                }}
+                className={cn(
+                  'w-full text-left px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between',
+                  !value
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                )}
+              >
+                <span>{placeholder}</span>
+                {!value && <Check className="w-4 h-4 text-emerald-600" />}
+              </button>
+              {options.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                  }}
+                  className={cn(
+                    'w-full text-left px-4 py-3 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between',
+                    value === opt.value
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                      : 'bg-slate-50 text-slate-700 hover:bg-slate-100'
+                  )}
+                >
+                  <span>
+                    {opt.emoji && <span className="mr-1.5">{opt.emoji}</span>}
+                    {opt.label}
+                  </span>
+                  {value === opt.value && <Check className="w-4 h-4 text-emerald-600" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
 export const QuickEntryView: React.FC = () => {
   const { expenses, totalSpentALL } = useExpenses();
   const { transfers } = useTransfers();
@@ -160,7 +248,6 @@ export const QuickEntryView: React.FC = () => {
   const [payMethod, setPayMethod] = useState<PayMethod>('Cash');
   const [payerName, setPayerName] = useState<string>('');
 
-  // Optional Splitup mirror for Lend entries. Only shown on the Lend tab.
   const [lendSyncGroupId, setLendSyncGroupId] = useState<string>('');
 
   const [dateOverride, setDateOverride] = useState<string | null>(null);
@@ -272,8 +359,6 @@ export const QuickEntryView: React.FC = () => {
   const handleModeChange = (next: EntryMode) => {
     if (editingId) return;
     setMode(next);
-    // Clear lend-only mirror when leaving the Lend tab so a stale group
-    // selection can never leak into a different save path.
     if (next !== 'lend') setLendSyncGroupId('');
   };
 
@@ -336,14 +421,6 @@ export const QuickEntryView: React.FC = () => {
     }
   };
 
-  /**
-   * Mirror a lend into a Splitup group as a 2-person shared expense.
-   * Best-effort: if the counterparty can't be matched to a member by name,
-   * we skip silently and append a note to the feedback string. Never throws.
-   *
-   * Returns a short human-readable suffix to append to the success toast,
-   * or '' if the mirror succeeded (or was not requested).
-   */
   const mirrorLendToSplitup = async (lendRecord: { counterparty: string }): Promise<string> => {
     if (!lendSyncGroupId) return '';
 
@@ -362,13 +439,6 @@ export const QuickEntryView: React.FC = () => {
         return ' · Splitup mirror skipped (no matching member)';
       }
 
-      // "Self" is the group member tied to our Clerk user. Since the group
-      // list only knows our own net, we identify self as the first member
-      // whose userId matches the current identity — but we don't have that
-      // here. Fallback: pick the first member that ISN'T the matched
-      // counterparty. That's correct for the common 2-person trip case and
-      // is at worst a harmless split between the counterparty and a
-      // different group member — which the user can fix in Splitup.
       const selfMember =
         groupDetails.members.find((m: any) => m._id !== matchedMember._id) ??
         groupDetails.members[0];
@@ -377,7 +447,6 @@ export const QuickEntryView: React.FC = () => {
       const paidBy =
         lendDirection === 'OwedToMe' ? selfMember._id : matchedMember._id;
 
-      // Equal split across just these two members, Hamilton-exact.
       const cents = Math.round(normalizedALL * 100);
       const baseCents = Math.floor(cents / 2);
       const extra = cents - baseCents * 2;
@@ -529,6 +598,12 @@ export const QuickEntryView: React.FC = () => {
   };
 
   const spentThisCycle = stats?.spent ?? 0;
+
+  const groupOptions = convexGroups.map((g: any) => ({
+    value: g._id as string,
+    label: g.name as string,
+    emoji: '👥',
+  }));
 
   return (
     <div className="w-full max-w-md mx-auto px-4 py-4 space-y-6 font-sans">
@@ -1010,18 +1085,12 @@ export const QuickEntryView: React.FC = () => {
                 <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
                   Also record in Splitup group
                 </p>
-                <select
+                <StyledSelect
                   value={lendSyncGroupId}
-                  onChange={(e) => setLendSyncGroupId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="">— Personal only —</option>
-                  {convexGroups.map((g: any) => (
-                    <option key={g._id} value={g._id}>
-                      👥 {g.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setLendSyncGroupId}
+                  placeholder="— Personal only —"
+                  options={groupOptions}
+                />
                 {lendSyncGroupId && (
                   <p className="text-[10px] text-slate-400 mt-1 px-1">
                     We'll match "{lendPerson || 'the person'}" to a group member by name.
