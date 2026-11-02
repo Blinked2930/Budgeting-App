@@ -31,6 +31,7 @@ import { cn } from '../utils/cn';
 import { DebtsPanel } from './DebtsPanel';
 import { BigExpensesCard } from './BigExpensesCard';
 import { AuditPanel } from './AuditPanel';
+import { SplitupNetBalancesCard } from './SplitupNetBalancesCard';
 
 type FormMode = 'first' | 'next' | 'edit';
 
@@ -890,6 +891,8 @@ export const BudgetView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <SplitupNetBalancesCard />
 
       <BigExpensesCard cycle={cycle} expenses={expenses} />
 

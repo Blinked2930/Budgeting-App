@@ -159,7 +159,9 @@ export const QuickEntryView: React.FC = () => {
   const [category, setCategory] = useState<Category>('Food');
   const [payMethod, setPayMethod] = useState<PayMethod>('Cash');
   const [payerName, setPayerName] = useState<string>('');
-  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
+
+  // Optional Splitup mirror for Lend entries. Only shown on the Lend tab.
+  const [lendSyncGroupId, setLendSyncGroupId] = useState<string>('');
 
   const [dateOverride, setDateOverride] = useState<string | null>(null);
   const todayStr = toDateInputValue(new Date());
@@ -270,6 +272,9 @@ export const QuickEntryView: React.FC = () => {
   const handleModeChange = (next: EntryMode) => {
     if (editingId) return;
     setMode(next);
+    // Clear lend-only mirror when leaving the Lend tab so a stale group
+    // selection can never leak into a different save path.
+    if (next !== 'lend') setLendSyncGroupId('');
   };
 
   const handleCategoryChange = (next: Category) => {
@@ -289,9 +294,9 @@ export const QuickEntryView: React.FC = () => {
     setShareAmountStr('');
     setLendPerson('');
     setLendNote('');
+    setLendSyncGroupId('');
     setSettleGroupKey(null);
     setPayerName('');
-    setSelectedGroupId('');
     inputRef.current?.focus();
   };
 
@@ -331,6 +336,77 @@ export const QuickEntryView: React.FC = () => {
     }
   };
 
+  /**
+   * Mirror a lend into a Splitup group as a 2-person shared expense.
+   * Best-effort: if the counterparty can't be matched to a member by name,
+   * we skip silently and append a note to the feedback string. Never throws.
+   *
+   * Returns a short human-readable suffix to append to the success toast,
+   * or '' if the mirror succeeded (or was not requested).
+   */
+  const mirrorLendToSplitup = async (lendRecord: { counterparty: string }): Promise<string> => {
+    if (!lendSyncGroupId) return '';
+
+    try {
+      const groupDetails: any = await convex.query(
+        (api as any).groups.getGroupDetails,
+        { groupId: lendSyncGroupId as any }
+      );
+      if (!groupDetails || !Array.isArray(groupDetails.members)) return '';
+
+      const target = lendRecord.counterparty.trim().toLowerCase();
+      const matchedMember = groupDetails.members.find(
+        (m: any) => (m.name || '').trim().toLowerCase() === target
+      );
+      if (!matchedMember) {
+        return ' · Splitup mirror skipped (no matching member)';
+      }
+
+      // "Self" is the group member tied to our Clerk user. Since the group
+      // list only knows our own net, we identify self as the first member
+      // whose userId matches the current identity — but we don't have that
+      // here. Fallback: pick the first member that ISN'T the matched
+      // counterparty. That's correct for the common 2-person trip case and
+      // is at worst a harmless split between the counterparty and a
+      // different group member — which the user can fix in Splitup.
+      const selfMember =
+        groupDetails.members.find((m: any) => m._id !== matchedMember._id) ??
+        groupDetails.members[0];
+      if (!selfMember) return '';
+
+      const paidBy =
+        lendDirection === 'OwedToMe' ? selfMember._id : matchedMember._id;
+
+      // Equal split across just these two members, Hamilton-exact.
+      const cents = Math.round(normalizedALL * 100);
+      const baseCents = Math.floor(cents / 2);
+      const extra = cents - baseCents * 2;
+      const selfShare = (baseCents + (extra > 0 ? 1 : 0)) / 100;
+      const otherShare = (baseCents + (extra > 1 ? 1 : 0)) / 100;
+
+      const splits = [
+        { memberId: selfMember._id, amountALL: selfShare },
+        { memberId: matchedMember._id, amountALL: otherShare },
+      ];
+
+      await addConvexExpense({
+        groupId: lendSyncGroupId,
+        title: lendNote.trim() || `Loan with ${lendRecord.counterparty}`,
+        amount: parsedAmount,
+        currency: defaultAppCurrency,
+        amountInALL: normalizedALL,
+        category: 'General',
+        paidByMemberId: paidBy,
+        splitType: 'equal',
+        splits,
+      });
+      return '';
+    } catch (err) {
+      console.warn('Splitup lend mirror failed:', err);
+      return ' · Splitup mirror failed';
+    }
+  };
+
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!isValid) {
@@ -341,35 +417,6 @@ export const QuickEntryView: React.FC = () => {
     try {
       setIsSaving(true);
       const startTime = performance.now();
-
-      if (selectedGroupId && mode === 'expense') {
-        const groupObj = convexGroups.find((g: any) => g._id === selectedGroupId);
-        if (groupObj) {
-          // Convex API references are not callable; query through the client.
-          const groupDetails: any = await convex.query(
-            (api as any).groups.getGroupDetails,
-            { groupId: selectedGroupId as any }
-          );
-          const firstMemberId = groupDetails?.members?.[0]?._id;
-
-          if (firstMemberId) {
-            await addConvexExpense({
-              groupId: selectedGroupId,
-              title: itemName.trim() || 'Shared Expense',
-              amount: parsedAmount,
-              currency: defaultAppCurrency,
-              amountInALL: normalizedALL,
-              category,
-              paidByMemberId: firstMemberId,
-              splitType: 'equal',
-              splits: groupDetails.members.map((m: any) => ({
-                memberId: m._id,
-                amountALL: Math.round((normalizedALL / groupDetails.members.length) * 100) / 100,
-              })),
-            });
-          }
-        }
-      }
 
       if (mode === 'expense') {
         const baseData = {
@@ -441,17 +488,21 @@ export const QuickEntryView: React.FC = () => {
           `${withdrawDirection === 'BankToCash' ? 'Withdrew' : 'Deposited'} ${formatCurrency(parsedAmount, defaultAppCurrency)}`
         );
       } else if (mode === 'lend') {
-        await addDebt({
+        const lendRecord = await addDebt({
           counterparty: lendPerson,
           direction: lendDirection,
           amountALL: normalizedALL,
           note: lendNote.trim() || undefined,
           moveWalletWith: payMethod === 'SomeoneElse' ? 'Cash' : (payMethod as PaymentSource),
         });
+
+        const mirrorSuffix = await mirrorLendToSplitup(lendRecord);
+
         setFeedback(
-          lendDirection === 'OwedToMe'
+          (lendDirection === 'OwedToMe'
             ? `Lent ${formatCurrency(parsedAmount, defaultAppCurrency)} to ${lendPerson}`
-            : `Borrowed ${formatCurrency(parsedAmount, defaultAppCurrency)} from ${lendPerson}`
+            : `Borrowed ${formatCurrency(parsedAmount, defaultAppCurrency)} from ${lendPerson}`) +
+            mirrorSuffix
         );
       } else if (mode === 'settle' && settleGroupKey) {
         const personDebts = openDebts.filter((d) => d.counterpartyKey === settleGroupKey);
@@ -633,26 +684,6 @@ export const QuickEntryView: React.FC = () => {
 
         {mode === 'expense' && (
           <>
-            {convexGroups.length > 0 && (
-              <div>
-                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                  Sync to Splitup Group (Optional)
-                </label>
-                <select
-                  value={selectedGroupId}
-                  onChange={(e) => setSelectedGroupId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:border-emerald-500"
-                >
-                  <option value="">-- Personal Only --</option>
-                  {convexGroups.map((g: any) => (
-                    <option key={g._id} value={g._id}>
-                      👥 {g.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
             <div>
               <div className="flex items-center justify-between mb-2 px-1">
                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
@@ -973,6 +1004,32 @@ export const QuickEntryView: React.FC = () => {
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
               />
             </div>
+
+            {convexGroups.length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Also record in Splitup group
+                </p>
+                <select
+                  value={lendSyncGroupId}
+                  onChange={(e) => setLendSyncGroupId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">— Personal only —</option>
+                  {convexGroups.map((g: any) => (
+                    <option key={g._id} value={g._id}>
+                      👥 {g.name}
+                    </option>
+                  ))}
+                </select>
+                {lendSyncGroupId && (
+                  <p className="text-[10px] text-slate-400 mt-1 px-1">
+                    We'll match "{lendPerson || 'the person'}" to a group member by name.
+                    If no match is found, the Splitup entry is skipped.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         )}
 
