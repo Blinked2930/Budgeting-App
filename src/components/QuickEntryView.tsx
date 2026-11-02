@@ -1,4 +1,6 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { useQuery, useMutation } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import {
   ArrowRight,
   Utensils,
@@ -143,19 +145,22 @@ export const QuickEntryView: React.FC = () => {
   const { stats } = useBudgetCycle();
   const { currency: defaultAppCurrency, format } = useCurrency();
 
+  const convexGroups = useQuery((api as any).groups?.getMyGroups || (api as any).groups?.listGroups, {}) || [];
+  const addConvexExpense = useMutation((api as any).groups?.addExpense || (api as any).groups?.addGroupExpense);
+
   const [amountStr, setAmountStr] = useState<string>('');
   const [mode, setMode] = useState<EntryMode>('expense');
 
   const [category, setCategory] = useState<Category>('Food');
   const [payMethod, setPayMethod] = useState<PayMethod>('Cash');
   const [payerName, setPayerName] = useState<string>('');
+  const [selectedGroupId, setSelectedGroupId] = useState<string>('');
 
   const [dateOverride, setDateOverride] = useState<string | null>(null);
   const todayStr = toDateInputValue(new Date());
 
   const [itemName, setItemName] = useState<string>('');
   const [isItemFocused, setIsItemFocused] = useState(false);
-
   const [shareAmountStr, setShareAmountStr] = useState<string>('');
 
   const [withdrawDirection, setWithdrawDirection] = useState<TransferDirection>('BankToCash');
@@ -228,7 +233,6 @@ export const QuickEntryView: React.FC = () => {
 
   const shareAmount = parseFloat(shareAmountStr) || 0;
   const normalizedShareALL = convertToALL(shareAmount, defaultAppCurrency);
-
   const hasShare = shareAmount > 0;
 
   const selectedGroup = debtGroups.find((g) => g.key === settleGroupKey);
@@ -282,6 +286,7 @@ export const QuickEntryView: React.FC = () => {
     setLendNote('');
     setSettleGroupKey(null);
     setPayerName('');
+    setSelectedGroupId('');
     inputRef.current?.focus();
   };
 
@@ -331,6 +336,31 @@ export const QuickEntryView: React.FC = () => {
     try {
       setIsSaving(true);
       const startTime = performance.now();
+
+      if (selectedGroupId && mode === 'expense') {
+        const groupObj = convexGroups.find((g: any) => g._id === selectedGroupId);
+        if (groupObj) {
+          const groupDetails = await (api as any).groups?.getGroupDetails({ groupId: selectedGroupId });
+          const firstMemberId = groupDetails?.members?.[0]?._id;
+
+          if (firstMemberId) {
+            await addConvexExpense({
+              groupId: selectedGroupId,
+              title: itemName.trim() || 'Shared Expense',
+              amount: parsedAmount,
+              currency: defaultAppCurrency,
+              amountInALL: normalizedALL,
+              category,
+              paidByMemberId: firstMemberId,
+              splitType: 'equal',
+              splits: groupDetails.members.map((m: any) => ({
+                memberId: m._id,
+                amountALL: Math.round((normalizedALL / groupDetails.members.length) * 100) / 100,
+              })),
+            });
+          }
+        }
+      }
 
       if (mode === 'expense') {
         const baseData = {
@@ -594,6 +624,26 @@ export const QuickEntryView: React.FC = () => {
 
         {mode === 'expense' && (
           <>
+            {convexGroups.length > 0 && (
+              <div>
+                <label className="block text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                  Sync to Splitup Group (Optional)
+                </label>
+                <select
+                  value={selectedGroupId}
+                  onChange={(e) => setSelectedGroupId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="">-- Personal Only --</option>
+                  {convexGroups.map((g: any) => (
+                    <option key={g._id} value={g._id}>
+                      👥 {g.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div>
               <div className="flex items-center justify-between mb-2 px-1">
                 <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
