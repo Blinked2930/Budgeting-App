@@ -37,14 +37,14 @@ export function daysBetween(start: Date, end: Date): number {
 // ---------------------------------------------------------------------------
 
 export type ExpenseBucket =
-    | 'reconciliation' // "Balance Reconciliation" entries: wallet only, never spending
-    | 'debtSettlement' // debtRelated: wallet only, never spending
-    | 'debtOrigin' // initial lend/borrow wallet movement: wallet only
-    | 'forgiveness' // written-off debt (isForgiveness): counts as spending, no wallet movement
-    | 'travel' // paid from the travel stash
-    | 'big' // pre-budgeted big expense (rent etc.)
-    | 'noWalletSpending' // real spending that moved no wallet money: written-off loans ("Gift to ..."), things someone else paid for
-    | 'regular'; // normal consumption (negative amounts are refunds)
+    | 'reconciliation'
+    | 'debtSettlement'
+    | 'debtOrigin'
+    | 'forgiveness'
+    | 'travel'
+    | 'big'
+    | 'noWalletSpending'
+    | 'regular';
 
 export function isReconciliationEntry(e: ExpenseRecord): boolean {
     return (e.itemName ?? '').trim().toLowerCase() === 'balance reconciliation';
@@ -55,15 +55,10 @@ export function classifyExpense(e: ExpenseRecord): ExpenseBucket {
     if (isReconciliationEntry(e)) return 'reconciliation';
     if (e.isDebtOrigin) return 'debtOrigin';
     if (e.debtRelated) return 'debtSettlement';
-    // Non-cash offset of money someone owed you: settles a debt, it is not spending.
     if (e.walletNeutral && (e.itemName ?? '').trim().startsWith('Offset from ')) return 'debtSettlement';
     if (e.isForgiveness) return 'forgiveness';
     if (e.category === 'Travel') return 'travel';
     if (e.isBigExpense) return 'big';
-    // Wallet-neutral entries are real spending whose money either left the wallet earlier
-    // (a lend that was later written off) or was paid by someone else. They count as
-    // spending but never touch the wallet. To go back to ignoring them, return a
-    // non-spending bucket here instead.
     if (e.walletNeutral) return 'noWalletSpending';
     return 'regular';
 }
@@ -73,20 +68,52 @@ export function budgetImpactOf(e: ExpenseRecord): number {
     return e.budgetAmountALL ?? e.amountInALL;
 }
 
-/** Cycle start as local midnight (same convention computeBudgetStats uses). */
+/** Cycle start as local midnight. */
 export function cycleStartMs(cycle: BudgetCycle): number {
     return parseLocalDate(cycle.startDate).getTime();
 }
 
 /**
  * Where does the travel stash physically live?
- * The stash is an earmark on money already sitting in your bank (travel spending
- * is paid from the bank, and "Next cycle" carries the bank balance forward as-is).
- * true  -> stash is part of walletTotal: it is held back from "free to spend"
- *          and is NOT added again to net worth.
- * false -> stash is separate money: not held back, added on top of net worth.
  */
 export const TRAVEL_STASH_IS_INSIDE_WALLET = true;
+
+/**
+ * Minimal Splitup snapshot passed into computeBudgetStats so free-to-spend
+ * can reflect "I'm owed money via shared groups" without needing the full
+ * group data. Filled from getMyGroups; split by direction so receivables
+ * and payables are visible.
+ */
+export interface SplitupSnapshot {
+    /** Positive: total owed to you across all shared groups. */
+    receivablesALL: number;
+    /** Positive: total you owe across all shared groups. */
+    payablesALL: number;
+}
+
+export const EMPTY_SPLITUP_SNAPSHOT: SplitupSnapshot = {
+    receivablesALL: 0,
+    payablesALL: 0,
+};
+
+/**
+ * Build a SplitupSnapshot from getMyGroups output. Each group's
+ * `myNetBalanceALL` is your net in that group: positive = you're owed,
+ * negative = you owe.
+ */
+export function snapshotFromGroups(
+    groups: Array<{ myNetBalanceALL?: number }> | undefined | null
+): SplitupSnapshot {
+    if (!groups || groups.length === 0) return EMPTY_SPLITUP_SNAPSHOT;
+    let rec = 0;
+    let pay = 0;
+    for (const g of groups) {
+        const net = g.myNetBalanceALL ?? 0;
+        if (net > 0) rec += net;
+        else if (net < 0) pay += -net;
+    }
+    return { receivablesALL: rec, payablesALL: pay };
+}
 
 export interface BudgetStats {
     cycleBudget: number;
@@ -97,11 +124,8 @@ export interface BudgetStats {
 
     plannedBig: number;
     bigExpenseSpent: number;
-    /** Planned big expenses not yet paid (never negative). */
     unpaidBig: number;
-    /** Travel stash held back from free money (0 if the stash is separate). */
     travelStashHeld: number;
-    /** walletTotal - unpaidBig - payables - travelStashHeld. Equals `remaining`. */
     freeToSpend: number;
 
     travelSpent: number;
@@ -120,13 +144,19 @@ export interface BudgetStats {
     estimatedCashBalance: number;
     walletTotal: number;
 
+    // Local (Dexie) debt totals
     receivablesALL: number;
     payablesALL: number;
+
+    // Splitup contribution (subset of the totals above)
+    splitupReceivablesALL: number;
+    splitupPayablesALL: number;
+
     netOfDebtsALL: number;
     netWorthALL: number;
 
-    spent: number; // alias for consumed
-    spentToday: number; // alias for consumedToday
+    spent: number;
+    spentToday: number;
     estimatedTotalBalance: number;
     projectedSurplus: number;
 }
@@ -136,6 +166,7 @@ export function computeBudgetStats(
     expenses: ExpenseRecord[],
     transfers: TransferRecord[] = [],
     debts: DebtRecord[] = [],
+    splitup: SplitupSnapshot = EMPTY_SPLITUP_SNAPSHOT,
     now: Date = new Date()
 ): BudgetStats {
     const start = parseLocalDate(cycle.startDate);
@@ -166,8 +197,6 @@ export function computeBudgetStats(
         const whenMs = new Date(e.timestamp).getTime();
         if (whenMs < startMs) continue;
 
-        // Wallet movement: wallet-neutral entries do not move money.
-        // Signed amount: positive = outflow, negative = inflow.
         if (!e.walletNeutral) {
             const amt = e.amountInALL;
             if (e.paidWith === 'Cash') cashDelta -= amt;
@@ -181,7 +210,6 @@ export function computeBudgetStats(
             case 'reconciliation':
             case 'debtSettlement':
             case 'debtOrigin':
-                // Not consumption.
                 break;
 
             case 'travel':
@@ -208,31 +236,25 @@ export function computeBudgetStats(
         }
     }
 
-    let bankToCash = 0;
-    let cashToBank = 0;
     for (const t of transfers) {
         if (t.deleted) continue;
         const whenMs = new Date(t.timestamp).getTime();
         if (whenMs < startMs) continue;
         if (t.direction === 'BankToCash') {
-            bankToCash += t.amountALL;
             cashDelta += t.amountALL;
             cardDelta -= t.amountALL;
         } else {
-            cashToBank += t.amountALL;
             cashDelta -= t.amountALL;
             cardDelta += t.amountALL;
         }
     }
-    void bankToCash;
-    void cashToBank;
 
-    // ---- Wallet side (what you actually have) ----
     const startingCash = cycle.startingCashALL ?? 0;
     const estimatedBankBalance = cycle.startingRaiffeisenBalanceALL + cycle.stipendAmountALL + cardDelta;
     const estimatedCashBalance = startingCash + cashDelta;
     const walletTotal = estimatedBankBalance + estimatedCashBalance;
 
+    // Local debts (Dexie)
     let receivablesALL = 0;
     let payablesALL = 0;
     for (const d of debts) {
@@ -240,19 +262,23 @@ export function computeBudgetStats(
         if (d.direction === 'OwedToMe') receivablesALL += d.remainingALL;
         else payablesALL += d.remainingALL;
     }
-    const netOfDebtsALL = receivablesALL - payablesALL;
+
+    // Fold Splitup net into the same receivables/payables. This is the
+    // "one ecosystem" bridge: owed money via a shared trip shows up as
+    // money you have, owed to a trip member shows up as money you'll pay.
+    const splitupReceivablesALL = splitup.receivablesALL;
+    const splitupPayablesALL = splitup.payablesALL;
+    const totalReceivablesALL = receivablesALL + splitupReceivablesALL;
+    const totalPayablesALL = payablesALL + splitupPayablesALL;
+
+    const netOfDebtsALL = totalReceivablesALL - totalPayablesALL;
     const travelStashBalance = cycle.travelStashALL - travelSpent;
 
-    // ---- Free to spend: anchored to the wallet, so every real money movement
-    // (reconciliations, loans, settlements, transfers) is reflected automatically.
-    // The wallet is already net of everything spent, so consumption is NOT
-    // subtracted again here. Receivables are not spendable, so they are ignored.
     const plannedBig = cycle.plannedBigExpensesALL ?? 0;
     const unpaidBig = Math.max(0, plannedBig - bigExpenseSpent);
     const travelStashHeld = TRAVEL_STASH_IS_INSIDE_WALLET ? Math.max(0, travelStashBalance) : 0;
-    const freeToSpend = walletTotal - unpaidBig - payablesALL - travelStashHeld;
+    const freeToSpend = walletTotal - unpaidBig - totalPayablesALL - travelStashHeld;
 
-    // "Cycle budget" = everything that was spendable this cycle = what is left + what is spent.
     const remaining = freeToSpend;
     const cycleBudget = freeToSpend + consumed;
     const percentConsumed = cycleBudget > 0
@@ -289,8 +315,10 @@ export function computeBudgetStats(
         estimatedBankBalance,
         estimatedCashBalance,
         walletTotal,
-        receivablesALL,
-        payablesALL,
+        receivablesALL: totalReceivablesALL,
+        payablesALL: totalPayablesALL,
+        splitupReceivablesALL,
+        splitupPayablesALL,
         netOfDebtsALL,
         netWorthALL: walletTotal + (TRAVEL_STASH_IS_INSIDE_WALLET ? 0 : travelStashBalance) + netOfDebtsALL,
         spent: consumed,

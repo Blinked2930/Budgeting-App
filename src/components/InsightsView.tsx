@@ -4,7 +4,6 @@ import {
     ListFilter,
     Banknote,
     CreditCard,
-    HandCoins,
     PieChart,
     History,
     PiggyBank,
@@ -45,6 +44,7 @@ import {
 } from '../utils/splitupBridge';
 import { cn } from '../utils/cn';
 import { DebtsPanel } from './DebtsPanel';
+import { DebtsAndSharedCard } from './SplitupNetBalancesCard';
 
 type TimeScope = 'cycle' | '30d' | 'all';
 
@@ -379,100 +379,6 @@ const CashFlowCard: React.FC<{
     );
 };
 
-const DebtSummary: React.FC<{ onOpen: () => void }> = ({ onOpen }) => {
-    const { openDebts } = useDebts();
-    const { format } = useCurrency();
-
-    const totals = useMemo(() => {
-        let receivables = 0;
-        let payables = 0;
-        for (const d of openDebts) {
-            if (d.direction === 'OwedToMe') receivables += d.remainingALL;
-            else payables += d.remainingALL;
-        }
-        return { receivables, payables, net: receivables - payables };
-    }, [openDebts]);
-
-    if (openDebts.length === 0) {
-        return (
-            <Card>
-                <p className="text-xs text-slate-500">No open debts.</p>
-            </Card>
-        );
-    }
-
-    return (
-        <Card className="space-y-3" onClick={onOpen}>
-            <div className="flex items-center justify-between">
-                <p className="text-[10px] font-semibold text-indigo-700 uppercase tracking-wider">Debts</p>
-                <span className="text-[10px] text-indigo-500 underline">Manage →</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-                <div>
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Owed to you</p>
-                    <p className="text-sm font-mono font-bold text-emerald-600 mt-0.5">
-                        {format(totals.receivables)}
-                    </p>
-                </div>
-                <div>
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">You owe</p>
-                    <p className="text-sm font-mono font-bold text-rose-600 mt-0.5">
-                        {format(totals.payables)}
-                    </p>
-                </div>
-                <div>
-                    <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Net</p>
-                    <p className={cn('text-sm font-mono font-bold mt-0.5', totals.net > 0 ? 'text-emerald-600' : totals.net < 0 ? 'text-rose-600' : 'text-slate-500')}>
-                        {totals.net > 0 ? '+' : ''}{format(Math.abs(totals.net))}
-                    </p>
-                </div>
-            </div>
-        </Card>
-    );
-};
-
-const SharedGroupsCard: React.FC<{ groups: BridgeGroupSummary[] }> = ({ groups }) => {
-    const { format } = useCurrency();
-    if (groups.length === 0) return null;
-    const totalNet = groups.reduce((s, g) => s + (g.myNetBalanceALL ?? 0), 0);
-    return (
-        <Card className="space-y-2">
-            <div className="flex items-center justify-between">
-                <p className="text-[10px] font-semibold text-indigo-700 uppercase tracking-wider">Shared groups</p>
-                <span
-                    className={cn(
-                        'text-sm font-mono font-bold',
-                        totalNet > 0 ? 'text-emerald-600' : totalNet < 0 ? 'text-rose-600' : 'text-slate-500'
-                    )}
-                >
-                    {totalNet === 0 ? 'Settled' : `${totalNet > 0 ? '+' : '−'}${format(Math.abs(totalNet))}`}
-                </span>
-            </div>
-            <div className="space-y-1">
-                {groups.map((g) => {
-                    const net = g.myNetBalanceALL ?? 0;
-                    return (
-                        <div key={g._id} className="flex items-center justify-between text-[11px] gap-2">
-                            <span className="text-slate-600 truncate flex items-center gap-1">
-                                <Users className="w-3 h-3 text-slate-400 shrink-0" />
-                                {g.name}
-                            </span>
-                            <span
-                                className={cn(
-                                    'font-mono shrink-0',
-                                    net > 0 ? 'text-emerald-600' : net < 0 ? 'text-rose-600' : 'text-slate-400'
-                                )}
-                            >
-                                {net === 0 ? '—' : format(Math.abs(net))}
-                            </span>
-                        </div>
-                    );
-                })}
-            </div>
-        </Card>
-    );
-};
-
 const CycleHistorySection: React.FC = () => {
     const { format } = useCurrency();
 
@@ -563,6 +469,7 @@ function filterByScope(
 export const InsightsView: React.FC = () => {
     const { expenses } = useExpenses();
     const { cycle } = useBudgetCycle();
+    const { openDebts } = useDebts();
     const { format } = useCurrency();
     const [timeScope, setTimeScope] = useState<TimeScope>('cycle');
     const [filters, setFilters] = useState<InsightFilters>(DEFAULT_FILTERS);
@@ -717,17 +624,10 @@ export const InsightsView: React.FC = () => {
             </div>
 
             <section>
-                <SectionTitle icon={<HandCoins className="w-3.5 h-3.5 text-slate-400" />}>
-                    Debts Overview
-                </SectionTitle>
-                <DebtSummary onOpen={() => setIsDebtsOpen(true)} />
-            </section>
-
-            <section>
                 <SectionTitle icon={<Users className="w-3.5 h-3.5 text-slate-400" />}>
-                    Shared Groups
+                    Debts & Shared
                 </SectionTitle>
-                <SharedGroupsCard groups={groupSummaries} />
+                <DebtsAndSharedCard localDebts={openDebts} />
             </section>
 
             <section>

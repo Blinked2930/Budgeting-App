@@ -15,6 +15,93 @@ function normalizeName(name: string): string {
   return name.trim().toLowerCase();
 }
 
+/**
+ * Hamilton (Largest Remainder) allocation of totalAmount across weighted
+ * shares, returning amounts in major currency units. Guarantees the sum
+ * equals totalAmount to the cent.
+ */
+function allocateByShares(
+  totalAmount: number,
+  weights: Record<string, number>
+): Record<string, number> {
+  const ids = Object.keys(weights).filter((id) => (weights[id] ?? 0) > 0);
+  if (ids.length === 0) return {};
+  const sign = totalAmount < 0 ? -1 : 1;
+  const totalCents = Math.round(Math.abs(totalAmount) * 100);
+  if (totalCents === 0) {
+    const zeros: Record<string, number> = {};
+    for (const id of ids) zeros[id] = 0;
+    return zeros;
+  }
+  const totalWeight = ids.reduce((s, id) => s + weights[id], 0);
+  if (totalWeight <= 0) return {};
+  const floors: Record<string, number> = {};
+  const remainders: Array<{ id: string; rem: number }> = [];
+  let allocatedCents = 0;
+  for (const id of ids) {
+    const exact = (totalCents * weights[id]) / totalWeight;
+    const floor = Math.floor(exact);
+    floors[id] = floor;
+    allocatedCents += floor;
+    remainders.push({ id, rem: exact - floor });
+  }
+  let leftover = totalCents - allocatedCents;
+  remainders.sort((a, b) => (b.rem !== a.rem ? b.rem - a.rem : a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (let i = 0; i < remainders.length && leftover > 0; i++, leftover--) {
+    floors[remainders[i].id] += 1;
+  }
+  const result: Record<string, number> = {};
+  for (const id of ids) result[id] = (floors[id] * sign) / 100;
+  return result;
+}
+
+/**
+ * Validate that the sum of split amounts equals amountInALL within 1 cent.
+ * Throws if not — prevents the "silent corruption" bug where exact-split
+ * amounts saved in group currency didn't match the converted ALL total.
+ */
+function assertSplitsBalance(splits: Array<{ amountALL: number }>, amountInALL: number): void {
+  const sum = splits.reduce((s, x) => s + (x.amountALL ?? 0), 0);
+  const diff = Math.abs(sum - amountInALL);
+  if (diff > 0.01) {
+    throw new Error(
+      `Split amounts do not sum to the expense total. Sum=${sum.toFixed(2)}, expected=${amountInALL.toFixed(2)}, off by ${diff.toFixed(2)}.`
+    );
+  }
+}
+
+/**
+ * Given an expense (from DB) and a target amountInALL, rebuild splits via
+ * Hamilton allocation preserving the original weights where possible.
+ * Used by repairExpenseSplits.
+ */
+function rebalanceSplits(
+  existing: Array<{ memberId: any; userId?: string; amountALL: number }>,
+  amountInALL: number
+): Array<{ memberId: any; userId?: string; amountALL: number }> {
+  // Derive integer weights from the existing amounts so repairs preserve
+  // whatever the user originally intended.
+  const positives = existing.filter((s) => s.amountALL > 0);
+  if (positives.length === 0) {
+    // All zero — distribute equally across all members in splits.
+    const weights: Record<string, number> = {};
+    for (const s of existing) weights[s.memberId] = 1;
+    const alloc = allocateByShares(amountInALL, weights);
+    return existing.map((s) => ({ ...s, amountALL: alloc[s.memberId] ?? 0 }));
+  }
+  const minAmt = Math.min(...positives.map((s) => s.amountALL));
+  const weights: Record<string, number> = {};
+  for (const s of existing) {
+    if (s.amountALL <= 0) {
+      weights[s.memberId] = 0;
+      continue;
+    }
+    weights[s.memberId] = Math.max(1, Math.round(s.amountALL / minAmt));
+  }
+  const alloc = allocateByShares(amountInALL, weights);
+  return existing.map((s) => ({ ...s, amountALL: alloc[s.memberId] ?? 0 }));
+}
+
 const currencyValidator = v.union(
   v.literal("ALL"),
   v.literal("EUR"),
@@ -94,7 +181,9 @@ export const getMyGroups = query({
         ...group,
         status: groupStatus,
         memberCount: members.length,
-        myNetBalanceALL: Math.round(net),
+        // Un-rounded. Round only at the display layer to avoid drift when
+        // summing across many groups.
+        myNetBalanceALL: net,
         isOwner: group.createdBy === userId,
       });
     }
@@ -158,8 +247,6 @@ export const getGroupDetails = query({
  * A name is unavailable if the caller already OWNS another group with the
  * same name (case-insensitive, trimmed). Names owned by other users do not
  * block — you can both have a "Tirana Trip".
- *
- * `excludeGroupId` lets GroupSettingsModal reuse this check when renaming.
  */
 export const checkGroupNameAvailable = query({
   args: {
@@ -188,6 +275,45 @@ export const checkGroupNameAvailable = query({
   },
 });
 
+/**
+ * Scan all expenses the caller can see and report which ones have split sums
+ * that don't match amountInALL. Used for one-shot repair of pre-fix data.
+ */
+export const findCorruptExpenses = query({
+  args: {},
+  handler: async (ctx) => {
+    const expenses = await ctx.db.query("groupExpenses").collect();
+    const corrupt: Array<{
+      expenseId: any;
+      groupId: any;
+      title: string;
+      amountInALL: number;
+      splitsSum: number;
+      diff: number;
+      currency: string;
+      splitType: string;
+    }> = [];
+    for (const exp of expenses) {
+      if (exp.deleted) continue;
+      const sum = exp.splits.reduce((s: number, x: any) => s + (x.amountALL ?? 0), 0);
+      const diff = Math.abs(sum - exp.amountInALL);
+      if (diff > 0.01) {
+        corrupt.push({
+          expenseId: exp._id,
+          groupId: exp.groupId,
+          title: exp.title,
+          amountInALL: exp.amountInALL,
+          splitsSum: sum,
+          diff,
+          currency: exp.currency,
+          splitType: exp.splitType,
+        });
+      }
+    }
+    return corrupt;
+  },
+});
+
 export const getActivityFeed = query({
   args: {
     userId: v.optional(v.string()),
@@ -210,6 +336,7 @@ export const getActivityFeed = query({
       type: "expense" | "settlement";
       title: string;
       amount: number;
+      amountInALL: number;
       currency: string;
       category?: string;
       paidByMemberId?: string;
@@ -248,6 +375,7 @@ export const getActivityFeed = query({
           type: "expense",
           title: exp.title,
           amount: exp.amount,
+          amountInALL: exp.amountInALL,
           currency: exp.currency,
           category: exp.category,
           paidByMemberId: exp.paidByMemberId,
@@ -277,6 +405,7 @@ export const getActivityFeed = query({
           type: "settlement",
           title: `${fromName} paid ${toName}`,
           amount: set.amountALL,
+          amountInALL: set.amountALL,
           currency: set.currency,
           paidWith: set.paidWith,
           timestamp: set.timestamp,
@@ -352,9 +481,6 @@ export const createGroup = mutation({
       throw new Error("Group name cannot be empty.");
     }
 
-    // Owner-scoped uniqueness: reject if THIS user already owns a group
-    // with the same name (case-insensitive). Other users may own groups
-    // with the same name — names are not globally unique.
     const allGroups = await ctx.db.query("groups").collect();
     const ownedDuplicate = allGroups.find(
       (g) =>
@@ -436,7 +562,6 @@ export const updateGroupSettings = mutation({
       throw new Error("Only the group owner can change settings.");
     }
 
-    // Owner-scoped duplicate check on rename (excludes this group).
     const normalized = normalizeName(args.name);
     if (!normalized) {
       throw new Error("Group name cannot be empty.");
@@ -477,11 +602,6 @@ export const unarchiveGroup = mutation({
   },
 });
 
-/**
- * Hard-deletes a group and every dependent row (settlements, expenses,
- * members). Only the creator can delete. Non-owners should archive instead.
- * Order matters: children before the parent so no orphaned rows survive.
- */
 export const deleteGroup = mutation({
   args: { groupId: v.id("groups") },
   handler: async (ctx, args) => {
@@ -600,14 +720,12 @@ export const addMember = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-
     const memberId = await ctx.db.insert("groupMembers", {
       groupId: args.groupId,
       name: args.name.trim(),
       userId: args.userId ?? "anonymous",
       joinedAt: now,
     });
-
     return memberId;
   },
 });
@@ -633,8 +751,8 @@ export const addExpense = mutation({
     timestamp: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    assertSplitsBalance(args.splits, args.amountInALL);
     const now = Date.now();
-
     const expenseId = await ctx.db.insert("groupExpenses", {
       groupId: args.groupId,
       title: args.title,
@@ -649,7 +767,6 @@ export const addExpense = mutation({
       timestamp: args.timestamp ?? now,
       createdAt: now,
     });
-
     return expenseId;
   },
 });
@@ -675,8 +792,48 @@ export const updateExpense = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    assertSplitsBalance(args.splits, args.amountInALL);
     const { expenseId, ...updates } = args;
     await ctx.db.patch(expenseId, updates);
+  },
+});
+
+/**
+ * One-shot repair for expenses saved before the client converted split
+ * amounts to ALL. Re-derives splits via Hamilton allocation of amountInALL
+ * across the existing member set, preserving original weights where
+ * possible. Idempotent — safe to re-run.
+ *
+ * Call once from the Convex dashboard:
+ *   - Run findCorruptExpenses to see the damage
+ *   - Run repairExpenseSplits({}) to fix everything found
+ */
+export const repairExpenseSplits = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const expenses = await ctx.db.query("groupExpenses").collect();
+    const repaired: string[] = [];
+    const skipped: string[] = [];
+    for (const exp of expenses) {
+      if (exp.deleted) continue;
+      const sum = exp.splits.reduce((s: number, x: any) => s + (x.amountALL ?? 0), 0);
+      const diff = Math.abs(sum - exp.amountInALL);
+      if (diff <= 0.01) {
+        skipped.push(exp._id);
+        continue;
+      }
+      const fixed = rebalanceSplits(
+        exp.splits.map((s: any) => ({
+          memberId: s.memberId,
+          userId: s.userId,
+          amountALL: s.amountALL,
+        })),
+        exp.amountInALL
+      );
+      await ctx.db.patch(exp._id, { splits: fixed });
+      repaired.push(exp._id);
+    }
+    return { repaired, skipped };
   },
 });
 
@@ -705,7 +862,6 @@ export const settleGroupDebt = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-
     const settlementId = await ctx.db.insert("groupSettlements", {
       groupId: args.groupId,
       fromMemberId: args.fromMemberId,
@@ -718,7 +874,6 @@ export const settleGroupDebt = mutation({
       timestamp: args.timestamp ?? now,
       createdAt: now,
     });
-
     return settlementId;
   },
 });
