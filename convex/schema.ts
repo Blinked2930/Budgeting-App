@@ -1,3 +1,4 @@
+// convex/schema.ts
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
@@ -40,6 +41,17 @@ export default defineSchema({
     bufferPoolALL: v.number(),
     travelStashALL: v.number(),
     plannedBigExpensesALL: v.optional(v.number()),
+    customAccounts: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          name: v.string(),
+          currency: v.string(),
+          nativeBalance: v.number(),
+          lastUpdated: v.optional(v.string()),
+        })
+      )
+    ),
     updatedAt: v.optional(v.string()),
     deleted: v.optional(v.boolean()),
   })
@@ -87,6 +99,7 @@ export default defineSchema({
     createdBy: v.string(),
     createdAt: v.number(),
     inviteCode: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("active"), v.literal("archived"))),
     deleted: v.optional(v.boolean()),
   })
     .index("by_createdBy", ["createdBy"])
@@ -136,6 +149,7 @@ export default defineSchema({
     toUserId: v.optional(v.string()),
     amountALL: v.number(),
     currency: v.string(),
+    paidWith: v.optional(v.union(v.literal("Cash"), v.literal("Card"))),
     timestamp: v.number(),
     createdAt: v.number(),
     deleted: v.optional(v.boolean()),

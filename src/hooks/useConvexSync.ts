@@ -96,7 +96,7 @@ export function useConvexSync() {
             for (const cycle of unsynced) {
                 const updatedAt = cycle.updatedAt ?? cycle.startDate;
 
-                const convexId = await upsertBudgetCycleMutation({
+                const convexId = await (upsertBudgetCycleMutation as any)({
                     localId: cycle.id,
                     startDate: cycle.startDate,
                     targetEndDate: cycle.targetEndDate,
@@ -106,6 +106,7 @@ export function useConvexSync() {
                     bufferPoolALL: cycle.bufferPoolALL,
                     travelStashALL: cycle.travelStashALL,
                     plannedBigExpensesALL: cycle.plannedBigExpensesALL,
+                    customAccounts: cycle.customAccounts,
                     updatedAt,
                     deleted: cycle.deleted,
                 });

@@ -1,3 +1,4 @@
+// convex/groups.ts
 import { v } from "convex/values";
 import { query, mutation } from "./_generated/server";
 
@@ -10,8 +11,6 @@ function generateInviteCode(): string {
   return result;
 }
 
-// Shared currency validator — keep this list in sync with GLOBAL_CURRENCIES
-// in src/utils/currencies.ts.
 const currencyValidator = v.union(
   v.literal("ALL"),
   v.literal("EUR"),
@@ -30,6 +29,7 @@ const currencyValidator = v.union(
 export const getMyGroups = query({
   args: {
     userId: v.optional(v.string()),
+    includeArchived: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -45,6 +45,9 @@ export const getMyGroups = query({
     for (const memberRow of myMemberRecords) {
       const group = await ctx.db.get(memberRow.groupId);
       if (!group || group.deleted) continue;
+
+      const groupStatus = group.status ?? "active";
+      if (!args.includeArchived && groupStatus === "archived") continue;
 
       const members = await ctx.db
         .query("groupMembers")
@@ -71,12 +74,6 @@ export const getMyGroups = query({
         )
         .collect();
 
-      // Compute this user's net position for this group.
-      // Same math as debtCalculator.calculateBalances:
-      //   payer  → +amountInALL
-      //   splitter → −amountALL
-      //   settlement sender → +amountALL
-      //   settlement receiver → −amountALL
       let net = 0;
       for (const exp of expenses) {
         if (exp.paidByMemberId === memberRow._id) net += exp.amountInALL;
@@ -91,6 +88,7 @@ export const getMyGroups = query({
 
       groups.push({
         ...group,
+        status: groupStatus,
         memberCount: members.length,
         myNetBalanceALL: Math.round(net),
       });
@@ -140,6 +138,7 @@ export const getGroupDetails = query({
     return {
       group: {
         ...group,
+        status: group.status ?? "active",
         allowedCurrencies: (group as any).allowedCurrencies || ["ALL", "EUR", "USD"],
       },
       members,
@@ -175,6 +174,7 @@ export const getActivityFeed = query({
       category?: string;
       paidByMemberId?: string;
       splitType?: string;
+      paidWith?: "Cash" | "Card";
       timestamp: number;
       actorName: string;
     }> = [];
@@ -238,6 +238,7 @@ export const getActivityFeed = query({
           title: `${fromName} paid ${toName}`,
           amount: set.amountALL,
           currency: set.currency,
+          paidWith: set.paidWith,
           timestamp: set.timestamp,
           actorName: fromName,
         });
@@ -314,6 +315,7 @@ export const createGroup = mutation({
       createdBy: string;
       createdAt: number;
       inviteCode: string;
+      status: "active" | "archived";
     } = {
       name: args.name,
       currency: args.currency,
@@ -321,6 +323,7 @@ export const createGroup = mutation({
       createdBy: userId,
       createdAt: now,
       inviteCode,
+      status: "active",
     };
 
     if (args.description?.trim()) {
@@ -366,6 +369,20 @@ export const updateGroupSettings = mutation({
       currency: args.currency,
       allowedCurrencies: args.allowedCurrencies as any,
     });
+  },
+});
+
+export const archiveGroup = mutation({
+  args: { groupId: v.id("groups") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.groupId, { status: "archived" });
+  },
+});
+
+export const unarchiveGroup = mutation({
+  args: { groupId: v.id("groups") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.groupId, { status: "active" });
   },
 });
 
@@ -549,6 +566,7 @@ export const settleGroupDebt = mutation({
     toUserId: v.optional(v.string()),
     amountALL: v.number(),
     currency: currencyValidator,
+    paidWith: v.optional(v.union(v.literal("Cash"), v.literal("Card"))),
     timestamp: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -562,6 +580,7 @@ export const settleGroupDebt = mutation({
       toUserId: args.toUserId,
       amountALL: args.amountALL,
       currency: args.currency,
+      paidWith: args.paidWith ?? "Cash",
       timestamp: args.timestamp ?? now,
       createdAt: now,
     });

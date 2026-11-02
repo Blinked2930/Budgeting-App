@@ -11,6 +11,8 @@ export const CATEGORY_CONFIG: Record<Category, CategoryConfig> = {
     Transport: { itemLabel: 'Destination / Route', itemPlaceholder: 'e.g. Tirana -> Peshkopi' },
     Social: { itemLabel: 'Event / Place', itemPlaceholder: 'e.g. Movie, Drinks' },
     Travel: { itemLabel: 'Location / Item', itemPlaceholder: 'e.g. Hostel, Train ticket' },
+    Accommodation: { itemLabel: 'Hotel / Airbnb / Rent', itemPlaceholder: 'e.g. Hostel booking, Hotel room' },
+    Entertainment: { itemLabel: 'Show / Attraction', itemPlaceholder: 'e.g. Movie, Concert ticket, Museum' },
     Other: { itemLabel: 'Item name', itemPlaceholder: 'What was it?' },
 };
 
@@ -22,6 +24,10 @@ export function getSubcategories(category: Category): string[] {
             return ['Furgon', 'Bus', 'Taxi', 'Train', 'Flight'];
         case 'Travel':
             return ['Accommodation', 'Transport', 'Activity', 'Food'];
+        case 'Accommodation':
+            return ['Hostel', 'Hotel', 'Airbnb', 'Rent'];
+        case 'Entertainment':
+            return ['Cinema', 'Concert', 'Museum', 'Theater', 'Sports'];
         default:
             return [];
     }

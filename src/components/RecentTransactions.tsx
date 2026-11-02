@@ -11,6 +11,8 @@ import {
   Bus,
   Users,
   Plane,
+  Building,
+  Film,
   MoreHorizontal,
   Banknote,
   CreditCard,
@@ -45,6 +47,8 @@ const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
   Transport: <Bus className="w-3.5 h-3.5 text-slate-600" />,
   Social: <Users className="w-3.5 h-3.5 text-slate-600" />,
   Travel: <Plane className="w-3.5 h-3.5 text-slate-600" />,
+  Accommodation: <Building className="w-3.5 h-3.5 text-slate-600" />,
+  Entertainment: <Film className="w-3.5 h-3.5 text-slate-600" />,
   Other: <MoreHorizontal className="w-3.5 h-3.5 text-slate-600" />,
 };
 

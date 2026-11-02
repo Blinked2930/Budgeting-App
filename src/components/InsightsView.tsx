@@ -50,6 +50,8 @@ const CATEGORY_COLORS: Record<Category, { bar: string; text: string; dot: string
     Transport: { bar: 'bg-cyan-400', text: 'text-cyan-700', dot: 'bg-cyan-400' },
     Social: { bar: 'bg-purple-400', text: 'text-purple-700', dot: 'bg-purple-400' },
     Travel: { bar: 'bg-rose-400', text: 'text-rose-700', dot: 'bg-rose-400' },
+    Accommodation: { bar: 'bg-indigo-400', text: 'text-indigo-700', dot: 'bg-indigo-400' },
+    Entertainment: { bar: 'bg-pink-400', text: 'text-pink-700', dot: 'bg-pink-400' },
     Other: { bar: 'bg-slate-400', text: 'text-slate-700', dot: 'bg-slate-400' },
 };
 
@@ -134,24 +136,27 @@ const CategoryBreakdown: React.FC<{ expenses: ExpenseRecord[] }> = ({ expenses }
 
             <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden flex">
                 {stats.map((c) => (
-                    <div key={c.category} className={cn('h-full', CATEGORY_COLORS[c.category].bar)} style={{ width: `${c.percent}%` }} />
+                    <div key={c.category} className={cn('h-full', CATEGORY_COLORS[c.category]?.bar || CATEGORY_COLORS.Other.bar)} style={{ width: `${c.percent}%` }} />
                 ))}
             </div>
 
             <div className="space-y-1.5">
-                {stats.map((c) => (
-                    <div key={c.category} className="flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2 min-w-0">
-                            <span className={cn('w-2 h-2 rounded-full shrink-0', CATEGORY_COLORS[c.category].dot)} />
-                            <span className={cn('font-semibold truncate', CATEGORY_COLORS[c.category].text)}>{c.category}</span>
-                            <span className="text-[10px] text-slate-400 font-mono">{c.count}×</span>
+                {stats.map((c) => {
+                    const color = CATEGORY_COLORS[c.category] || CATEGORY_COLORS.Other;
+                    return (
+                        <div key={c.category} className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <span className={cn('w-2 h-2 rounded-full shrink-0', color.dot)} />
+                                <span className={cn('font-semibold truncate', color.text)}>{c.category}</span>
+                                <span className="text-[10px] text-slate-400 font-mono">{c.count}×</span>
+                            </div>
+                            <div className="flex items-center gap-2.5 font-mono shrink-0">
+                                <span className="text-[10px] text-slate-400">{c.percent.toFixed(0)}%</span>
+                                <span className="font-bold text-slate-900 text-[11px]">{format(c.total)}</span>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2.5 font-mono shrink-0">
-                            <span className="text-[10px] text-slate-400">{c.percent.toFixed(0)}%</span>
-                            <span className="font-bold text-slate-900 text-[11px]">{format(c.total)}</span>
-                        </div>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </Card>
     );

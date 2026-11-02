@@ -1,5 +1,5 @@
 // src/types/index.ts
-export type Currency = 'ALL' | 'EUR' | 'USD' | (string & {});
+export type Currency = 'ALL' | 'EUR' | 'USD' | 'GBP' | 'CHF' | 'CAD' | 'AUD' | 'JPY' | (string & {});
 
 export type Category =
   | 'Food'
@@ -7,6 +7,8 @@ export type Category =
   | 'Transport'
   | 'Social'
   | 'Travel'
+  | 'Accommodation'
+  | 'Entertainment'
   | 'Other';
 
 export type VendorType =
@@ -28,6 +30,14 @@ export type PaymentSource = 'Cash' | 'Card';
 export type TransferDirection = 'BankToCash' | 'CashToBank';
 
 export type DebtDirection = 'iOwe' | 'OwedToMe';
+
+export interface CustomAccount {
+  id: string;
+  name: string;
+  currency: Currency;
+  nativeBalance: number;
+  lastUpdated?: string;
+}
 
 export interface ExpenseRecord {
   id: string;
@@ -142,6 +152,7 @@ export interface BudgetCycle {
    */
   plannedBigExpensesALL?: number;
 
+  customAccounts?: CustomAccount[];
   isSynced?: boolean;
   updatedAt?: string;
   deleted?: boolean;
@@ -170,6 +181,8 @@ export const CATEGORIES: Category[] = [
   'Transport',
   'Social',
   'Travel',
+  'Accommodation',
+  'Entertainment',
   'Other',
 ];
 

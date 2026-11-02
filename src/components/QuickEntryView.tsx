@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { useQuery, useMutation } from 'convex/react';
+import { useQuery, useMutation, useConvex } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import {
   ArrowRight,
@@ -8,6 +8,8 @@ import {
   Bus,
   Users,
   Plane,
+  Building,
+  Film,
   MoreHorizontal,
   RotateCcw,
   Zap,
@@ -67,6 +69,8 @@ const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
   Transport: <Bus className="w-4 h-4 text-slate-600" />,
   Social: <Users className="w-4 h-4 text-slate-600" />,
   Travel: <Plane className="w-4 h-4 text-slate-600" />,
+  Accommodation: <Building className="w-4 h-4 text-slate-600" />,
+  Entertainment: <Film className="w-4 h-4 text-slate-600" />,
   Other: <MoreHorizontal className="w-4 h-4 text-slate-600" />,
 };
 
@@ -145,6 +149,7 @@ export const QuickEntryView: React.FC = () => {
   const { stats } = useBudgetCycle();
   const { currency: defaultAppCurrency, format } = useCurrency();
 
+  const convex = useConvex();
   const convexGroups = useQuery((api as any).groups?.getMyGroups || (api as any).groups?.listGroups, {}) || [];
   const addConvexExpense = useMutation((api as any).groups?.addExpense || (api as any).groups?.addGroupExpense);
 
@@ -340,7 +345,11 @@ export const QuickEntryView: React.FC = () => {
       if (selectedGroupId && mode === 'expense') {
         const groupObj = convexGroups.find((g: any) => g._id === selectedGroupId);
         if (groupObj) {
-          const groupDetails = await (api as any).groups?.getGroupDetails({ groupId: selectedGroupId });
+          // Convex API references are not callable; query through the client.
+          const groupDetails: any = await convex.query(
+            (api as any).groups.getGroupDetails,
+            { groupId: selectedGroupId as any }
+          );
           const firstMemberId = groupDetails?.members?.[0]?._id;
 
           if (firstMemberId) {
@@ -650,7 +659,7 @@ export const QuickEntryView: React.FC = () => {
                   Category
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-4 gap-1.5">
                 {CATEGORIES.map((cat) => {
                   const selected = category === cat;
                   return (
@@ -659,14 +668,14 @@ export const QuickEntryView: React.FC = () => {
                       type="button"
                       onClick={() => handleCategoryChange(cat)}
                       className={cn(
-                        'flex items-center gap-2 p-2.5 rounded-2xl border text-xs font-semibold transition-all cursor-pointer text-left',
+                        'flex flex-col items-center justify-center gap-1 p-2 rounded-xl border text-[10px] font-bold transition-all cursor-pointer text-center min-w-0',
                         selected
-                          ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm'
-                          : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800'
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-xs'
+                          : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
                       )}
                     >
                       <span className="shrink-0">{CATEGORY_ICONS[cat]}</span>
-                      <span className="truncate">{cat}</span>
+                      <span className="truncate max-w-full">{cat}</span>
                     </button>
                   );
                 })}
@@ -680,7 +689,7 @@ export const QuickEntryView: React.FC = () => {
                 onChange={(e) => setItemName(e.target.value)}
                 onFocus={() => setIsItemFocused(true)}
                 onBlur={() => setIsItemFocused(false)}
-                placeholder={CATEGORY_CONFIG[category].itemPlaceholder}
+                placeholder={CATEGORY_CONFIG[category]?.itemPlaceholder || CATEGORY_CONFIG.Other.itemPlaceholder}
                 list="lekflow-item-names"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
               />

@@ -15,14 +15,17 @@ import {
   CircleCheck,
   Check,
   Search,
+  Plus,
+  Trash2,
 } from 'lucide-react';
-import type { BudgetCycle, PaymentSource } from '../types';
+import type { BudgetCycle, CustomAccount, PaymentSource } from '../types';
 import type { BudgetStats } from '../utils/budget';
 import { addExpense, saveBudgetCycle } from '../db';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { useDebts } from '../hooks/useDebts';
 import { useExpenses } from '../hooks/useExpenses';
 import { useCurrency } from '../hooks/useCurrency';
+import { convertToALL } from '../utils/currency';
 import { addDays, toDateInputValue } from '../utils/budget';
 import { cn } from '../utils/cn';
 import { DebtsPanel } from './DebtsPanel';
@@ -314,6 +317,157 @@ const ReconcileRow: React.FC<{
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+const CustomAccountsManager: React.FC<{
+  cycle: BudgetCycle;
+}> = ({ cycle }) => {
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [accountName, setAccountName] = useState('');
+  const [accountCurrency, setAccountCurrency] = useState('USD');
+  const [accountNativeBalance, setAccountNativeBalance] = useState('');
+  const { format } = useCurrency();
+
+  const customAccounts = cycle.customAccounts || [];
+
+  const handleAddAccount = async () => {
+    if (!accountName.trim() || !accountNativeBalance) return;
+    const newAcc: CustomAccount = {
+      id: crypto.randomUUID(),
+      name: accountName.trim(),
+      currency: accountCurrency,
+      nativeBalance: parseFloat(accountNativeBalance) || 0,
+      lastUpdated: new Date().toISOString(),
+    };
+
+    await saveBudgetCycle({
+      ...cycle,
+      customAccounts: [...customAccounts, newAcc],
+    });
+
+    setAccountName('');
+    setAccountNativeBalance('');
+    setShowAddForm(false);
+  };
+
+  const handleUpdateBalance = async (accId: string, newBalanceStr: string) => {
+    const val = parseFloat(newBalanceStr);
+    if (Number.isNaN(val)) return;
+
+    const updated = customAccounts.map((acc) =>
+      acc.id === accId
+        ? { ...acc, nativeBalance: val, lastUpdated: new Date().toISOString() }
+        : acc
+    );
+
+    await saveBudgetCycle({
+      ...cycle,
+      customAccounts: updated,
+    });
+  };
+
+  const handleDeleteAccount = async (accId: string) => {
+    const filtered = customAccounts.filter((acc) => acc.id !== accId);
+    await saveBudgetCycle({
+      ...cycle,
+      customAccounts: filtered,
+    });
+  };
+
+  return (
+    <div className="pt-3 border-t border-slate-100 space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+          Auxiliary Accounts ({customAccounts.length})
+        </p>
+        <button
+          type="button"
+          onClick={() => setShowAddForm(!showAddForm)}
+          className="text-[10px] font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 cursor-pointer"
+        >
+          <Plus className="w-3 h-3" />
+          {showAddForm ? 'Close' : 'Add Account'}
+        </button>
+      </div>
+
+      {showAddForm && (
+        <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200 space-y-2 text-xs">
+          <input
+            type="text"
+            placeholder="Account Name (e.g., Wise, BKT, Chase)"
+            value={accountName}
+            onChange={(e) => setAccountName(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 font-medium focus:outline-none focus:border-emerald-500"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={accountCurrency}
+              onChange={(e) => setAccountCurrency(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 font-bold focus:outline-none focus:border-emerald-500"
+            >
+              <option value="USD">USD ($)</option>
+              <option value="EUR">EUR (€)</option>
+              <option value="ALL">ALL (L)</option>
+              <option value="GBP">GBP (£)</option>
+            </select>
+            <input
+              type="number"
+              step="any"
+              placeholder="Native Balance"
+              value={accountNativeBalance}
+              onChange={(e) => setAccountNativeBalance(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-white border border-slate-200 text-slate-900 font-mono font-bold focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleAddAccount}
+            className="w-full py-2 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 cursor-pointer"
+          >
+            Save Account
+          </button>
+        </div>
+      )}
+
+      {customAccounts.map((acc) => {
+        const converted = convertToALL(acc.nativeBalance, acc.currency);
+        return (
+          <div
+            key={acc.id}
+            className="p-3 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-between gap-2"
+          >
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-slate-900 truncate">{acc.name}</p>
+              <p className="text-[10px] text-slate-400 font-mono">
+                Native: {acc.nativeBalance} {acc.currency}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="text-right">
+                <input
+                  type="number"
+                  step="any"
+                  defaultValue={acc.nativeBalance}
+                  onBlur={(e) => handleUpdateBalance(acc.id, e.target.value)}
+                  className="w-20 px-2 py-1 rounded-lg bg-white border border-slate-200 font-mono text-xs font-bold text-right text-slate-900 focus:outline-none focus:border-emerald-500"
+                />
+                <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                  ≈ {format(converted)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDeleteAccount(acc.id)}
+                className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 cursor-pointer"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -748,6 +902,8 @@ export const BudgetView: React.FC = () => {
           <ReconcileRow icon={<Landmark className="w-3 h-3" />} label="Raiffeisen Bank" estimated={stats.estimatedBankBalance} paidWith="Card" />
           <ReconcileRow icon={<Banknote className="w-3 h-3" />} label="Physical Cash" estimated={stats.estimatedCashBalance} paidWith="Cash" />
         </div>
+
+        <CustomAccountsManager cycle={cycle} />
       </div>
 
       {hasDebts && (

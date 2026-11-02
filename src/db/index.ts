@@ -4,6 +4,7 @@ import type {
   BudgetCycle,
   Category,
   Currency,
+  CustomAccount,
   DebtDirection,
   DebtRecord,
   ExpenseRecord,
@@ -84,6 +85,7 @@ export interface RemoteBudgetCycle {
   bufferPoolALL: number;
   travelStashALL: number;
   plannedBigExpensesALL?: number;
+  customAccounts?: CustomAccount[];
   updatedAt?: string;
   deleted?: boolean;
 }
@@ -116,6 +118,14 @@ export interface RemoteDebt {
   deleted?: boolean;
 }
 
+function normalizeCategory(catStr?: string): Category {
+  if (!catStr) return 'Other';
+  const match = (['Food', 'Utilities', 'Transport', 'Social', 'Travel', 'Accommodation', 'Entertainment', 'Other'] as Category[]).find(
+    (c) => c.toLowerCase() === catStr.toLowerCase() || catStr.toLowerCase().includes(c.toLowerCase())
+  );
+  return match ?? 'Other';
+}
+
 // ---------- Expense helpers ----------
 
 export async function addExpense(
@@ -137,6 +147,7 @@ export async function addExpense(
   const record: ExpenseRecord = {
     ...expenseData,
     id,
+    category: normalizeCategory(expenseData.category),
     amountInALL,
     subcategory: expenseData.subcategory,
     timestamp: expenseData.timestamp || now,
@@ -163,14 +174,11 @@ export async function deleteExpense(id: string): Promise<void> {
   const expense = await db.expenses.get(id);
   if (!expense) return;
 
-  // Cascade: if this expense is linked to a debt, delete the debt too.
-  // deleteDebt() also cleans up any wallet movements linked to that debt.
   if (expense.debtId) {
     await deleteDebt(expense.debtId);
     return;
   }
 
-  // Also cascade if any debt has sourceExpenseId === id
   const linkedDebts = await db.debts
     .filter((d) => !d.deleted && d.sourceExpenseId === id)
     .toArray();
@@ -202,6 +210,7 @@ export async function updateExpense(
 
   await db.expenses.update(id, {
     ...updates,
+    category: updates.category ? normalizeCategory(updates.category) : existing.category,
     amountInALL,
     updatedAt: new Date().toISOString(),
     isSynced: false,
@@ -250,7 +259,7 @@ export async function applyRemoteExpenses(remote: RemoteExpense[]): Promise<void
         amount: r.amount,
         currency: r.currency,
         amountInALL: r.amountInALL,
-        category: r.category as Category,
+        category: normalizeCategory(r.category),
         subcategory: r.subcategory,
         vendorType: r.vendorType as VendorType | undefined,
         foodType: r.foodType as FoodType | undefined,
@@ -433,7 +442,7 @@ export async function addDebt(data: {
     await addExpense({
       amount: myShare,
       currency: 'ALL',
-      category: data.purchaseDetails.category,
+      category: normalizeCategory(data.purchaseDetails.category),
       itemName: fullItemName,
       budgetAmountALL: myShare,
       debtId: record.id,
@@ -631,8 +640,6 @@ export async function writeOffDebt(debtId: string): Promise<void> {
     return;
   }
 
-  // Debt is OwedToMe: create a new forgiveness entry dated today.
-  // This counts as consumed spending (the money is gone) and has no wallet movement today.
   const baseName = `Forgiven to ${debt.counterparty}`;
   const itemName = debt.note ? `${baseName} (${debt.note})` : baseName;
 
@@ -804,6 +811,7 @@ export async function applyRemoteBudgetCycles(remote: RemoteBudgetCycle[]): Prom
         bufferPoolALL: r.bufferPoolALL,
         travelStashALL: r.travelStashALL,
         plannedBigExpensesALL: r.plannedBigExpensesALL,
+        customAccounts: r.customAccounts,
         updatedAt: remoteUpdatedAt,
         deleted: r.deleted,
         isSynced: true,
