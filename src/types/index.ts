@@ -143,7 +143,20 @@ export interface BudgetCycle {
   startingRaiffeisenBalanceALL: number;
   startingCashALL?: number;
   bufferPoolALL: number;
+  // Legacy field — UI label is now "Dreams".
   travelStashALL: number;
+
+  /**
+   * Explicit savings bucket (earmark held back from free-to-spend).
+   * Stored in ALL. Optional so existing cycles keep working.
+   */
+  savingsALL?: number;
+
+  /**
+   * Explicit investments bucket (earmark held back from free-to-spend).
+   * Stored in ALL. Optional so existing cycles keep working.
+   */
+  investmentsALL?: number;
 
   /**
    * Total planned big expenses for the cycle (rent, bills, etc).

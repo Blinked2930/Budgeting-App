@@ -1,30 +1,29 @@
 // src/components/SplitupNetBalancesCard.tsx
-import React, { useState, useMemo } from 'react';
-import { useQuery } from 'convex/react';
-import { api } from '../../convex/_generated/api';
+import React, { useMemo, useState } from 'react';
+import { useQuery, useMutation } from 'convex/react';
+import { createPortal } from 'react-dom';
 import {
-  ChevronDown,
-  ChevronRight,
-  Users,
-  ExternalLink,
-  HandCoins,
-  ArrowUpRight,
-  ArrowDownLeft,
+  ChevronRight, Users, ExternalLink, HandCoins, ArrowUpRight, ArrowDownLeft,
+  X, Trash2, Banknote, CreditCard, CheckCircle2, Ban, TrendingDown,
+  TriangleAlert,
 } from 'lucide-react';
+import { api } from '../../convex/_generated/api';
 import { cn } from '../utils/cn';
 import { formatCurrency } from '../utils/currency';
+import { DEFAULT_EXCHANGE_RATES } from '../types';
 
-const SPLITUP_URL =
-  (import.meta as any).env?.VITE_SPLITUP_URL || 'https://splitup.app';
+const SPLITUP_URL = (import.meta as any).env?.VITE_SPLITUP_URL || 'https://splitup.emmettfrett.com';
 
 interface LocalDebt {
   id: string;
   counterparty: string;
   counterpartyKey: string;
   direction: 'iOwe' | 'OwedToMe';
+  amountALL: number;
   remainingALL: number;
   status: 'open' | 'resolved';
   note?: string;
+  createdAt?: string;
 }
 
 interface GroupSummary {
@@ -36,419 +35,524 @@ interface GroupSummary {
   isOwner?: boolean;
 }
 
-interface GroupMember {
-  _id: string;
-  name: string;
-}
-
+interface GroupMember { _id: string; name: string; userId?: string; }
 interface GroupExpense {
   _id: string;
-  paidByMemberId: string;
+  title: string;
+  amount: number;
   amountInALL: number;
+  currency: string;
+  category?: string;
+  paidByMemberId: string;
+  splitType: 'equal' | 'exact' | 'shares';
   splits: Array<{ memberId: string; amountALL: number }>;
+  timestamp: number;
 }
-
 interface GroupSettlement {
   _id: string;
   fromMemberId: string;
   toMemberId: string;
   amountALL: number;
+  currency: string;
+  paidWith?: 'Cash' | 'Card';
+  timestamp: number;
 }
-
 interface GroupDetails {
-  group: { _id: string; name: string; currency: string };
+  group: { _id: string; name: string; currency: string; createdBy: string };
   members: GroupMember[];
   expenses: GroupExpense[];
   settlements: GroupSettlement[];
 }
 
-/**
- * Compute per-member net balances from group details. Mirrors the math in
- * convex/groups.ts getMyGroups so the numbers here always agree with what
- * Splitup itself shows.
- *
- * net(m) = sum(expenses where m paid) - sum(splits owned by m)
- *        + sum(settlements where m paid the other) - sum(settlements where m received)
- */
-function computeMemberBalances(details: GroupDetails): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const m of details.members) map.set(m._id, 0);
-
-  for (const exp of details.expenses) {
-    const current = map.get(exp.paidByMemberId) ?? 0;
-    map.set(exp.paidByMemberId, current + exp.amountInALL);
-    for (const split of exp.splits) {
-      const m = map.get(split.memberId) ?? 0;
-      map.set(split.memberId, m - split.amountALL);
-    }
-  }
-  for (const set of details.settlements) {
-    const from = map.get(set.fromMemberId) ?? 0;
-    map.set(set.fromMemberId, from + set.amountALL);
-    const to = map.get(set.toMemberId) ?? 0;
-    map.set(set.toMemberId, to - set.amountALL);
-  }
-  return map;
-}
-
-function normalizeName(name: string): string {
-  return name.trim().toLowerCase();
-}
-
-interface PersonRow {
-  key: string;
-  displayName: string;
-  localNet: number;           // + means they owe you, - means you owe
-  splitupNet: number;         // + means they owe you, - means you owe
-  localDebtCount: number;
-  groupRefs: Array<{
-    groupId: string;
-    groupName: string;
-    netInGroup: number;       // from YOUR perspective, same sign convention
-  }>;
-}
-
 interface DebtsAndSharedCardProps {
   localDebts: LocalDebt[];
+  onOpenDebtsPanel?: () => void;
 }
 
-export const DebtsAndSharedCard: React.FC<DebtsAndSharedCardProps> = ({ localDebts }) => {
-  const groups: GroupSummary[] =
-    useQuery((api as any).groups?.getMyGroups, {}) || [];
-  const [expandedPersonKey, setExpandedPersonKey] = useState<string | null>(null);
-  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
+type SheetTarget =
+  | { kind: 'person'; key: string; displayName: string }
+  | { kind: 'group'; groupId: string; displayName: string }
+  | null;
 
-  // Fetch details only for the group whose sub-row is open.
-  const groupDetails: GroupDetails | null = useQuery(
+interface ConfirmState {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+}
+
+const Pill: React.FC<{ className?: string; children: React.ReactNode }> = ({ className, children }) => (
+  <span className={cn('text-[10px] px-1.5 py-0.5 rounded-md font-medium inline-flex items-center gap-0.5 whitespace-nowrap', className)}>
+    {children}
+  </span>
+);
+
+function relativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  const sec = Math.floor(diff / 1000);
+  if (sec < 45) return 'just now';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  const day = Math.floor(hr / 24);
+  if (day < 7) return `${day}d ago`;
+  return new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+}
+
+const ConfirmDialog: React.FC<{ state: ConfirmState | null; onClose: () => void }> = ({ state, onClose }) => {
+  if (!state) return null;
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[130] flex items-end sm:items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-5 space-y-4 animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-2"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center shrink-0">
+            <TriangleAlert className="w-5 h-5 text-rose-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-base font-bold text-slate-900">{state.title}</h3>
+            <p className="text-xs text-slate-500 mt-1 leading-relaxed">{state.message}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-2 pt-1">
+          <button type="button" onClick={onClose}
+            className="py-3 rounded-2xl bg-white border border-slate-200 text-slate-600 text-xs font-semibold cursor-pointer hover:bg-slate-50 transition-colors">
+            Cancel
+          </button>
+          <button type="button" onClick={() => { state.onConfirm(); onClose(); }}
+            className="py-3 rounded-2xl bg-rose-600 text-white text-xs font-bold cursor-pointer hover:bg-rose-700 transition-colors">
+            {state.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+export const DebtsAndSharedCard: React.FC<DebtsAndSharedCardProps> = ({ localDebts, onOpenDebtsPanel }) => {
+  const groups: GroupSummary[] = useQuery((api as any).groups?.getMyGroups, {}) || [];
+  const [target, setTarget] = useState<SheetTarget>(null);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+
+  const deleteExpenseMutation = useMutation((api as any).groups?.deleteExpense);
+
+  const prefs = useQuery((api as any).preferences?.getMyPreferences, {}) as { baseCurrency: string } | undefined;
+  const baseCurrency: string = prefs?.baseCurrency ?? 'ALL';
+
+  const baseRateToALL: number =
+    baseCurrency === 'ALL' ? 1 : (DEFAULT_EXCHANGE_RATES[baseCurrency] ?? 1);
+
+  const fmtBase = (amountALL: number): string => {
+    const inBase = baseCurrency === 'ALL'
+      ? Math.round(amountALL)
+      : Math.round((amountALL / baseRateToALL) * 100) / 100;
+    return formatCurrency(inBase, baseCurrency as any);
+  };
+
+  const details: GroupDetails | null = useQuery(
     (api as any).groups?.getGroupDetails,
-    expandedGroupId ? { groupId: expandedGroupId as any } : ('skip' as any)
+    target?.kind === 'group' ? { groupId: target.groupId as any } : ('skip' as any)
   ) as GroupDetails | null;
 
-  const memberBalances = useMemo(() => {
-    if (!groupDetails) return new Map<string, number>();
-    return computeMemberBalances(groupDetails);
-  }, [groupDetails]);
-
-  /**
-   * Build one merged list keyed by normalised name. For each person we
-   * combine:
-   *  - their local debt net (from LekFlow's Dexie)
-   *  - their Splitup share inside any group whose members list contains
-   *    their name
-   *
-   * We can't know Splitup per-member balances without fetching details for
-   * every group, so we can only combine by *group-level* net here. That's
-   * the design we agreed on: front-face simplified, real per-member numbers
-   * appear when expanding the group.
-   */
-  const people = useMemo<PersonRow[]>(() => {
-    const map = new Map<string, PersonRow>();
-
-    const ensure = (rawName: string): PersonRow => {
-      const key = normalizeName(rawName);
-      let row = map.get(key);
-      if (!row) {
-        row = {
-          key,
-          displayName: rawName.trim(),
-          localNet: 0,
-          splitupNet: 0,
-          localDebtCount: 0,
-          groupRefs: [],
-        };
-        map.set(key, row);
-      } else if (rawName.trim().length < row.displayName.length) {
-        // Prefer the shortest casing variant as the display name.
-        row.displayName = rawName.trim();
-      }
-      return row;
-    };
-
+  const people = useMemo(() => {
+    const map = new Map<string, { key: string; name: string; localNet: number; debtCount: number }>();
     for (const d of localDebts) {
       if (d.status !== 'open') continue;
-      const row = ensure(d.counterparty);
-      const signed = d.direction === 'OwedToMe' ? d.remainingALL : -d.remainingALL;
-      row.localNet += signed;
-      row.localDebtCount += 1;
+      const key = d.counterpartyKey;
+      let row = map.get(key);
+      if (!row) {
+        row = { key, name: d.counterparty, localNet: 0, debtCount: 0 };
+        map.set(key, row);
+      }
+      row.localNet += d.direction === 'OwedToMe' ? d.remainingALL : -d.remainingALL;
+      row.debtCount += 1;
     }
+    return Array.from(map.values()).sort((a, b) => Math.abs(b.localNet) - Math.abs(a.localNet));
+  }, [localDebts]);
 
-    // Group-level Splitup share only. Attribution to individual names inside
-    // a group is deferred to the expand panel — we don't have per-member
-    // balances without a details query per group, and doing N queries here
-    // is exactly what we're avoiding.
-    for (const g of groups) {
-      // Use a synthetic person key so group rows live in the list too.
-      // We tag them so the UI knows to render them as groups, not people.
-      const row = ensure(`__group__:${g._id}`);
-      row.displayName = g.name;
-      row.localNet = 0;
-      row.localDebtCount = 0;
-      row.splitupNet = g.myNetBalanceALL ?? 0;
-      row.groupRefs = [
-        {
-          groupId: g._id,
-          groupName: g.name,
-          netInGroup: g.myNetBalanceALL ?? 0,
-        },
-      ];
-    }
-
-    return Array.from(map.values()).sort((a, b) => {
-      const aAbs = Math.abs(a.localNet + a.splitupNet);
-      const bAbs = Math.abs(b.localNet + b.splitupNet);
-      if (bAbs !== aAbs) return bAbs - aAbs;
-      return a.displayName.localeCompare(b.displayName);
-    });
-  }, [localDebts, groups]);
-
-  const hasAny = people.length > 0;
-  if (!hasAny) return null;
-
-  const combinedNet = people.reduce(
-    (sum, p) => sum + p.localNet + p.splitupNet,
-    0
+  const groupRows = useMemo(
+    () => [...groups].sort((a, b) => Math.abs(b.myNetBalanceALL) - Math.abs(a.myNetBalanceALL)),
+    [groups]
   );
 
-  const groupCount = groups.length;
-  const personCount = people.filter((p) => !p.key.startsWith('__group__:')).length;
+  const combinedNet =
+    people.reduce((s, p) => s + p.localNet, 0) +
+    groups.reduce((s, g) => s + g.myNetBalanceALL, 0);
+
+  const hasAny = people.length > 0 || groups.length > 0;
+  if (!hasAny) return null;
+
+  const handleDeleteGroupExpense = (expId: string, expTitle: string) => {
+    setConfirm({
+      title: 'Delete this group expense?',
+      message: `"${expTitle}" will be removed from the group. Balances recalculate automatically.`,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await deleteExpenseMutation({ expenseId: expId as any });
+        } catch (err) {
+          console.warn('Delete expense failed:', err);
+        }
+      },
+    });
+  };
 
   return (
-    <div className="rounded-3xl bg-white border border-slate-200 p-4 sm:p-5 shadow-sm space-y-3 font-sans">
-      {/* Front face — deliberately minimal. Only the combined net + counts. */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
-            <HandCoins className="w-4 h-4" />
+    <>
+      <div className="rounded-3xl bg-white border border-slate-200 p-4 sm:p-5 shadow-sm space-y-3 font-sans">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
+              <HandCoins className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Debts</h3>
+              <p className="text-[11px] text-slate-500">
+                {people.length > 0
+                  ? `${people.length} ${people.length === 1 ? 'person' : 'people'}`
+                  : 'No personal debts'}
+                {groups.length > 0 && ` · ${groups.length} ${groups.length === 1 ? 'group' : 'groups'}`}
+              </p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-sm font-bold text-slate-900">Debts & Shared</h3>
-            <p className="text-[11px] text-slate-500">
-              {personCount > 0
-                ? `${personCount} ${personCount === 1 ? 'person' : 'people'}`
-                : 'No personal debts'}
-              {groupCount > 0 && ` · ${groupCount} ${groupCount === 1 ? 'group' : 'groups'}`}
+          <div className="text-right">
+            <p className={cn(
+              'text-sm font-mono font-bold',
+              combinedNet > 0 ? 'text-emerald-600' : combinedNet < 0 ? 'text-rose-600' : 'text-slate-400'
+            )}>
+              {combinedNet === 0 ? 'Settled' : `${combinedNet > 0 ? '+' : '−'}${fmtBase(Math.abs(combinedNet))}`}
+            </p>
+            <p className="text-[10px] text-slate-400">
+              {combinedNet > 0 ? 'net owed to you' : combinedNet < 0 ? 'net you owe' : 'all even'}
             </p>
           </div>
         </div>
-        <div className="text-right">
-          <p
-            className={cn(
-              'text-sm font-mono font-bold',
-              combinedNet > 0
-                ? 'text-emerald-600'
-                : combinedNet < 0
-                  ? 'text-rose-600'
-                  : 'text-slate-400'
-            )}
-          >
-            {combinedNet === 0
-              ? 'Settled'
-              : `${combinedNet > 0 ? '+' : '−'}${formatCurrency(Math.abs(combinedNet), 'ALL')}`}
-          </p>
-          <p className="text-[10px] text-slate-400">
-            {combinedNet > 0 ? 'net owed to you' : combinedNet < 0 ? 'net you owe' : 'all even'}
-          </p>
+
+        <div className="space-y-1.5">
+          {people.map((p) => (
+            <button
+              key={`person-${p.key}`}
+              type="button"
+              onClick={() => setTarget({ kind: 'person', key: p.key, displayName: p.name })}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-2xl border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                <div className="w-6 h-6 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                  <span className="text-[10px] font-bold text-slate-700">
+                    {p.name.charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <span className="text-xs font-semibold text-slate-800 truncate">{p.name}</span>
+                <span className="text-[10px] text-slate-400 shrink-0">
+                  {p.debtCount} {p.debtCount === 1 ? 'debt' : 'debts'}
+                </span>
+              </div>
+              <span className={cn(
+                'text-xs font-mono font-bold shrink-0',
+                p.localNet > 0 ? 'text-emerald-600' : p.localNet < 0 ? 'text-rose-600' : 'text-slate-400'
+              )}>
+                {p.localNet === 0 ? '—' : fmtBase(Math.abs(p.localNet))}
+              </span>
+            </button>
+          ))}
+
+          {groupRows.map((g) => (
+            <button
+              key={`group-${g._id}`}
+              type="button"
+              onClick={() => setTarget({ kind: 'group', groupId: g._id, displayName: g.name })}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-2xl border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                <span className="text-xs font-semibold text-slate-800 truncate">{g.name}</span>
+                <span className="text-[10px] text-slate-400 shrink-0">
+                  {g.memberCount} {g.memberCount === 1 ? 'member' : 'members'}
+                </span>
+              </div>
+              <span className={cn(
+                'text-xs font-mono font-bold shrink-0',
+                g.myNetBalanceALL > 0 ? 'text-emerald-600' : g.myNetBalanceALL < 0 ? 'text-rose-600' : 'text-slate-400'
+              )}>
+                {g.myNetBalanceALL === 0 ? '—' : fmtBase(Math.abs(g.myNetBalanceALL))}
+              </span>
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Rows — one per person or per group. Expanded shows the breakdown. */}
-      <div className="space-y-1.5">
-        {people.map((p) => {
-          const isGroup = p.key.startsWith('__group__:');
-          const combined = p.localNet + p.splitupNet;
-          const isExpanded = isGroup
-            ? expandedGroupId === p.groupRefs[0]?.groupId
-            : expandedPersonKey === p.key;
-
-          const handleToggle = () => {
-            if (isGroup) {
-              const gid = p.groupRefs[0]?.groupId;
-              if (!gid) return;
-              setExpandedGroupId(expandedGroupId === gid ? null : gid);
-            } else {
-              setExpandedPersonKey(expandedPersonKey === p.key ? null : p.key);
-            }
-          };
-
-          return (
-            <div
-              key={p.key}
-              className="rounded-2xl border border-slate-200 overflow-hidden"
-            >
+      {target && (
+        <div
+          onClick={() => setTarget(null)}
+          className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md max-h-[80vh] sm:max-h-[750px] flex flex-col bg-white border-t sm:border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden min-h-0 font-sans"
+          >
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-200 shrink-0 bg-white">
+              <div className="flex items-center gap-2 min-w-0">
+                {target.kind === 'person' ? (
+                  <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                    <span className="text-xs font-bold text-slate-700">
+                      {target.displayName.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center shrink-0">
+                    <Users className="w-4 h-4 text-indigo-600" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <h2 className="text-base font-bold text-slate-900 truncate">{target.displayName}</h2>
+                  <p className="text-[10px] text-slate-400">
+                    {target.kind === 'person' ? 'Personal debts' : 'Shared group activity'}
+                  </p>
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={handleToggle}
-                className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer"
+                onClick={() => setTarget(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-100 cursor-pointer transition-colors"
               >
-                <div className="flex items-center gap-2 min-w-0">
-                  {isExpanded ? (
-                    <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
-                  ) : (
-                    <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
-                  )}
-                  {isGroup ? (
-                    <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                  ) : (
-                    <div className="w-6 h-6 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
-                      <span className="text-[10px] font-bold text-slate-700">
-                        {p.displayName.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                  )}
-                  <span className="text-xs font-semibold text-slate-800 truncate">
-                    {p.displayName}
-                  </span>
-                  {!isGroup && p.localDebtCount > 0 && (
-                    <span className="text-[10px] text-slate-400 shrink-0">
-                      {p.localDebtCount} {p.localDebtCount === 1 ? 'debt' : 'debts'}
-                    </span>
-                  )}
-                </div>
-                <span
-                  className={cn(
-                    'text-xs font-mono font-bold shrink-0',
-                    combined > 0
-                      ? 'text-emerald-600'
-                      : combined < 0
-                        ? 'text-rose-600'
-                        : 'text-slate-400'
-                  )}
-                >
-                  {combined === 0
-                    ? '—'
-                    : formatCurrency(Math.abs(combined), 'ALL')}
-                </span>
+                <X className="w-4 h-4" />
               </button>
+            </div>
 
-              {isExpanded && (
-                <div className="px-3 pb-3 pt-1 border-t border-slate-100 space-y-2 bg-slate-50/50">
-                  {isGroup ? (
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2.5 touch-pan-y">
+              {target.kind === 'person' ? (
+                (() => {
+                  const personDebts = localDebts.filter((d) => d.counterpartyKey === target.key);
+                  if (personDebts.length === 0) {
+                    return <p className="text-xs text-slate-400 text-center py-6">No debts recorded.</p>;
+                  }
+                  return (
                     <>
-                      {!groupDetails ? (
-                        <p className="text-[11px] text-slate-400">Loading details…</p>
-                      ) : (
-                        <>
-                          <div>
-                            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">
-                              Member balances
-                            </p>
-                            <div className="space-y-0.5">
-                              {groupDetails.members.map((m) => {
-                                const mb = memberBalances.get(m._id) ?? 0;
-                                return (
-                                  <div
-                                    key={m._id}
-                                    className="flex justify-between text-[11px] gap-2"
-                                  >
-                                    <span className="text-slate-600 truncate">
-                                      {m.name}
-                                    </span>
-                                    <span
-                                      className={cn(
-                                        'font-mono shrink-0',
-                                        mb > 0
-                                          ? 'text-emerald-600'
-                                          : mb < 0
-                                            ? 'text-rose-600'
-                                            : 'text-slate-400'
-                                      )}
-                                    >
-                                      {mb === 0
-                                        ? 'settled'
-                                        : formatCurrency(Math.abs(mb), 'ALL')}
-                                    </span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                          <a
-                            href={`${SPLITUP_URL}/?groupId=${p.groupRefs[0]?.groupId}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 hover:underline"
+                      {personDebts.map((d) => {
+                        const isOpen = d.status === 'open';
+                        const owedToMe = d.direction === 'OwedToMe';
+                        return (
+                          <div
+                            key={d.id}
+                            className={cn(
+                              'p-3 rounded-2xl border shadow-sm flex items-center justify-between gap-2',
+                              isOpen ? 'bg-white border-slate-200' : 'bg-slate-50 border-slate-200'
+                            )}
                           >
-                            Open in Splitup <ExternalLink className="w-3 h-3" />
-                          </a>
-                        </>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      {p.localDebtCount > 0 && (
-                        <div>
-                          <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">
-                            Personal
-                          </p>
-                          <div className="flex justify-between text-[11px]">
-                            <span className="text-slate-600">
-                              {p.localNet > 0
-                                ? 'owes you'
-                                : p.localNet < 0
-                                  ? 'you owe'
-                                  : 'settled'}
-                            </span>
-                            <span
-                              className={cn(
-                                'font-mono',
-                                p.localNet > 0
-                                  ? 'text-emerald-600'
-                                  : p.localNet < 0
-                                    ? 'text-rose-600'
-                                    : 'text-slate-400'
-                              )}
-                            >
-                              {p.localNet === 0
-                                ? '—'
-                                : formatCurrency(Math.abs(p.localNet), 'ALL')}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                      {p.groupRefs.length > 0 && (
-                        <div>
-                          <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-1">
-                            Shared groups
-                          </p>
-                          {p.groupRefs.map((g) => (
-                            <div
-                              key={g.groupId}
-                              className="flex justify-between text-[11px] gap-2"
-                            >
-                              <span className="text-slate-600 truncate flex items-center gap-1">
-                                {g.netInGroup >= 0 ? (
-                                  <ArrowUpRight className="w-3 h-3 text-emerald-500 shrink-0" />
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className={cn(
+                                'w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border',
+                                owedToMe ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'
+                              )}>
+                                {owedToMe ? (
+                                  <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600" />
                                 ) : (
-                                  <ArrowDownLeft className="w-3 h-3 text-rose-500 shrink-0" />
+                                  <ArrowDownLeft className="w-3.5 h-3.5 text-rose-600" />
                                 )}
-                                {g.groupName}
-                              </span>
-                              <span
-                                className={cn(
-                                  'font-mono shrink-0',
-                                  g.netInGroup > 0
-                                    ? 'text-emerald-600'
-                                    : g.netInGroup < 0
-                                      ? 'text-rose-600'
-                                      : 'text-slate-400'
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  <Pill className={owedToMe ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}>
+                                    {owedToMe ? 'Owes you' : 'You owe'}
+                                  </Pill>
+                                  {!isOpen && (
+                                    <Pill className="bg-slate-100 text-slate-500 border border-slate-200">
+                                      <CheckCircle2 className="w-2.5 h-2.5" />
+                                      Resolved
+                                    </Pill>
+                                  )}
+                                </div>
+                                {d.note && (
+                                  <p className="text-[11px] text-slate-500 italic truncate mt-0.5">
+                                    {d.note}
+                                  </p>
                                 )}
-                              >
-                                {g.netInGroup === 0
-                                  ? '—'
-                                  : formatCurrency(Math.abs(g.netInGroup), 'ALL')}
-                              </span>
+                              </div>
                             </div>
-                          ))}
-                        </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <p className={cn(
+                                'text-sm font-mono font-bold',
+                                isOpen ? (owedToMe ? 'text-emerald-600' : 'text-rose-600') : 'text-slate-400 line-through'
+                              )}>
+                                {fmtBase(d.remainingALL)}
+                              </p>
+                              {onOpenDebtsPanel && (
+                                <button
+                                  type="button"
+                                  onClick={() => { setTarget(null); onOpenDebtsPanel(); }}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
+                                  title="Edit in Debts panel"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {onOpenDebtsPanel && (
+                        <button
+                          type="button"
+                          onClick={() => { setTarget(null); onOpenDebtsPanel(); }}
+                          className="w-full mt-2 py-2.5 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-bold hover:bg-indigo-100 transition-colors cursor-pointer"
+                        >
+                          Manage in Debts panel →
+                        </button>
                       )}
                     </>
-                  )}
-                </div>
+                  );
+                })()
+              ) : !details ? (
+                <p className="text-xs text-slate-400 text-center py-6">Loading activity…</p>
+              ) : (
+                (() => {
+                  const memberName = new Map(details.members.map((m) => [m._id, m.name]));
+                  const items = [
+                    ...details.expenses.map((e) => ({ kind: 'expense' as const, e })),
+                    ...details.settlements.map((s) => ({ kind: 'settlement' as const, s })),
+                  ].sort((a, b) => {
+                    const ta = a.kind === 'expense' ? a.e.timestamp : a.s.timestamp;
+                    const tb = b.kind === 'expense' ? b.e.timestamp : b.s.timestamp;
+                    return tb - ta;
+                  });
+
+                  if (items.length === 0) {
+                    return <p className="text-xs text-slate-400 text-center py-6">No activity yet.</p>;
+                  }
+
+                  return (
+                    <>
+                      {items.map((item) => {
+                        if (item.kind === 'expense') {
+                          const exp = item.e;
+                          const paidBy = memberName.get(exp.paidByMemberId) ?? 'Someone';
+                          return (
+                            <div
+                              key={`e-${exp._id}`}
+                              className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 shadow-sm"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center shrink-0">
+                                  <Users className="w-3.5 h-3.5 text-emerald-600" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-xs font-semibold text-slate-900 truncate">
+                                      {exp.title}
+                                    </span>
+                                    <Pill className="bg-emerald-100 text-emerald-800">👥 {details.group.name}</Pill>
+                                  </div>
+                                  <div className="flex items-center gap-1 flex-wrap mt-1">
+                                    <Pill className="bg-slate-100 text-slate-700">Expense</Pill>
+                                    <Pill className="bg-rose-50 text-rose-700">
+                                      <CreditCard className="w-2.5 h-2.5" />
+                                      Card
+                                    </Pill>
+                                    <Pill className="bg-emerald-50 text-emerald-700">
+                                      <TrendingDown className="w-2.5 h-2.5" />
+                                      Spent
+                                    </Pill>
+                                  </div>
+                                  <p className="text-[11px] text-slate-400 mt-1">
+                                    Paid by {paidBy} · {relativeTime(exp.timestamp)}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-1 shrink-0 ml-2">
+                                <div className="text-right">
+                                  <p className="text-sm font-mono font-bold text-slate-900">
+                                    {formatCurrency(exp.amount, exp.currency as any)}
+                                  </p>
+                                  {exp.currency !== 'ALL' && (
+                                    <p className="text-[10px] font-mono text-emerald-600">
+                                      ≈ {fmtBase(exp.amountInALL)}
+                                    </p>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteGroupExpense(exp._id, exp.title)}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                  title="Delete expense"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        }
+                        const s = item.s;
+                        const fromName = memberName.get(s.fromMemberId) ?? 'Someone';
+                        const toName = memberName.get(s.toMemberId) ?? 'Someone';
+                        return (
+                          <div
+                            key={`s-${s._id}`}
+                            className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 shadow-sm"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
+                                <HandCoins className="w-3.5 h-3.5 text-amber-600" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-xs font-semibold text-slate-900 truncate">
+                                    {fromName} paid {toName}
+                                  </span>
+                                  <Pill className="bg-emerald-100 text-emerald-800">👥 {details.group.name}</Pill>
+                                </div>
+                                <div className="flex items-center gap-1 flex-wrap mt-1">
+                                  <Pill className="bg-amber-50 text-amber-700">Settlement</Pill>
+                                  <Pill className="bg-slate-100 text-slate-600">
+                                    {s.paidWith === 'Cash' ? (
+                                      <><Banknote className="w-2.5 h-2.5" />Cash</>
+                                    ) : (
+                                      <><CreditCard className="w-2.5 h-2.5" />Card</>
+                                    )}
+                                  </Pill>
+                                  <Pill className="bg-slate-100 text-slate-500 border border-slate-200">
+                                    <Ban className="w-2.5 h-2.5" />
+                                    Not spent
+                                  </Pill>
+                                </div>
+                                <p className="text-[11px] text-slate-400 mt-1">{relativeTime(s.timestamp)}</p>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0 ml-2">
+                              <p className="text-sm font-mono font-bold text-amber-700">
+                                {fmtBase(s.amountALL)}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      <a
+                        href={`${SPLITUP_URL}/?groupId=${details.group._id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 hover:underline mt-2"
+                      >
+                        Open in Splitup <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </>
+                  );
+                })()
               )}
             </div>
-          );
-        })}
-      </div>
-    </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
+    </>
   );
 };

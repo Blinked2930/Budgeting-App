@@ -19,12 +19,13 @@ export function useBudgetCycle() {
         []
     );
 
-    // Splitup groups so free-to-spend reflects "I'm owed money via a shared
-    // trip" without needing to open Splitup itself. `getMyGroups` returns
-    // myNetBalanceALL per group; snapshotFromGroups splits positive values
-    // into receivables and negative into payables.
     const myGroups = useQuery((api as any).groups?.getMyGroups, {}) || [];
     const splitupSnapshot = useMemo(() => snapshotFromGroups(myGroups), [myGroups]);
+
+    const prefs = useQuery((api as any).preferences?.getMyPreferences, {}) as
+        | { baseCurrency: string }
+        | undefined;
+    const baseCurrency: string = prefs?.baseCurrency ?? 'ALL';
 
     const [now, setNow] = useState(() => new Date());
     useEffect(() => {
@@ -42,5 +43,5 @@ export function useBudgetCycle() {
         [cycle, expenses, transfers, openDebts, splitupSnapshot, now]
     );
 
-    return { cycle, stats, isLoading: cycleResult === undefined };
+    return { cycle, stats, baseCurrency, isLoading: cycleResult === undefined };
 }

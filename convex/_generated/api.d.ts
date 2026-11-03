@@ -13,6 +13,7 @@ import type * as debts from "../debts.js";
 import type * as expenses from "../expenses.js";
 import type * as groups from "../groups.js";
 import type * as migrations from "../migrations.js";
+import type * as preferences from "../preferences.js";
 import type * as transfers from "../transfers.js";
 
 import type {
@@ -27,6 +28,7 @@ declare const fullApi: ApiFromModules<{
   expenses: typeof expenses;
   groups: typeof groups;
   migrations: typeof migrations;
+  preferences: typeof preferences;
   transfers: typeof transfers;
 }>;
 

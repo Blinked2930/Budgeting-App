@@ -1,5 +1,6 @@
 // src/utils/budget.ts
-import type { BudgetCycle, DebtRecord, ExpenseRecord, TransferRecord } from '../types';
+import type { BudgetCycle, CustomAccount, DebtRecord, ExpenseRecord, TransferRecord } from '../types';
+import { convertToALL } from './currency';
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -32,8 +33,7 @@ export function daysBetween(start: Date, end: Date): number {
 }
 
 // ---------------------------------------------------------------------------
-// Shared classification. computeBudgetStats AND the Audit panel both use these,
-// so the two can never disagree about where an entry belongs.
+// Classification
 // ---------------------------------------------------------------------------
 
 export type ExpenseBucket =
@@ -41,7 +41,7 @@ export type ExpenseBucket =
     | 'debtSettlement'
     | 'debtOrigin'
     | 'forgiveness'
-    | 'travel'
+    | 'travel'   // legacy bucket name; UI calls it "Dreams"
     | 'big'
     | 'noWalletSpending'
     | 'regular';
@@ -50,7 +50,6 @@ export function isReconciliationEntry(e: ExpenseRecord): boolean {
     return (e.itemName ?? '').trim().toLowerCase() === 'balance reconciliation';
 }
 
-/** Order matters. First match wins. */
 export function classifyExpense(e: ExpenseRecord): ExpenseBucket {
     if (isReconciliationEntry(e)) return 'reconciliation';
     if (e.isDebtOrigin) return 'debtOrigin';
@@ -63,31 +62,28 @@ export function classifyExpense(e: ExpenseRecord): ExpenseBucket {
     return 'regular';
 }
 
-/** How much of this entry counts against the budget. */
 export function budgetImpactOf(e: ExpenseRecord): number {
     return e.budgetAmountALL ?? e.amountInALL;
 }
 
-/** Cycle start as local midnight. */
 export function cycleStartMs(cycle: BudgetCycle): number {
     return parseLocalDate(cycle.startDate).getTime();
 }
 
 /**
- * Where does the travel stash physically live?
+ * Where do earmarked buckets physically live?
+ * true = they're earmarks on money that's already inside walletTotal.
+ * This is the model we use: Dreams/Savings/Investments are inside the wallet,
+ * held back from free-to-spend, NOT added again to net worth.
  */
-export const TRAVEL_STASH_IS_INSIDE_WALLET = true;
+export const EARMARKS_INSIDE_WALLET = true;
 
-/**
- * Minimal Splitup snapshot passed into computeBudgetStats so free-to-spend
- * can reflect "I'm owed money via shared groups" without needing the full
- * group data. Filled from getMyGroups; split by direction so receivables
- * and payables are visible.
- */
+// ---------------------------------------------------------------------------
+// Splitup snapshot
+// ---------------------------------------------------------------------------
+
 export interface SplitupSnapshot {
-    /** Positive: total owed to you across all shared groups. */
     receivablesALL: number;
-    /** Positive: total you owe across all shared groups. */
     payablesALL: number;
 }
 
@@ -96,11 +92,6 @@ export const EMPTY_SPLITUP_SNAPSHOT: SplitupSnapshot = {
     payablesALL: 0,
 };
 
-/**
- * Build a SplitupSnapshot from getMyGroups output. Each group's
- * `myNetBalanceALL` is your net in that group: positive = you're owed,
- * negative = you owe.
- */
 export function snapshotFromGroups(
     groups: Array<{ myNetBalanceALL?: number }> | undefined | null
 ): SplitupSnapshot {
@@ -115,6 +106,33 @@ export function snapshotFromGroups(
     return { receivablesALL: rec, payablesALL: pay };
 }
 
+// ---------------------------------------------------------------------------
+// Aux account helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a custom account's native balance to ALL using the app's static
+ * EXCHANGE_RATES table. Good enough for daily display; not for real FX
+ * settlement. If the account currency isn't in the table, treat it as ALL
+ * (safer than silently multiplying by 1 for a foreign currency).
+ */
+export function customAccountBalanceALL(acc: CustomAccount): number {
+    try {
+        return convertToALL(acc.nativeBalance, acc.currency as any);
+    } catch {
+        return acc.nativeBalance;
+    }
+}
+
+export function totalAuxAccountsALL(accounts: CustomAccount[] | undefined | null): number {
+    if (!accounts || accounts.length === 0) return 0;
+    return accounts.reduce((sum, acc) => sum + customAccountBalanceALL(acc), 0);
+}
+
+// ---------------------------------------------------------------------------
+// BudgetStats
+// ---------------------------------------------------------------------------
+
 export interface BudgetStats {
     cycleBudget: number;
     consumed: number;
@@ -125,11 +143,21 @@ export interface BudgetStats {
     plannedBig: number;
     bigExpenseSpent: number;
     unpaidBig: number;
-    travelStashHeld: number;
+
+    // Earmarks (held back from free-to-spend)
+    dreamsHeld: number;
+    savingsHeld: number;
+    investmentsHeld: number;
+    totalEarmarked: number;
+
     freeToSpend: number;
 
-    travelSpent: number;
-    travelStashBalance: number;
+    // Bucket balances
+    dreamsBalance: number;        // legacy field `travelStashALL` minus spent on Travel
+    savingsBalance: number;       // `savingsALL` (no per-expense drawdown yet)
+    investmentsBalance: number;   // `investmentsALL`
+
+    dreamsSpent: number;          // spending from Dreams this cycle
 
     totalDays: number;
     daysLeft: number;
@@ -140,18 +168,17 @@ export interface BudgetStats {
     leftToday: number;
     bufferPool: number;
 
+    // Wallet side
     estimatedBankBalance: number;
     estimatedCashBalance: number;
+    auxAccountsTotal: number;
     walletTotal: number;
 
-    // Local (Dexie) debt totals
+    // Debts
     receivablesALL: number;
     payablesALL: number;
-
-    // Splitup contribution (subset of the totals above)
     splitupReceivablesALL: number;
     splitupPayablesALL: number;
-
     netOfDebtsALL: number;
     netWorthALL: number;
 
@@ -159,6 +186,11 @@ export interface BudgetStats {
     spentToday: number;
     estimatedTotalBalance: number;
     projectedSurplus: number;
+
+    // Legacy aliases (kept so old code that reads these names still works)
+    travelStashBalance: number;
+    travelStashHeld: number;
+    travelSpent: number;
 }
 
 export function computeBudgetStats(
@@ -185,7 +217,7 @@ export function computeBudgetStats(
     let consumed = 0;
     let forgivenSpent = 0;
     let bigExpenseSpent = 0;
-    let travelSpent = 0;
+    let dreamsSpent = 0;
     let consumedToday = 0;
     let consumedBeforeToday = 0;
 
@@ -212,8 +244,8 @@ export function computeBudgetStats(
             case 'debtOrigin':
                 break;
 
-            case 'travel':
-                travelSpent += budgetImpact;
+            case 'travel': // Dreams
+                dreamsSpent += budgetImpact;
                 break;
 
             case 'big':
@@ -252,9 +284,13 @@ export function computeBudgetStats(
     const startingCash = cycle.startingCashALL ?? 0;
     const estimatedBankBalance = cycle.startingRaiffeisenBalanceALL + cycle.stipendAmountALL + cardDelta;
     const estimatedCashBalance = startingCash + cashDelta;
-    const walletTotal = estimatedBankBalance + estimatedCashBalance;
 
-    // Local debts (Dexie)
+    // Aux accounts count as part of the everyday pool.
+    const auxAccountsTotal = totalAuxAccountsALL(cycle.customAccounts);
+
+    const walletTotal = estimatedBankBalance + estimatedCashBalance + auxAccountsTotal;
+
+    // Debts
     let receivablesALL = 0;
     let payablesALL = 0;
     for (const d of debts) {
@@ -262,22 +298,31 @@ export function computeBudgetStats(
         if (d.direction === 'OwedToMe') receivablesALL += d.remainingALL;
         else payablesALL += d.remainingALL;
     }
-
-    // Fold Splitup net into the same receivables/payables. This is the
-    // "one ecosystem" bridge: owed money via a shared trip shows up as
-    // money you have, owed to a trip member shows up as money you'll pay.
     const splitupReceivablesALL = splitup.receivablesALL;
     const splitupPayablesALL = splitup.payablesALL;
     const totalReceivablesALL = receivablesALL + splitupReceivablesALL;
     const totalPayablesALL = payablesALL + splitupPayablesALL;
-
     const netOfDebtsALL = totalReceivablesALL - totalPayablesALL;
-    const travelStashBalance = cycle.travelStashALL - travelSpent;
+
+    // Bucket balances
+    const dreamsBalance = Math.max(0, cycle.travelStashALL - dreamsSpent);
+    const savingsBalance = Math.max(0, cycle.savingsALL ?? 0);
+    const investmentsBalance = Math.max(0, cycle.investmentsALL ?? 0);
+
+    // Earmarks are INSIDE the wallet — held back from free-to-spend.
+    const dreamsHeld = EARMARKS_INSIDE_WALLET ? dreamsBalance : 0;
+    const savingsHeld = EARMARKS_INSIDE_WALLET ? savingsBalance : 0;
+    const investmentsHeld = EARMARKS_INSIDE_WALLET ? investmentsBalance : 0;
+    const totalEarmarked = dreamsHeld + savingsHeld + investmentsHeld;
 
     const plannedBig = cycle.plannedBigExpensesALL ?? 0;
     const unpaidBig = Math.max(0, plannedBig - bigExpenseSpent);
-    const travelStashHeld = TRAVEL_STASH_IS_INSIDE_WALLET ? Math.max(0, travelStashBalance) : 0;
-    const freeToSpend = walletTotal - unpaidBig - totalPayablesALL - travelStashHeld;
+
+    const freeToSpend =
+        walletTotal -
+        unpaidBig -
+        totalPayablesALL -
+        totalEarmarked;
 
     const remaining = freeToSpend;
     const cycleBudget = freeToSpend + consumed;
@@ -300,10 +345,15 @@ export function computeBudgetStats(
         plannedBig,
         bigExpenseSpent,
         unpaidBig,
-        travelStashHeld,
+        dreamsHeld,
+        savingsHeld,
+        investmentsHeld,
+        totalEarmarked,
         freeToSpend,
-        travelSpent,
-        travelStashBalance,
+        dreamsBalance,
+        savingsBalance,
+        investmentsBalance,
+        dreamsSpent,
         totalDays,
         daysLeft: rawDaysLeft,
         dayNumber,
@@ -314,17 +364,22 @@ export function computeBudgetStats(
         bufferPool,
         estimatedBankBalance,
         estimatedCashBalance,
+        auxAccountsTotal,
         walletTotal,
         receivablesALL: totalReceivablesALL,
         payablesALL: totalPayablesALL,
         splitupReceivablesALL,
         splitupPayablesALL,
         netOfDebtsALL,
-        netWorthALL: walletTotal + (TRAVEL_STASH_IS_INSIDE_WALLET ? 0 : travelStashBalance) + netOfDebtsALL,
+        netWorthALL: walletTotal + (EARMARKS_INSIDE_WALLET ? 0 : totalEarmarked) + netOfDebtsALL,
         spent: consumed,
         spentToday: consumedToday,
         estimatedTotalBalance: walletTotal,
         projectedSurplus: Math.max(0, remaining),
+        // Legacy aliases
+        travelStashBalance: dreamsBalance,
+        travelStashHeld: dreamsHeld,
+        travelSpent: dreamsSpent,
     };
 }
 
