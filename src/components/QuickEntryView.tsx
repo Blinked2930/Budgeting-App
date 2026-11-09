@@ -26,6 +26,7 @@ import {
   Handshake,
   Calculator,
   ChevronsUpDown,
+  Building2,
 } from 'lucide-react';
 import {
   type Category,
@@ -42,7 +43,9 @@ import {
   updateExpense,
   addTransfer,
   addDebt,
+  updateDebt,
   settleDebtCash,
+  db,
 } from '../db';
 import { useExpenses } from '../hooks/useExpenses';
 import { useTransfers } from '../hooks/useTransfers';
@@ -248,6 +251,12 @@ export const QuickEntryView: React.FC = () => {
   const [payMethod, setPayMethod] = useState<PayMethod>('Cash');
   const [payerName, setPayerName] = useState<string>('');
 
+  const [isBigExpense, setIsBigExpense] = useState<boolean>(false);
+  const [isSplitWithFriend, setIsSplitWithFriend] = useState<boolean>(false);
+  const [friendName, setFriendName] = useState<string>('');
+  const [friendShareStr, setFriendShareStr] = useState<string>('');
+  const [splitSyncGroupId, setSplitSyncGroupId] = useState<string>('');
+
   const [lendSyncGroupId, setLendSyncGroupId] = useState<string>('');
 
   const [dateOverride, setDateOverride] = useState<string | null>(null);
@@ -318,22 +327,30 @@ export const QuickEntryView: React.FC = () => {
       const result = evaluateAmountExpression(amountStr);
       return result ?? 0;
     }
-    const n = parseFloat(amountStr);
+    const n = parseFloat(amountStr.replace(/,/g, '.'));
     return Number.isNaN(n) ? 0 : n;
   }, [amountStr]);
 
   const isExpression = /[+\-*/()]/.test(amountStr) && amountStr.trim().length > 0;
   const normalizedALL = convertToALL(parsedAmount, defaultAppCurrency);
 
-  const shareAmount = parseFloat(shareAmountStr) || 0;
+  const shareAmount = parseFloat(shareAmountStr.replace(/,/g, '.')) || 0;
   const normalizedShareALL = convertToALL(shareAmount, defaultAppCurrency);
   const hasShare = shareAmount > 0;
+
+  const friendShareAmount = parseFloat(friendShareStr.replace(/,/g, '.')) || 0;
+  const isSplitValid =
+    !isSplitWithFriend ||
+    (friendName.trim().length > 0 &&
+      friendShareAmount > 0 &&
+      friendShareAmount <= parsedAmount);
 
   const selectedGroup = debtGroups.find((g) => g.key === settleGroupKey);
 
   const isValid =
     parsedAmount > 0 &&
     (mode !== 'expense' || payMethod !== 'SomeoneElse' || payerName.trim().length > 0) &&
+    (mode !== 'expense' || isSplitValid) &&
     (mode !== 'lend' || lendPerson.trim().length > 0) &&
     (mode !== 'settle' || selectedGroup !== undefined);
 
@@ -364,6 +381,17 @@ export const QuickEntryView: React.FC = () => {
 
   const handleCategoryChange = (next: Category) => {
     setCategory(next);
+    if (next === 'Accommodation' && !isBigExpense) {
+      setIsBigExpense(true);
+    }
+  };
+
+  const handleItemNameChange = (val: string) => {
+    setItemName(val);
+    const lower = val.toLowerCase();
+    if ((lower.includes('rent') || lower.includes('qira')) && !isBigExpense) {
+      setIsBigExpense(true);
+    }
   };
 
   const handleQuickAdd = (inc: number) => {
@@ -371,6 +399,26 @@ export const QuickEntryView: React.FC = () => {
       const current = parseFloat(prev) || 0;
       return (current + inc).toString();
     });
+  };
+
+  const handleInsertOperator = (op: string) => {
+    setAmountStr((prev) => {
+      const trimmed = prev.trim();
+      if (!trimmed) {
+        if (op === '(' || op === '-') return op;
+        return '';
+      }
+      if (/[+\-*/]$/.test(trimmed) && op !== '(' && op !== ')') {
+        return trimmed.slice(0, -1) + op;
+      }
+      return trimmed + op;
+    });
+  };
+
+  const handleResolveMath = () => {
+    if (parsedAmount > 0) {
+      setAmountStr(String(parsedAmount));
+    }
   };
 
   const handleResetForm = () => {
@@ -382,6 +430,11 @@ export const QuickEntryView: React.FC = () => {
     setLendSyncGroupId('');
     setSettleGroupKey(null);
     setPayerName('');
+    setIsBigExpense(false);
+    setIsSplitWithFriend(false);
+    setFriendName('');
+    setFriendShareStr('');
+    setSplitSyncGroupId('');
     inputRef.current?.focus();
   };
 
@@ -391,9 +444,27 @@ export const QuickEntryView: React.FC = () => {
     setEditingIsDebt(Boolean(expense.debtId));
     setAmountStr(String(expense.amount));
     setCategory(expense.category);
-    setPayMethod((expense.paidWith as PayMethod) ?? 'Card');
+    setPayMethod(expense.walletNeutral ? 'SomeoneElse' : ((expense.paidWith as PayMethod) ?? 'Card'));
     setItemName(expense.itemName ?? '');
     setShareAmountStr('');
+    setIsBigExpense(Boolean(expense.isBigExpense));
+
+    // Check for linked debt
+    const linkedDebt = debts.find((d) => d.id === expense.debtId || d.sourceExpenseId === expense.id);
+    if (linkedDebt) {
+      if (linkedDebt.direction === 'iOwe') {
+        setPayMethod('SomeoneElse');
+        setPayerName(linkedDebt.counterparty);
+        setShareAmountStr(String(linkedDebt.amountALL));
+      } else if (linkedDebt.direction === 'OwedToMe') {
+        setIsSplitWithFriend(true);
+        setFriendName(linkedDebt.counterparty);
+        setFriendShareStr(String(linkedDebt.amountALL));
+      }
+    } else if (expense.budgetAmountALL !== undefined && expense.budgetAmountALL < expense.amountInALL) {
+      setIsSplitWithFriend(true);
+      setFriendShareStr(String(expense.amountInALL - expense.budgetAmountALL));
+    }
 
     const expenseDate = toDateInputValue(new Date(expense.timestamp));
     const override = expenseDate === todayStr ? null : expenseDate;
@@ -476,6 +547,61 @@ export const QuickEntryView: React.FC = () => {
     }
   };
 
+  const mirrorSplitToSplitup = async (params: {
+    groupId: string;
+    friendName: string;
+    totalAmount: number;
+    myShare: number;
+    friendShare: number;
+    title: string;
+    category: Category;
+  }): Promise<string> => {
+    try {
+      const groupDetails: any = await convex.query(
+        (api as any).groups.getGroupDetails,
+        { groupId: params.groupId as any }
+      );
+      if (!groupDetails || !Array.isArray(groupDetails.members)) return '';
+
+      const target = params.friendName.trim().toLowerCase();
+      const matchedMember = groupDetails.members.find(
+        (m: any) => (m.name || '').trim().toLowerCase() === target
+      );
+      if (!matchedMember) {
+        return ' · Splitup mirror skipped (no matching member)';
+      }
+
+      const selfMember =
+        groupDetails.members.find((m: any) => m._id !== matchedMember._id) ??
+        groupDetails.members[0];
+      if (!selfMember) return '';
+
+      const totalALL = convertToALL(params.totalAmount, defaultAppCurrency);
+      const friendCents = Math.round(params.friendShare * 100);
+      const totalCents = Math.round(totalALL * 100);
+      const selfCents = totalCents - friendCents;
+
+      await addConvexExpense({
+        groupId: params.groupId,
+        title: params.title,
+        amount: params.totalAmount,
+        currency: defaultAppCurrency,
+        amountInALL: totalALL,
+        category: params.category || 'General',
+        paidByMemberId: selfMember._id,
+        splitType: 'exact',
+        splits: [
+          { memberId: selfMember._id, amountALL: selfCents / 100 },
+          { memberId: matchedMember._id, amountALL: friendCents / 100 },
+        ],
+      });
+      return ' · Synced to Splitup';
+    } catch (err) {
+      console.warn('Splitup mirror failed:', err);
+      return ' · Splitup mirror failed';
+    }
+  };
+
   const handleSave = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!isValid) {
@@ -488,6 +614,15 @@ export const QuickEntryView: React.FC = () => {
       const startTime = performance.now();
 
       if (mode === 'expense') {
+        const timestamp = dateOverride ? dateToNoonISO(dateOverride) : undefined;
+        const normalizedFriendShareALL = convertToALL(friendShareAmount, defaultAppCurrency);
+        const myShareALL = isSplitWithFriend && friendShareAmount > 0
+          ? Math.max(0, normalizedALL - normalizedFriendShareALL)
+          : normalizedALL;
+        const myShareDisplay = isSplitWithFriend && friendShareAmount > 0
+          ? Math.max(0, parsedAmount - friendShareAmount)
+          : parsedAmount;
+
         const baseData = {
           amount: parsedAmount,
           currency: defaultAppCurrency,
@@ -498,7 +633,10 @@ export const QuickEntryView: React.FC = () => {
         if (editingId) {
           const updates: Partial<Omit<ExpenseRecord, 'id'>> = {
             ...baseData,
-            paidWith: payMethod === 'SomeoneElse' ? 'Cash' : payMethod,
+            paidWith: payMethod === 'SomeoneElse' ? undefined : (payMethod as PaymentSource),
+            walletNeutral: payMethod === 'SomeoneElse',
+            isBigExpense,
+            budgetAmountALL: isSplitWithFriend && friendShareAmount > 0 ? myShareALL : undefined,
           };
           const dateChanged = dateOverride !== originalDateOverride;
           if (dateChanged) {
@@ -507,20 +645,38 @@ export const QuickEntryView: React.FC = () => {
               : new Date().toISOString();
           }
           await updateExpense(editingId, updates);
+
+          // Update linked debt if it exists
+          const existingDebt = debts.find((d) => d.id === editingId || d.sourceExpenseId === editingId);
+          if (existingDebt) {
+            if (payMethod === 'SomeoneElse') {
+              const oweAmount = hasShare ? normalizedShareALL : normalizedALL;
+              await updateDebt(existingDebt.id, {
+                counterparty: payerName.trim(),
+                amountALL: oweAmount,
+                remainingALL: Math.min(existingDebt.remainingALL, oweAmount),
+              });
+            } else if (isSplitWithFriend && friendShareAmount > 0) {
+              await updateDebt(existingDebt.id, {
+                counterparty: friendName.trim(),
+                amountALL: normalizedFriendShareALL,
+                remainingALL: Math.min(existingDebt.remainingALL, normalizedFriendShareALL),
+              });
+            }
+          }
+
           const latencyMs = Math.round(performance.now() - startTime);
           setFeedback(`Updated in ${latencyMs}ms ⚡`);
         } else {
-          const timestamp = dateOverride ? dateToNoonISO(dateOverride) : undefined;
-
           if (payMethod === 'SomeoneElse') {
-            const myShareALL = hasShare ? normalizedShareALL : normalizedALL;
-            const myShareDisplay = hasShare ? shareAmount : parsedAmount;
+            const myShareALLVal = hasShare ? normalizedShareALL : normalizedALL;
+            const myShareDisplayVal = hasShare ? shareAmount : parsedAmount;
 
             await addDebt({
               counterparty: payerName.trim(),
               direction: 'iOwe',
-              amountALL: myShareALL,
-              myShareAmountALL: myShareALL,
+              amountALL: myShareALLVal,
+              myShareAmountALL: myShareALLVal,
               purchaseDetails: {
                 category,
                 itemName: itemName.trim() || undefined,
@@ -529,19 +685,59 @@ export const QuickEntryView: React.FC = () => {
             });
             const latencyMs = Math.round(performance.now() - startTime);
             setFeedback(
-              `Logged ${formatCurrency(myShareDisplay, defaultAppCurrency)} for you owed to ${payerName} in ${latencyMs}ms ⚡`
+              `Logged ${formatCurrency(myShareDisplayVal, defaultAppCurrency)} owed to ${payerName} in ${latencyMs}ms ⚡`
+            );
+          } else if (isSplitWithFriend && friendName.trim() && friendShareAmount > 0) {
+            const debt = await addDebt({
+              counterparty: friendName.trim(),
+              direction: 'OwedToMe',
+              amountALL: normalizedFriendShareALL,
+              note: itemName.trim() ? `${itemName.trim()} (their share)` : undefined,
+              timestamp,
+            });
+
+            const newExpense = await addExpense({
+              ...baseData,
+              paidWith: payMethod as PaymentSource,
+              budgetAmountALL: myShareALL,
+              debtId: debt.id,
+              isBigExpense,
+              timestamp,
+            });
+
+            await db.debts.update(debt.id, { sourceExpenseId: newExpense.id });
+
+            let mirrorSuffix = '';
+            if (splitSyncGroupId) {
+              mirrorSuffix = await mirrorSplitToSplitup({
+                groupId: splitSyncGroupId,
+                friendName: friendName.trim(),
+                totalAmount: parsedAmount,
+                myShare: myShareALL,
+                friendShare: normalizedFriendShareALL,
+                title: itemName.trim() || `${category} with ${friendName}`,
+                category,
+              });
+            }
+
+            const latencyMs = Math.round(performance.now() - startTime);
+            setFeedback(
+              `Logged ${formatCurrency(parsedAmount, defaultAppCurrency)} (${formatCurrency(myShareDisplay, defaultAppCurrency)} for you, ${formatCurrency(friendShareAmount, defaultAppCurrency)} owed by ${friendName})${mirrorSuffix} in ${latencyMs}ms ⚡`
             );
           } else {
             await addExpense({
               ...baseData,
               paidWith: payMethod as PaymentSource,
+              isBigExpense,
               timestamp,
             });
             const latencyMs = Math.round(performance.now() - startTime);
             setFeedback(
               dateOverride
                 ? `Logged ${formatCurrency(parsedAmount, defaultAppCurrency)} for ${dateOverride}`
-                : `Logged ${formatCurrency(parsedAmount, defaultAppCurrency)} in ${latencyMs}ms ⚡`
+                : isBigExpense
+                  ? `Logged ${formatCurrency(parsedAmount, defaultAppCurrency)} as Big Expense (Rent)`
+                  : `Logged ${formatCurrency(parsedAmount, defaultAppCurrency)} in ${latencyMs}ms ⚡`
             );
           }
         }
@@ -731,6 +927,39 @@ export const QuickEntryView: React.FC = () => {
               </button>
             )}
           </div>
+
+          {/* Math operator keypad */}
+          <div className="flex items-center justify-center gap-1.5 mt-2 flex-wrap">
+            {[
+              { label: '+', op: '+' },
+              { label: '−', op: '-' },
+              { label: '×', op: '*' },
+              { label: '÷', op: '/' },
+              { label: '(', op: '(' },
+              { label: ')', op: ')' },
+            ].map(({ label, op }) => (
+              <button
+                key={op}
+                type="button"
+                onClick={() => handleInsertOperator(op)}
+                className="w-8 h-7 flex items-center justify-center rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs font-mono font-bold text-slate-700 transition-all cursor-pointer active:scale-95"
+                title={`Insert ${label}`}
+              >
+                {label}
+              </button>
+            ))}
+            {isExpression && (
+              <button
+                type="button"
+                onClick={handleResolveMath}
+                className="px-2.5 h-7 flex items-center justify-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-mono font-bold transition-all cursor-pointer active:scale-95 shadow-xs"
+                title="Evaluate expression"
+              >
+                <span>=</span>
+                <span>{parsedAmount}</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {!editingId && (
@@ -792,7 +1021,7 @@ export const QuickEntryView: React.FC = () => {
               <input
                 type="text"
                 value={itemName}
-                onChange={(e) => setItemName(e.target.value)}
+                onChange={(e) => handleItemNameChange(e.target.value)}
                 onFocus={() => setIsItemFocused(true)}
                 onBlur={() => setIsItemFocused(false)}
                 placeholder={CATEGORY_CONFIG[category]?.itemPlaceholder || CATEGORY_CONFIG.Other.itemPlaceholder}
@@ -820,6 +1049,40 @@ export const QuickEntryView: React.FC = () => {
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Big Expense / Rent Toggle */}
+            <div className="pt-0.5">
+              <button
+                type="button"
+                onClick={() => setIsBigExpense(!isBigExpense)}
+                className={cn(
+                  'w-full flex items-center justify-between p-2.5 rounded-2xl border text-xs font-semibold transition-all cursor-pointer text-left',
+                  isBigExpense
+                    ? 'bg-purple-50 border-purple-300 text-purple-800 shadow-xs'
+                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                )}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Building2 className={cn('w-4 h-4 shrink-0', isBigExpense ? 'text-purple-600' : 'text-slate-400')} />
+                  <div className="min-w-0">
+                    <span className="block font-bold truncate">
+                      {isBigExpense ? 'Planned Big Expense (Rent / Fixed Bill)' : 'Mark as Planned Big Expense (Rent)'}
+                    </span>
+                    <span className="block text-[10px] font-normal text-slate-500 mt-0.5 leading-snug">
+                      {isBigExpense
+                        ? `Draws from rent buffer (${format(stats?.unpaidBig ?? 0)} unpaid) · Won't affect today's allowance`
+                        : 'Rent and fixed bills draw from your planned buffer so your daily budget never goes negative'}
+                    </span>
+                  </div>
+                </div>
+                <div className={cn(
+                  'w-5 h-5 rounded-lg flex items-center justify-center border transition-all shrink-0 ml-2',
+                  isBigExpense ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300 bg-white'
+                )}>
+                  {isBigExpense && <Check className="w-3.5 h-3.5" />}
+                </div>
+              </button>
             </div>
 
             <div className="flex justify-center">
@@ -866,49 +1129,219 @@ export const QuickEntryView: React.FC = () => {
               </div>
             </div>
 
-            {payMethod === 'SomeoneElse' && (
-              <div className="pt-2 space-y-2">
-                <input
-                  type="text"
-                  value={payerName}
-                  onChange={(e) => setPayerName(e.target.value)}
-                  placeholder="Who paid?"
-                  list="lekflow-payer-names"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                />
-                <datalist id="lekflow-payer-names">
-                  {lendSuggestions.map((p) => (
-                    <option key={p} value={p} />
-                  ))}
-                </datalist>
-                <SuggestionChips
-                  options={lendSuggestions}
-                  value={payerName}
-                  onSelect={setPayerName}
-                />
+            {/* Split with someone when paying with Cash or Card */}
+            {(payMethod === 'Cash' || payMethod === 'Card') && (
+              <div className="pt-1">
+                {!isSplitWithFriend ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsSplitWithFriend(true)}
+                    className="w-full py-2 px-3 rounded-2xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-600 hover:text-indigo-700 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Users className="w-3.5 h-3.5 text-indigo-500" />
+                    <span>Split with someone (they owe you a portion)</span>
+                  </button>
+                ) : (
+                  <div className="p-3.5 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-3 animate-in fade-in">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                        <Users className="w-3.5 h-3.5 text-indigo-600" />
+                        Someone owes you for this
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSplitWithFriend(false);
+                          setFriendName('');
+                          setFriendShareStr('');
+                          setSplitSyncGroupId('');
+                        }}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold cursor-pointer flex items-center gap-0.5"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Remove
+                      </button>
+                    </div>
 
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">
-                    Your share:
-                  </label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      inputMode="decimal"
-                      step="any"
-                      value={shareAmountStr}
-                      onChange={(e) => setShareAmountStr(e.target.value)}
-                      placeholder="0"
-                      className="w-24 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                    />
-                    <span className="text-xs font-medium text-slate-500">{defaultAppCurrency}</span>
+                    <div>
+                      <input
+                        type="text"
+                        value={friendName}
+                        onChange={(e) => setFriendName(e.target.value)}
+                        placeholder="Who owes you?"
+                        list="lekflow-friend-names"
+                        className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                      />
+                      <datalist id="lekflow-friend-names">
+                        {lendSuggestions.map((p) => (
+                          <option key={p} value={p} />
+                        ))}
+                      </datalist>
+                      <SuggestionChips
+                        options={lendSuggestions}
+                        value={friendName}
+                        onSelect={setFriendName}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <label className="text-[11px] font-semibold text-indigo-900 uppercase tracking-wider whitespace-nowrap">
+                          Their share (they owe you):
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            step="any"
+                            value={friendShareStr}
+                            onChange={(e) => setFriendShareStr(e.target.value)}
+                            placeholder="0"
+                            className="w-24 bg-white border border-indigo-200 rounded-xl px-3 py-1.5 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                          />
+                          <span className="text-xs font-medium text-indigo-700">{defaultAppCurrency}</span>
+                        </div>
+                      </div>
+
+                      {parsedAmount > 0 && (
+                        <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
+                          <span className="text-[10px] text-indigo-600 font-medium">Quick split:</span>
+                          <button
+                            type="button"
+                            onClick={() => setFriendShareStr(String(Math.round((parsedAmount / 2) * 100) / 100))}
+                            className="px-2 py-0.5 rounded-lg bg-white border border-indigo-200 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 cursor-pointer"
+                          >
+                            ½ 50% ({Math.round(parsedAmount / 2)} {defaultAppCurrency})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setFriendShareStr(String(Math.round((parsedAmount / 3) * 100) / 100))}
+                            className="px-2 py-0.5 rounded-lg bg-white border border-indigo-200 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 cursor-pointer"
+                          >
+                            ⅓ 33% ({Math.round(parsedAmount / 3)} {defaultAppCurrency})
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {parsedAmount > 0 && friendShareAmount > 0 && (
+                      <div className="p-2.5 rounded-xl bg-white border border-indigo-100 text-[11px] text-slate-700 leading-relaxed font-sans space-y-0.5">
+                        <p>
+                          <span className="font-semibold text-slate-900">Wallet:</span> {payMethod} drops by {format(parsedAmount)}
+                        </p>
+                        <p>
+                          <span className="font-semibold text-indigo-700">Debt logged:</span> {friendName || 'Friend'} owes you {formatCurrency(friendShareAmount, defaultAppCurrency)}
+                        </p>
+                        <p>
+                          <span className="font-semibold text-emerald-700">Hits your budget:</span> {formatCurrency(Math.max(0, parsedAmount - friendShareAmount), defaultAppCurrency)}
+                        </p>
+                      </div>
+                    )}
+
+                    {convexGroups.length > 0 && (
+                      <div className="pt-1 border-t border-indigo-100">
+                        <p className="text-[10px] font-semibold text-indigo-900 uppercase tracking-wider mb-1">
+                          Also record in Splitup group
+                        </p>
+                        <StyledSelect
+                          value={splitSyncGroupId}
+                          onChange={setSplitSyncGroupId}
+                          placeholder="— Personal only —"
+                          options={groupOptions}
+                        />
+                      </div>
+                    )}
                   </div>
+                )}
+              </div>
+            )}
+
+            {/* When Someone Else Paid */}
+            {payMethod === 'SomeoneElse' && (
+              <div className="pt-2 p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-200 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <Handshake className="w-3.5 h-3.5 text-indigo-600" />
+                    Someone else paid for this
+                  </span>
                 </div>
 
-                {hasShare && (
-                  <p className="text-[10px] text-slate-500 leading-relaxed px-1 pt-0.5">
-                    You owe {payerName || 'them'} {formatCurrency(shareAmount, defaultAppCurrency)}.
-                  </p>
+                <div>
+                  <input
+                    type="text"
+                    value={payerName}
+                    onChange={(e) => setPayerName(e.target.value)}
+                    placeholder="Who paid?"
+                    list="lekflow-payer-names"
+                    className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                  />
+                  <datalist id="lekflow-payer-names">
+                    {lendSuggestions.map((p) => (
+                      <option key={p} value={p} />
+                    ))}
+                  </datalist>
+                  <SuggestionChips
+                    options={lendSuggestions}
+                    value={payerName}
+                    onSelect={setPayerName}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[11px] font-semibold text-indigo-900 uppercase tracking-wider whitespace-nowrap">
+                      Your share (you owe them):
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        step="any"
+                        value={shareAmountStr}
+                        onChange={(e) => setShareAmountStr(e.target.value)}
+                        placeholder={parsedAmount > 0 ? String(parsedAmount) : '0'}
+                        className="w-24 bg-white border border-indigo-200 rounded-xl px-3 py-1.5 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                      />
+                      <span className="text-xs font-medium text-indigo-700">{defaultAppCurrency}</span>
+                    </div>
+                  </div>
+
+                  {parsedAmount > 0 && (
+                    <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
+                      <span className="text-[10px] text-indigo-600 font-medium">Quick split:</span>
+                      <button
+                        type="button"
+                        onClick={() => setShareAmountStr(String(Math.round((parsedAmount / 2) * 100) / 100))}
+                        className="px-2 py-0.5 rounded-lg bg-white border border-indigo-200 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 cursor-pointer"
+                      >
+                        ½ 50% ({Math.round(parsedAmount / 2)} {defaultAppCurrency})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShareAmountStr(String(parsedAmount))}
+                        className="px-2 py-0.5 rounded-lg bg-white border border-indigo-200 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 cursor-pointer"
+                      >
+                        All for me (100%)
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {parsedAmount > 0 && (
+                  <div className="p-2.5 rounded-xl bg-white border border-indigo-100 text-[11px] text-slate-700 leading-relaxed font-sans space-y-0.5">
+                    <p>
+                      <span className="font-semibold text-slate-900">{payerName || 'Payer'} paid:</span> {format(parsedAmount)}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-indigo-700">You owe {payerName || 'them'}:</span> {formatCurrency(hasShare ? shareAmount : parsedAmount, defaultAppCurrency)}
+                    </p>
+                    <p>
+                      <span className="font-semibold text-emerald-700">Hits your budget:</span> {formatCurrency(hasShare ? shareAmount : parsedAmount, defaultAppCurrency)}
+                    </p>
+                    <p className="text-[10px] text-slate-400 italic pt-0.5">
+                      Wallet: 0 L (No cash or card deducted now; deducted when you settle debt)
+                    </p>
+                  </div>
                 )}
               </div>
             )}

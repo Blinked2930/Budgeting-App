@@ -39,7 +39,11 @@ export default defineSchema({
     startingRaiffeisenBalanceALL: v.number(),
     startingCashALL: v.optional(v.number()),
     bufferPoolALL: v.number(),
+    // Travel-stash field kept for backward compat; semantically "Dreams".
     travelStashALL: v.number(),
+    // New explicit buckets.
+    savingsALL: v.optional(v.number()),
+    investmentsALL: v.optional(v.number()),
     plannedBigExpensesALL: v.optional(v.number()),
     customAccounts: v.optional(
       v.array(
@@ -88,6 +92,16 @@ export default defineSchema({
     deleted: v.optional(v.boolean()),
   })
     .index("by_localId", ["localId"])
+    .index("by_userId", ["userId"]),
+
+  // ---------- Cross-app user preferences ----------
+  userPreferences: defineTable({
+    userId: v.string(),
+    // Base currency every aggregate in both apps should display in.
+    // Stored as a code string (ALL, EUR, USD, GBP, CHF, CAD, AUD, JPY).
+    baseCurrency: v.string(),
+    updatedAt: v.number(),
+  })
     .index("by_userId", ["userId"]),
 
   // ---------- Splitup Shared Group Tables ----------

@@ -33,11 +33,26 @@ export function formatCurrency(amount: number, currency: Currency = 'ALL'): stri
 
 /**
  * Safely evaluate a simple arithmetic expression. Supports digits, decimal
- * points, whitespace, parentheses, and + - * /. Returns null on any parse
- * error or division by zero. No eval, no Function, no globals.
+ * points, commas, whitespace, parentheses, and + - * / (plus aliases ×, x, ÷, :, –, —).
+ * Returns null on any parse error or division by zero. No eval, no Function, no globals.
  */
 export function evaluateAmountExpression(input: string): number | null {
-  const src = input.replace(/\s+/g, '');
+  if (!input) return null;
+
+  // Normalize common symbols
+  let src = input
+    .replace(/\s+/g, '')
+    .replace(/[×xX]/g, '*')
+    .replace(/[÷:]/g, '/')
+    .replace(/[–—]/g, '-')
+    .replace(/,/g, '.');
+
+  if (!src) return null;
+
+  // If ends with a trailing operator or dot (e.g. while typing "500+"), strip it for live partial evaluation
+  while (src.length > 0 && /[+\-*/.]$/.test(src)) {
+    src = src.slice(0, -1);
+  }
   if (!src) return null;
   if (!/^[0-9+\-*/().]+$/.test(src)) return null;
 
@@ -46,7 +61,19 @@ export function evaluateAmountExpression(input: string): number | null {
   let i = 0;
   while (i < src.length) {
     const ch = src[i];
-    if (ch === '+' || ch === '-' || ch === '*' || ch === '/' || ch === '(' || ch === ')') {
+    const prev = tokens.length > 0 ? tokens[tokens.length - 1] : null;
+    const isUnaryContext = prev === null || prev === '(' || prev === '+' || prev === '-' || prev === '*' || prev === '/';
+
+    if (ch === '-' && isUnaryContext && i + 1 < src.length && (/[0-9.]/.test(src[i + 1]))) {
+      // Unary negative number
+      let j = i + 1;
+      while (j < src.length && (/[0-9.]/.test(src[j]))) j++;
+      const raw = src.slice(i, j);
+      const num = Number(raw);
+      if (Number.isNaN(num)) return null;
+      tokens.push(num);
+      i = j;
+    } else if (ch === '+' || ch === '-' || ch === '*' || ch === '/' || ch === '(' || ch === ')') {
       tokens.push(ch);
       i++;
     } else if ((ch >= '0' && ch <= '9') || ch === '.') {
@@ -118,5 +145,5 @@ export function evaluateAmountExpression(input: string): number | null {
   if (stack.length !== 1) return null;
   const result = stack[0];
   if (!Number.isFinite(result)) return null;
-  return result;
+  return Math.round(result * 100) / 100;
 }

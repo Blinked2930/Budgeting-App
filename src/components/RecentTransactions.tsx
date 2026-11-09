@@ -3,9 +3,29 @@ import { createPortal } from 'react-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import {
-  Trash2, CheckCircle2, Clock, Utensils, Lightbulb, Bus, Users, Plane, Building,
-  Film, MoreHorizontal, Banknote, CreditCard, ArrowLeftRight, HandCoins, PlusCircle,
-  TriangleAlert, ChevronDown, Gift, Scale, Ban, TrendingDown,
+  Trash2,
+  CheckCircle2,
+  Clock,
+  Utensils,
+  Lightbulb,
+  Bus,
+  Users,
+  Plane,
+  Building,
+  Film,
+  MoreHorizontal,
+  Banknote,
+  CreditCard,
+  ArrowLeftRight,
+  HandCoins,
+  PlusCircle,
+  TriangleAlert,
+  ChevronDown,
+  Gift,
+  Scale,
+  Ban,
+  TrendingDown,
+  Handshake,
 } from 'lucide-react';
 import type { ExpenseRecord, Category, TransferRecord } from '../types';
 import { deleteExpense, deleteTransfer, hasLinkedDebt } from '../db';
@@ -44,7 +64,10 @@ function formatRelativeTime(isoString: string): string {
     if (diffHour < 24) return `${diffHour}h ago`;
     const diffDay = Math.floor(diffHour / 24);
     if (diffDay < 7) return `${diffDay}d ago`;
-    return new Date(isoString).toLocaleDateString('sq-AL', { month: 'short', day: 'numeric' });
+    return new Date(isoString).toLocaleDateString('sq-AL', {
+      month: 'short',
+      day: 'numeric',
+    });
   } catch {
     return 'Recent';
   }
@@ -72,8 +95,16 @@ function dayLabel(key: string): string {
 }
 
 type PrimaryKind =
-  | 'expense' | 'gift' | 'lent' | 'borrowed' | 'repaid_to_me' | 'i_repaid'
-  | 'offset' | 'big' | 'income' | 'reconciliation';
+  | 'expense'
+  | 'gift'
+  | 'lent'
+  | 'borrowed'
+  | 'repaid_to_me'
+  | 'i_repaid'
+  | 'offset'
+  | 'big'
+  | 'income'
+  | 'reconciliation';
 
 const PRIMARY_META: Record<PrimaryKind, { label: string; cls: string }> = {
   expense: { label: 'Expense', cls: 'bg-slate-100 text-slate-700' },
@@ -91,8 +122,10 @@ const PRIMARY_META: Record<PrimaryKind, { label: string; cls: string }> = {
 function primaryKind(e: ExpenseRecord): PrimaryKind {
   const name = (e.itemName ?? '').trim();
   const lowerName = name.toLowerCase();
+
   if (isReconciliationEntry(e)) return 'reconciliation';
   if (e.isBigExpense) return 'big';
+
   if (e.isDebtOrigin || (e.debtRelated && (lowerName.startsWith('lent to ') || lowerName.startsWith('borrowed from ')))) {
     return e.amount < 0 ? 'borrowed' : 'lent';
   }
@@ -101,6 +134,7 @@ function primaryKind(e: ExpenseRecord): PrimaryKind {
     if (lowerName.startsWith('repaid by ') || e.amount < 0) return 'repaid_to_me';
     return 'i_repaid';
   }
+
   if (e.isForgiveness || lowerName.includes('gift to') || lowerName.includes('forgiven to') || lowerName.includes('bought by')) {
     return 'gift';
   }
@@ -137,8 +171,12 @@ interface ConfirmState {
   onConfirm: () => void;
 }
 
-const ConfirmDialog: React.FC<{ state: ConfirmState | null; onClose: () => void }> = ({ state, onClose }) => {
+const ConfirmDialog: React.FC<{ state: ConfirmState | null; onClose: () => void }> = ({
+  state,
+  onClose,
+}) => {
   if (!state || !state.isOpen) return null;
+
   return createPortal(
     <div
       className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in"
@@ -157,6 +195,7 @@ const ConfirmDialog: React.FC<{ state: ConfirmState | null; onClose: () => void 
             <p className="text-xs text-slate-500 mt-1 leading-relaxed">{state.message}</p>
           </div>
         </div>
+
         <div className="grid grid-cols-2 gap-2 pt-1">
           <button
             type="button"
@@ -167,7 +206,10 @@ const ConfirmDialog: React.FC<{ state: ConfirmState | null; onClose: () => void 
           </button>
           <button
             type="button"
-            onClick={() => { state.onConfirm(); onClose(); }}
+            onClick={() => {
+              state.onConfirm();
+              onClose();
+            }}
             className="py-3 rounded-2xl bg-rose-600 text-white text-xs font-bold cursor-pointer hover:bg-rose-700 transition-colors"
           >
             {state.confirmLabel}
@@ -180,7 +222,10 @@ const ConfirmDialog: React.FC<{ state: ConfirmState | null; onClose: () => void 
 };
 
 export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
-  expenses, transfers = [], onDeleted, onEdit,
+  expenses,
+  transfers = [],
+  onDeleted,
+  onEdit,
 }) => {
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -191,21 +236,28 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   const handleDeleteExpense = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const record = expenses.find((x) => x.id === id);
+
     const checkAndConfirm = async () => {
       const isLinked = await hasLinkedDebt(id, record?.debtId);
       if (isLinked) {
         setConfirm({
           isOpen: true,
           title: 'Delete both the transaction AND the debt?',
-          message: 'This transaction is linked to a debt record. Deleting it will also remove the debt and every entry linked to it. Continue?',
+          message:
+            'This transaction is linked to a debt record. Deleting it will also remove the debt and every entry linked to it. Continue?',
           confirmLabel: 'Delete both',
-          onConfirm: async () => { await deleteExpense(id); if (onDeleted) onDeleted(); },
+          onConfirm: async () => {
+            await deleteExpense(id);
+            if (onDeleted) onDeleted();
+          },
         });
         return;
       }
+
       await deleteExpense(id);
       if (onDeleted) onDeleted();
     };
+
     void checkAndConfirm();
   };
 
@@ -228,29 +280,23 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
       .filter((t) => !t.deleted)
       .map((t) => ({ kind: 'transfer' as const, record: t, timestamp: t.timestamp }));
 
-    // Splitup activity. The backend now returns `amountInALL` on each item
-    // (see convex/groups.ts getActivityFeed). Fall back to `amount` for
-    // pre-fix data where `amountInALL` is missing.
-    const remoteExpenses: MergedItem[] = convexActivity.map((a: any) => {
-      const amountInALL = typeof a.amountInALL === 'number' ? a.amountInALL : a.amount;
-      return {
-        kind: 'expense' as const,
-        isConvex: true,
-        groupName: a.groupName,
+    const remoteExpenses: MergedItem[] = convexActivity.map((a: any) => ({
+      kind: 'expense' as const,
+      isConvex: true,
+      groupName: a.groupName,
+      timestamp: new Date(a.timestamp).toISOString(),
+      record: {
+        id: a.id || a._id,
+        amount: a.amount,
+        amountInALL: a.amount,
+        currency: a.currency || 'ALL',
+        category: a.category || 'Other',
+        itemName: `${a.groupName}: ${a.title}`,
+        paidWith: 'Cash',
         timestamp: new Date(a.timestamp).toISOString(),
-        record: {
-          id: a.id || a._id,
-          amount: a.amount,
-          amountInALL,
-          currency: a.currency || 'ALL',
-          category: a.category || 'Other',
-          itemName: `${a.groupName}: ${a.title}`,
-          paidWith: a.paidWith || 'Cash',
-          timestamp: new Date(a.timestamp).toISOString(),
-          isSynced: true,
-        } as ExpenseRecord,
-      };
-    });
+        isSynced: true,
+      } as ExpenseRecord,
+    }));
 
     return [...localExpenses, ...localTransfers, ...remoteExpenses].sort((a, b) =>
       a.timestamp < b.timestamp ? 1 : -1
@@ -295,6 +341,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
   return (
     <>
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
+
       <div className="w-full space-y-4">
         <div className="flex items-center justify-between px-1">
           <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -345,7 +392,11 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                           <span>{formatRelativeTime(t.timestamp)}</span>
                           <span>•</span>
                           <span className="flex items-center gap-1">
-                            {t.isSynced ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Clock className="w-3 h-3 text-slate-400" />}
+                            {t.isSynced ? (
+                              <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                            ) : (
+                              <Clock className="w-3 h-3 text-slate-400" />
+                            )}
                             <span className="text-[10px]">{t.isSynced ? 'Synced' : 'Offline'}</span>
                           </span>
                         </div>
@@ -439,6 +490,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                     <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border', tile)}>
                       {icon}
                     </div>
+
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-semibold text-slate-900 truncate">
@@ -455,12 +507,14 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                           </span>
                         )}
                       </div>
+
                       <div className="flex items-center gap-1 flex-wrap mt-1">
                         <Pill className={primary.cls}>{primary.label}</Pill>
+
                         {noWallet ? (
-                          <Pill className="bg-slate-100 text-slate-500">
-                            <Ban className="w-2.5 h-2.5" />
-                            No wallet
+                          <Pill className="bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <Handshake className="w-2.5 h-2.5" />
+                            Someone else
                           </Pill>
                         ) : isCash ? (
                           <Pill className="bg-teal-50 text-teal-700">
@@ -473,6 +527,14 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                             Card
                           </Pill>
                         )}
+
+                        {showsBudgetShare && (
+                          <Pill className="bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <Users className="w-2.5 h-2.5" />
+                            Split
+                          </Pill>
+                        )}
+
                         {spent ? (
                           <Pill className="bg-emerald-50 text-emerald-700">
                             <TrendingDown className="w-2.5 h-2.5" />
@@ -485,11 +547,16 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                           </Pill>
                         )}
                       </div>
+
                       <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400">
                         <span>{formatRelativeTime(expense.timestamp)}</span>
                         <span>•</span>
                         <span className="flex items-center gap-1">
-                          {expense.isSynced ? <CheckCircle2 className="w-3 h-3 text-emerald-500" /> : <Clock className="w-3 h-3 text-slate-400" />}
+                          {expense.isSynced ? (
+                            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                          ) : (
+                            <Clock className="w-3 h-3 text-slate-400" />
+                          )}
                           <span className="text-[10px]">{expense.isSynced ? 'Synced' : 'Offline'}</span>
                         </span>
                       </div>
@@ -512,6 +579,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                         </p>
                       )}
                     </div>
+
                     {!item.isConvex && (
                       <div className="flex items-center justify-center w-[26px]">
                         <button

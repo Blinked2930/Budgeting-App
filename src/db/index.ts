@@ -332,6 +332,19 @@ export async function deleteTransfer(id: string): Promise<void> {
   });
 }
 
+export async function updateTransfer(
+  id: string,
+  updates: Partial<Omit<TransferRecord, 'id'>>
+): Promise<void> {
+  const existing = await db.transfers.get(id);
+  if (!existing || existing.deleted) return;
+  await db.transfers.update(id, {
+    ...updates,
+    isSynced: false,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 export async function getUnsyncedTransfers(): Promise<TransferRecord[]> {
   return db.transfers.filter((t) => !t.isSynced).toArray();
 }
@@ -446,6 +459,8 @@ export async function addDebt(data: {
       itemName: fullItemName,
       budgetAmountALL: myShare,
       debtId: record.id,
+      walletNeutral: true,
+      timestamp: data.timestamp,
     });
   }
 
