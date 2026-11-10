@@ -81,11 +81,11 @@ const ConfirmDialog: React.FC<{ state: ConfirmState | null; onClose: () => void 
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-[170] flex items-end sm:items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-5 space-y-4 animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-2"
+        className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-5 space-y-4 animate-in slide-in-from-bottom-4 sm:slide-in-from-bottom-2 mb-16 sm:mb-0"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3">
@@ -293,6 +293,16 @@ const DebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void
     setAmountStr(String(debt.remainingALL));
   }, [debt.remainingALL]);
 
+  useEffect(() => {
+    if (isEditing) {
+      setEditName(debt.counterparty);
+      setEditAmount(String(debt.amountALL));
+      setEditRemaining(String(debt.remainingALL));
+      setEditNote(debt.note || '');
+      setEditDirection(debt.direction);
+    }
+  }, [isEditing, debt]);
+
   const owedToMe = debt.direction === 'OwedToMe';
   const parsed = parseFloat(amountStr);
   const requested = Number.isNaN(parsed) ? debt.remainingALL : parsed;
@@ -337,7 +347,7 @@ const DebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void
 
   if (isEditing) {
     return (
-      <div className="p-3.5 rounded-2xl bg-indigo-50/60 border border-indigo-200 space-y-3">
+      <div className="p-3.5 rounded-2xl bg-indigo-50/90 border border-indigo-200 space-y-3 shadow-xs">
         <div className="flex items-center justify-between">
           <p className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider">Edit Debt Details</p>
           <div className="flex gap-1">
@@ -355,7 +365,7 @@ const DebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void
             type="button"
             onClick={() => setEditDirection('OwedToMe')}
             className={cn(
-              'py-1.5 rounded-xl text-xs font-bold border cursor-pointer',
+              'py-1.5 rounded-xl text-xs font-bold border cursor-pointer transition-colors',
               editDirection === 'OwedToMe' ? 'bg-emerald-100 border-emerald-400 text-emerald-800' : 'bg-white border-slate-200 text-slate-500'
             )}
           >
@@ -365,7 +375,7 @@ const DebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void
             type="button"
             onClick={() => setEditDirection('iOwe')}
             className={cn(
-              'py-1.5 rounded-xl text-xs font-bold border cursor-pointer',
+              'py-1.5 rounded-xl text-xs font-bold border cursor-pointer transition-colors',
               editDirection === 'iOwe' ? 'bg-rose-100 border-rose-400 text-rose-800' : 'bg-white border-slate-200 text-slate-500'
             )}
           >
@@ -773,13 +783,13 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-[150] flex items-end sm:items-center justify-center p-3 sm:p-4 bg-slate-900/60 animate-in fade-in pb-20 sm:pb-4"
       onClick={onClose}
     >
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
 
       <div
-        className="w-full max-w-lg h-[90vh] sm:h-[85vh] max-h-[800px] flex flex-col bg-white border-t sm:border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden min-h-0 font-sans"
+        className="w-full max-w-lg h-[82vh] sm:h-[85vh] max-h-[calc(100vh-100px)] flex flex-col bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden min-h-0 font-sans mb-14 sm:mb-0"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-200 shrink-0 bg-white">

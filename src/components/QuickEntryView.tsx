@@ -27,7 +27,7 @@ import {
   Handshake,
   Calculator,
   ChevronsUpDown,
-  Building2,
+  UserCheck,
 } from 'lucide-react';
 import {
   type Category,
@@ -174,7 +174,7 @@ const StyledSelect: React.FC<{
       {open && (
         <div
           onClick={() => setOpen(false)}
-          className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
+          className="fixed inset-0 z-[160] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in"
         >
           <div
             onClick={(e) => e.stopPropagation()}
@@ -248,7 +248,6 @@ export const QuickEntryView: React.FC = () => {
   const [payMethod, setPayMethod] = useState<PayMethod>('Cash');
   const [payerName, setPayerName] = useState<string>('');
 
-  const [isBigExpense, setIsBigExpense] = useState<boolean>(false);
   const [isSplitWithFriend, setIsSplitWithFriend] = useState<boolean>(false);
   const [friendName, setFriendName] = useState<string>('');
   const [friendShareStr, setFriendShareStr] = useState<string>('');
@@ -268,28 +267,6 @@ export const QuickEntryView: React.FC = () => {
   const [lendPerson, setLendPerson] = useState<string>('');
   const [lendDirection, setLendDirection] = useState<DebtDirection>('OwedToMe');
   const [lendNote, setLendNote] = useState<string>('');
-
-  const lendSuggestions = useMemo(() => {
-    const names = new Set(debts.map((d) => d.counterparty));
-    return Array.from(names).sort();
-  }, [debts]);
-
-  const debtGroups = useMemo(() => {
-    const map = new Map<string, { key: string; name: string; net: number; count: number }>();
-    for (const d of openDebts) {
-      let g = map.get(d.counterpartyKey);
-      if (!g) {
-        g = { key: d.counterpartyKey, name: d.counterparty, net: 0, count: 0 };
-        map.set(d.counterpartyKey, g);
-      }
-      if (d.direction === 'OwedToMe') g.net += d.remainingALL;
-      else g.net -= d.remainingALL;
-      g.count++;
-    }
-    return Array.from(map.values()).sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
-  }, [openDebts]);
-
-  const [settleGroupKey, setSettleGroupKey] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingIsDebt, setEditingIsDebt] = useState<boolean>(false);
@@ -317,6 +294,53 @@ export const QuickEntryView: React.FC = () => {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  // Query details of selected Splitup groups to extract member names
+  const splitGroupDetails = useQuery(
+    (api as any).groups?.getGroupDetails,
+    splitSyncGroupId ? { groupId: splitSyncGroupId } : 'skip'
+  );
+
+  const splitGroupMembers = useMemo(() => {
+    if (!splitGroupDetails || !Array.isArray(splitGroupDetails.members)) return [];
+    return splitGroupDetails.members
+      .map((m: any) => (m.name || '').trim())
+      .filter((n: string) => n.length > 0);
+  }, [splitGroupDetails]);
+
+  const lendGroupDetails = useQuery(
+    (api as any).groups?.getGroupDetails,
+    lendSyncGroupId ? { groupId: lendSyncGroupId } : 'skip'
+  );
+
+  const lendGroupMembers = useMemo(() => {
+    if (!lendGroupDetails || !Array.isArray(lendGroupDetails.members)) return [];
+    return lendGroupDetails.members
+      .map((m: any) => (m.name || '').trim())
+      .filter((n: string) => n.length > 0);
+  }, [lendGroupDetails]);
+
+  const lendSuggestions = useMemo(() => {
+    const names = new Set(debts.map((d) => d.counterparty));
+    return Array.from(names).sort();
+  }, [debts]);
+
+  const debtGroups = useMemo(() => {
+    const map = new Map<string, { key: string; name: string; net: number; count: number }>();
+    for (const d of openDebts) {
+      let g = map.get(d.counterpartyKey);
+      if (!g) {
+        g = { key: d.counterpartyKey, name: d.counterparty, net: 0, count: 0 };
+        map.set(d.counterpartyKey, g);
+      }
+      if (d.direction === 'OwedToMe') g.net += d.remainingALL;
+      else g.net -= d.remainingALL;
+      g.count++;
+    }
+    return Array.from(map.values()).sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+  }, [openDebts]);
+
+  const [settleGroupKey, setSettleGroupKey] = useState<string | null>(null);
 
   const parsedAmount = useMemo(() => {
     if (!amountStr.trim()) return 0;
@@ -378,17 +402,10 @@ export const QuickEntryView: React.FC = () => {
 
   const handleCategoryChange = (next: Category) => {
     setCategory(next);
-    if (next === 'Accommodation' && !isBigExpense) {
-      setIsBigExpense(true);
-    }
   };
 
   const handleItemNameChange = (val: string) => {
     setItemName(val);
-    const lower = val.toLowerCase();
-    if ((lower.includes('rent') || lower.includes('qira')) && !isBigExpense) {
-      setIsBigExpense(true);
-    }
   };
 
   const handleQuickAdd = (inc: number) => {
@@ -427,7 +444,6 @@ export const QuickEntryView: React.FC = () => {
     setLendSyncGroupId('');
     setSettleGroupKey(null);
     setPayerName('');
-    setIsBigExpense(false);
     setIsSplitWithFriend(false);
     setFriendName('');
     setFriendShareStr('');
@@ -444,7 +460,6 @@ export const QuickEntryView: React.FC = () => {
     setPayMethod(expense.walletNeutral ? 'SomeoneElse' : ((expense.paidWith as PayMethod) ?? 'Card'));
     setItemName(expense.itemName ?? '');
     setShareAmountStr('');
-    setIsBigExpense(Boolean(expense.isBigExpense));
 
     const linkedDebt = debts.find((d) => d.id === expense.debtId || d.sourceExpenseId === expense.id);
     if (linkedDebt) {
@@ -631,7 +646,6 @@ export const QuickEntryView: React.FC = () => {
             ...baseData,
             paidWith: payMethod === 'SomeoneElse' ? undefined : (payMethod as PaymentSource),
             walletNeutral: payMethod === 'SomeoneElse',
-            isBigExpense,
             budgetAmountALL: isSplitWithFriend && friendShareAmount > 0 ? myShareALL : undefined,
           };
           const dateChanged = dateOverride !== originalDateOverride;
@@ -696,7 +710,6 @@ export const QuickEntryView: React.FC = () => {
               paidWith: payMethod as PaymentSource,
               budgetAmountALL: myShareALL,
               debtId: debt.id,
-              isBigExpense,
               timestamp,
             });
 
@@ -723,16 +736,13 @@ export const QuickEntryView: React.FC = () => {
             await addExpense({
               ...baseData,
               paidWith: payMethod as PaymentSource,
-              isBigExpense,
               timestamp,
             });
             const latencyMs = Math.round(performance.now() - startTime);
             setFeedback(
               dateOverride
                 ? `Logged ${formatCurrency(parsedAmount, defaultAppCurrency)} for ${dateOverride}`
-                : isBigExpense
-                  ? `Logged ${formatCurrency(parsedAmount, defaultAppCurrency)} as Planned Big Expense`
-                  : `Logged ${formatCurrency(parsedAmount, defaultAppCurrency)} in ${latencyMs}ms ⚡`
+                : `Logged ${formatCurrency(parsedAmount, defaultAppCurrency)} in ${latencyMs}ms ⚡`
             );
           }
         }
@@ -1042,39 +1052,6 @@ export const QuickEntryView: React.FC = () => {
               )}
             </div>
 
-            <div className="pt-0.5">
-              <button
-                type="button"
-                onClick={() => setIsBigExpense(!isBigExpense)}
-                className={cn(
-                  'w-full flex items-center justify-between p-2.5 rounded-2xl border text-xs font-semibold transition-all cursor-pointer text-left',
-                  isBigExpense
-                    ? 'bg-purple-50 border-purple-300 text-purple-800 shadow-xs'
-                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                )}
-              >
-                <div className="flex items-center gap-2 min-w-0">
-                  <Building2 className={cn('w-4 h-4 shrink-0', isBigExpense ? 'text-purple-600' : 'text-slate-400')} />
-                  <div className="min-w-0">
-                    <span className="block font-bold truncate">
-                      {isBigExpense ? 'Planned Big Expense (Rent / Fixed Bill)' : 'Mark as Planned Big Expense (Rent)'}
-                    </span>
-                    <span className="block text-[10px] font-normal text-slate-500 mt-0.5 leading-snug">
-                      {isBigExpense
-                        ? `Draws from buffer (${format(stats?.unpaidBig ?? 0)} unpaid) · Won't reduce daily allowance`
-                        : 'Rent & fixed bills draw from pre-planned buffer so daily budget stays accurate'}
-                    </span>
-                  </div>
-                </div>
-                <div className={cn(
-                  'w-5 h-5 rounded-lg flex items-center justify-center border transition-all shrink-0 ml-2',
-                  isBigExpense ? 'bg-purple-600 border-purple-600 text-white' : 'border-slate-300 bg-white'
-                )}>
-                  {isBigExpense && <Check className="w-3.5 h-3.5" />}
-                </div>
-              </button>
-            </div>
-
             <div className="flex justify-center">
               <div className="inline-flex p-1 rounded-2xl bg-slate-100 border border-slate-200">
                 <button
@@ -1125,15 +1102,15 @@ export const QuickEntryView: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setIsSplitWithFriend(true)}
-                    className="w-full py-2 px-3 rounded-2xl bg-slate-50 hover:bg-indigo-50 border border-slate-200 hover:border-indigo-200 text-slate-600 hover:text-indigo-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    className="w-full py-2.5 px-3 rounded-2xl bg-indigo-50/80 hover:bg-indigo-100/80 border border-indigo-200/80 text-indigo-700 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs"
                   >
-                    <Users className="w-3.5 h-3.5 text-indigo-500" />
-                    <span>Someone owes me a portion of this</span>
+                    <Users className="w-4 h-4 text-indigo-600" />
+                    <span>Split portion with a friend</span>
                   </button>
                 ) : (
-                  <div className="p-4 rounded-2xl bg-indigo-50/70 border border-indigo-200 space-y-3.5 animate-in fade-in">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <div className="p-4 rounded-3xl bg-indigo-50/50 border border-indigo-200/80 space-y-3.5 animate-in fade-in">
+                    <div className="flex items-center justify-between pb-1 border-b border-indigo-100">
+                      <span className="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
                         <Users className="w-4 h-4 text-indigo-600" />
                         Partial Expense Sharing
                       </span>
@@ -1152,28 +1129,66 @@ export const QuickEntryView: React.FC = () => {
                       </button>
                     </div>
 
+                    {convexGroups.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                          Mirror to Splitup Group (Optional)
+                        </p>
+                        <StyledSelect
+                          value={splitSyncGroupId}
+                          onChange={(val) => {
+                            setSplitSyncGroupId(val);
+                            setFriendName('');
+                          }}
+                          placeholder="— Personal Only —"
+                          options={groupOptions}
+                        />
+                      </div>
+                    )}
+
                     <div>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                        Who owes you?
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <span>Who owes you?</span>
+                        {splitSyncGroupId && (
+                          <span className="text-emerald-600 font-semibold text-[9px] flex items-center gap-0.5">
+                            <UserCheck className="w-3 h-3" /> Group Filter Active
+                          </span>
+                        )}
                       </p>
-                      <input
-                        type="text"
-                        value={friendName}
-                        onChange={(e) => setFriendName(e.target.value)}
-                        placeholder="Person Name"
-                        list="lekflow-friend-names"
-                        className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
-                      />
-                      <datalist id="lekflow-friend-names">
-                        {lendSuggestions.map((p) => (
-                          <option key={p} value={p} />
-                        ))}
-                      </datalist>
-                      <SuggestionChips
-                        options={lendSuggestions}
-                        value={friendName}
-                        onSelect={setFriendName}
-                      />
+
+                      {splitSyncGroupId && splitGroupMembers.length > 0 ? (
+                        <StyledSelect
+                          value={friendName}
+                          onChange={setFriendName}
+                          placeholder="Select Group Member"
+                          options={splitGroupMembers.map((m: string) => ({
+                            value: m,
+                            label: m,
+                            emoji: '👤',
+                          }))}
+                        />
+                      ) : (
+                        <>
+                          <input
+                            type="text"
+                            value={friendName}
+                            onChange={(e) => setFriendName(e.target.value)}
+                            placeholder="Person Name"
+                            list="lekflow-friend-names"
+                            className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                          />
+                          <datalist id="lekflow-friend-names">
+                            {lendSuggestions.map((p) => (
+                              <option key={p} value={p} />
+                            ))}
+                          </datalist>
+                          <SuggestionChips
+                            options={lendSuggestions}
+                            value={friendName}
+                            onSelect={setFriendName}
+                          />
+                        </>
+                      )}
                     </div>
 
                     <div className="space-y-1.5">
@@ -1224,7 +1239,7 @@ export const QuickEntryView: React.FC = () => {
                     </div>
 
                     {parsedAmount > 0 && friendShareAmount > 0 && (
-                      <div className="p-3 rounded-2xl bg-white border border-indigo-200 text-[11px] text-slate-700 space-y-1 font-sans">
+                      <div className="p-3 rounded-2xl bg-white border border-indigo-200 text-[11px] text-slate-700 space-y-1 font-sans shadow-2xs">
                         <div className="flex justify-between items-center">
                           <span className="text-slate-500 font-medium">Total Paid ({payMethod}):</span>
                           <span className="font-mono font-bold text-slate-900">{format(parsedAmount)}</span>
@@ -1239,28 +1254,14 @@ export const QuickEntryView: React.FC = () => {
                         </div>
                       </div>
                     )}
-
-                    {convexGroups.length > 0 && (
-                      <div className="pt-1 border-t border-indigo-100">
-                        <p className="text-[10px] font-bold text-indigo-900 uppercase tracking-wider mb-1">
-                          Also Mirror to Splitup Group
-                        </p>
-                        <StyledSelect
-                          value={splitSyncGroupId}
-                          onChange={setSplitSyncGroupId}
-                          placeholder="— Personal Only —"
-                          options={groupOptions}
-                        />
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
             )}
 
             {payMethod === 'SomeoneElse' && (
-              <div className="pt-2 p-4 rounded-2xl bg-indigo-50/60 border border-indigo-200 space-y-3.5">
-                <div className="flex items-center justify-between">
+              <div className="pt-2 p-4 rounded-3xl bg-indigo-50/60 border border-indigo-200 space-y-3.5">
+                <div className="flex items-center justify-between pb-1 border-b border-indigo-100">
                   <span className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
                     <Handshake className="w-4 h-4 text-indigo-600" />
                     Someone Else Paid For Me
@@ -1420,28 +1421,66 @@ export const QuickEntryView: React.FC = () => {
 
         {mode === 'lend' && (
           <div className="space-y-3">
+            {convexGroups.length > 0 && (
+              <div>
+                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Record in Splitup Group (Optional)
+                </p>
+                <StyledSelect
+                  value={lendSyncGroupId}
+                  onChange={(val) => {
+                    setLendSyncGroupId(val);
+                    setLendPerson('');
+                  }}
+                  placeholder="— Personal Only —"
+                  options={groupOptions}
+                />
+              </div>
+            )}
+
             <div>
-              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                Person
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                <span>Person</span>
+                {lendSyncGroupId && (
+                  <span className="text-emerald-600 font-semibold text-[9px] flex items-center gap-0.5">
+                    <UserCheck className="w-3 h-3" /> Group Filter Active
+                  </span>
+                )}
               </p>
-              <input
-                type="text"
-                value={lendPerson}
-                onChange={(e) => setLendPerson(e.target.value)}
-                placeholder="Name"
-                list="lekflow-lend-persons"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
-              />
-              <datalist id="lekflow-lend-persons">
-                {lendSuggestions.map((p) => (
-                  <option key={p} value={p} />
-                ))}
-              </datalist>
-              <SuggestionChips
-                options={lendSuggestions}
-                value={lendPerson}
-                onSelect={setLendPerson}
-              />
+
+              {lendSyncGroupId && lendGroupMembers.length > 0 ? (
+                <StyledSelect
+                  value={lendPerson}
+                  onChange={setLendPerson}
+                  placeholder="Select Group Member"
+                  options={lendGroupMembers.map((m: string) => ({
+                    value: m,
+                    label: m,
+                    emoji: '👤',
+                  }))}
+                />
+              ) : (
+                <>
+                  <input
+                    type="text"
+                    value={lendPerson}
+                    onChange={(e) => setLendPerson(e.target.value)}
+                    placeholder="Name"
+                    list="lekflow-lend-persons"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  />
+                  <datalist id="lekflow-lend-persons">
+                    {lendSuggestions.map((p) => (
+                      <option key={p} value={p} />
+                    ))}
+                  </datalist>
+                  <SuggestionChips
+                    options={lendSuggestions}
+                    value={lendPerson}
+                    onSelect={setLendPerson}
+                  />
+                </>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-2">
@@ -1519,20 +1558,6 @@ export const QuickEntryView: React.FC = () => {
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
               />
             </div>
-
-            {convexGroups.length > 0 && (
-              <div>
-                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Also Record in Splitup Group
-                </p>
-                <StyledSelect
-                  value={lendSyncGroupId}
-                  onChange={setLendSyncGroupId}
-                  placeholder="— Personal Only —"
-                  options={groupOptions}
-                />
-              </div>
-            )}
           </div>
         )}
 
