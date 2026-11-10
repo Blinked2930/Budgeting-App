@@ -37,7 +37,7 @@ export const Header: React.FC<HeaderProps> = ({ unsyncedCount }) => {
     <>
       {/* Full-width sticky background for desktop, constraining inner content to mobile width */}
       <div
-        className="w-full sticky top-0 z-20 border-b border-slate-200 bg-white"
+        className="w-full sticky top-0 z-20 border-b border-slate-200 bg-white transform-gpu antialiased"
         style={{ paddingTop: 'max(1rem, env(safe-area-inset-top))' }}
       >
         <header className="max-w-md mx-auto pb-3 px-4 flex items-center justify-end gap-2">
