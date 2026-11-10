@@ -20,7 +20,6 @@ import {
   Sparkles,
   ArrowRightLeft,
   Gift,
-  Check,
 } from 'lucide-react';
 import { useDebts } from '../hooks/useDebts';
 import {
@@ -430,52 +429,81 @@ const LedgerItemRow: React.FC<{
 };
 
 // ---------------------------------------------------------------------------
-// Dual-box settlement controls
+// Compact settlement control — one direction toggle, one amount, three methods
 // ---------------------------------------------------------------------------
 
-interface FlowBoxProps {
-  variant: 'inflow' | 'outflow';
+interface SettlementControlsProps {
+  groupName: string;
   amount: string;
   onAmountChange: (v: string) => void;
+  direction: 'inflow' | 'outflow';
+  onDirectionChange: (d: 'inflow' | 'outflow') => void;
   disabled: boolean;
-  onAction: (method: PaymentSource | 'offset') => void;
+  onMethod: (method: PaymentSource | 'offset') => void;
+  onForgive: () => void;
+  canForgive: boolean;
 }
 
-const FlowBox: React.FC<FlowBoxProps> = ({ variant, amount, onAmountChange, disabled, onAction }) => {
-  const isInflow = variant === 'inflow';
-  const headerLabel = isInflow ? 'I Received' : 'I Paid';
-  const headerSub = isInflow ? 'money / value came to me' : 'money / value left me';
-  const Icon = isInflow ? ArrowDownLeft : ArrowUpRight;
-  const amountNum = parseFloat(amount) || 0;
+const SettlementControls: React.FC<SettlementControlsProps> = ({
+  groupName,
+  amount,
+  onAmountChange,
+  direction,
+  onDirectionChange,
+  disabled,
+  onMethod,
+  onForgive,
+  canForgive,
+}) => {
+  const parsed = parseFloat(amount);
+  const amountNum = !Number.isNaN(parsed) && parsed > 0 ? parsed : 0;
   const canAct = !disabled && amountNum > 0;
+  const isInflow = direction === 'inflow';
 
   return (
-    <div
-      className={cn(
-        'p-2.5 rounded-xl border space-y-1.5 transition-colors',
-        isInflow
-          ? 'bg-emerald-50/50 border-emerald-200/70'
-          : 'bg-rose-50/50 border-rose-200/70'
-      )}
-    >
-      <div className="flex items-start justify-between gap-1">
-        <div className="min-w-0">
-          <p
-            className={cn(
-              'text-[10px] font-bold uppercase tracking-wider flex items-center gap-1',
-              isInflow ? 'text-emerald-800' : 'text-rose-800'
-            )}
-          >
-            <Icon className={cn('w-3 h-3', isInflow ? 'text-emerald-600' : 'text-rose-600')} />
-            {headerLabel}
-          </p>
-          <p className={cn('text-[9px] mt-0.5', isInflow ? 'text-emerald-700/70' : 'text-rose-700/70')}>
-            {headerSub}
-          </p>
-        </div>
+    <div className="rounded-2xl bg-white border border-slate-200/80 p-3 space-y-2.5">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+          Settle with {groupName}
+        </p>
+        <p className="text-[9px] text-slate-400 italic">tap a method to apply</p>
       </div>
 
-      <div className="flex items-center gap-1">
+      {/* Direction segmented control */}
+      <div className="grid grid-cols-2 gap-1 p-0.5 rounded-xl bg-slate-100/70 border border-slate-200/60">
+        <button
+          type="button"
+          onClick={() => onDirectionChange('inflow')}
+          disabled={disabled}
+          className={cn(
+            'flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50',
+            isInflow
+              ? 'bg-white text-emerald-700 shadow-2xs border border-emerald-200/70'
+              : 'text-slate-500 hover:text-slate-700'
+          )}
+        >
+          <ArrowDownLeft className={cn('w-3 h-3', isInflow ? 'text-emerald-600' : 'text-slate-400')} />
+          They paid me
+        </button>
+        <button
+          type="button"
+          onClick={() => onDirectionChange('outflow')}
+          disabled={disabled}
+          className={cn(
+            'flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer disabled:opacity-50',
+            !isInflow
+              ? 'bg-white text-rose-700 shadow-2xs border border-rose-200/70'
+              : 'text-slate-500 hover:text-slate-700'
+          )}
+        >
+          <ArrowUpRight className={cn('w-3 h-3', !isInflow ? 'text-rose-600' : 'text-slate-400')} />
+          I paid them
+        </button>
+      </div>
+
+      {/* Hero amount input */}
+      <div className="flex items-baseline justify-center gap-1.5 py-1">
         <input
           type="number"
           inputMode="decimal"
@@ -484,61 +512,65 @@ const FlowBox: React.FC<FlowBoxProps> = ({ variant, amount, onAmountChange, disa
           onChange={(e) => onAmountChange(e.target.value)}
           placeholder="0"
           className={cn(
-            'flex-1 min-w-0 px-2 py-1 rounded-md bg-white border text-xs font-mono font-bold text-right',
-            isInflow
-              ? 'border-emerald-200 focus:border-emerald-500 text-emerald-900'
-              : 'border-rose-200 focus:border-rose-500 text-rose-900',
-            'focus:outline-none'
+            'w-32 bg-transparent text-right font-mono font-extrabold text-2xl tabular-nums placeholder:text-slate-300 focus:outline-none transition-colors',
+            amountNum > 0
+              ? isInflow
+                ? 'text-emerald-700'
+                : 'text-rose-700'
+              : 'text-slate-900'
           )}
         />
-        <span className={cn('text-[9px] font-mono font-semibold', isInflow ? 'text-emerald-700/70' : 'text-rose-700/70')}>
-          ALL
-        </span>
+        <span className="text-[11px] font-mono font-bold text-slate-400">ALL</span>
       </div>
 
-      <div className="grid grid-cols-3 gap-1">
+      {/* Method row — one tap fires the action */}
+      <div className="grid grid-cols-3 gap-1.5">
         <button
           type="button"
-          onClick={() => onAction('Cash')}
+          onClick={() => onMethod('Cash')}
           disabled={!canAct}
           className={cn(
-            'py-1 rounded-md text-[10px] font-bold border flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed',
-            isInflow
-              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200/70'
-              : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200/70'
+            'py-2 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-[0.97] border border-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer flex flex-col items-center gap-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100'
           )}
         >
-          <Banknote className="w-3 h-3" />
+          <Banknote className="w-4 h-4 text-teal-600" />
           Cash
         </button>
         <button
           type="button"
-          onClick={() => onAction('Card')}
+          onClick={() => onMethod('Card')}
           disabled={!canAct}
           className={cn(
-            'py-1 rounded-md text-[10px] font-bold border flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed',
-            isInflow
-              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200/70'
-              : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200/70'
+            'py-2 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-[0.97] border border-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer flex flex-col items-center gap-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100'
           )}
         >
-          <Wallet className="w-3 h-3" />
+          <Wallet className="w-4 h-4 text-indigo-600" />
           Bank
         </button>
         <button
           type="button"
-          onClick={() => onAction('offset')}
+          onClick={() => onMethod('offset')}
           disabled={!canAct}
           className={cn(
-            'py-1 rounded-md text-[10px] font-bold border flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed',
-            isInflow
-              ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border-indigo-200/70'
-              : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200/70'
+            'py-2 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-[0.97] border border-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer flex flex-col items-center gap-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100'
           )}
-          title="Non-cash offset — no wallet movement"
         >
-          <ArrowRightLeft className="w-3 h-3" />
+          <ArrowRightLeft className="w-4 h-4 text-amber-600" />
           Offset
+        </button>
+      </div>
+
+      {/* Forgive — subtle, right-aligned, applies to typed amount only */}
+      <div className="flex justify-end pt-0.5">
+        <button
+          type="button"
+          onClick={onForgive}
+          disabled={!canForgive || !canAct}
+          className="text-[10px] font-semibold text-amber-700/80 hover:text-amber-800 cursor-pointer flex items-center gap-1 px-1 py-0.5 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          title="Forgive the entered amount"
+        >
+          <Gift className="w-3 h-3" />
+          Forgive this amount
         </button>
       </div>
     </div>
@@ -550,8 +582,8 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
   const [showNewForm, setShowNewForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const [inflowMap, setInflowMap] = useState<Record<string, string>>({});
-  const [outflowMap, setOutflowMap] = useState<Record<string, string>>({});
+  const [amountMap, setAmountMap] = useState<Record<string, string>>({});
+  const [directionMap, setDirectionMap] = useState<Record<string, 'inflow' | 'outflow'>>({});
   const [busyPerson, setBusyPerson] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
@@ -605,71 +637,36 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
   }, [groups, expandedKey]);
 
   /**
-   * Apply a flow action against a person's open debts.
+   * Apply a flow against a person's open debts.
    *
-   * `flow` says whether money came IN or went OUT of my wallet (or, for
-   * offset, which direction value flowed).
+   * flow 'inflow'  (they paid me)  → pays down OwedToMe, spills into growing iOwe.
+   * flow 'outflow' (I paid them)   → pays down iOwe, spills into growing OwedToMe.
    *
-   * `method`:
-   *   'Cash'   → real cash wallet movement
-   *   'Card'   → real bank wallet movement
-   *   'offset' → no wallet movement, value offset only
-   *
-   * The matrix of (flow × method) vs. debt direction:
-   *
-   *   INFLOW + Cash/Card  → they paid me.
-   *     Against an OwedToMe debt: pay it down (settleDebtCash).
-   *     Against an iOwe debt:     they paid on my behalf → grow the debt
-   *                               (settleDebtOffset, iOweMore).
-   *
-   *   INFLOW + offset     → I received value from them without cash.
-   *     Against an OwedToMe debt: pay it down (settleDebtOffset, iOweMore).
-   *     Against an iOwe debt:     grow the debt (settleDebtOffset, iOweMore).
-   *
-   *   OUTFLOW + Cash/Card → I paid them.
-   *     Against an OwedToMe debt: I'm growing what they owe me OR they
-   *                               paid me back — ambiguous. We treat it as
-   *                               "I gave them money" → they now owe me more
-   *                               (grow with settleDebtOffset, theyOweMore).
-   *     Against an iOwe debt:     pay it down (settleDebtCash).
-   *
-   *   OUTFLOW + offset    → They received value from me without cash.
-   *     Against an OwedToMe debt: grow what they owe me
-   *                               (settleDebtOffset, theyOweMore).
-   *     Against an iOwe debt:     pay it down (settleDebtOffset, theyOweMore).
-   *
-   * The panel walks the person's open debts oldest-first, applying as much
-   * of the entered amount as each debt can absorb in the *primary* direction
-   * (pays-down first), then any residual grows the first debt of the
-   * opposite direction (or creates fresh growth on an existing record).
+   * method 'Cash'/'Card' → real wallet movement via settleDebtCash on paydown,
+   *                        and settleDebtOffset (grow) on spillover.
+   * method 'offset'      → non-cash, always settleDebtOffset.
    */
   const applyFlow = async (
     g: CounterpartyGroup,
     flow: 'inflow' | 'outflow',
     method: PaymentSource | 'offset'
   ) => {
-    const raw = flow === 'inflow' ? inflowMap[g.key] : outflowMap[g.key];
+    const raw = amountMap[g.key];
     const parsed = parseFloat(raw ?? '');
     const amount = !Number.isNaN(parsed) && parsed > 0 ? parsed : 0;
     if (amount <= 0) return;
 
     setBusyPerson(g.key);
 
-    // Sort oldest-first so we pay down the oldest debts first.
     const sortedOpen = [...g.openDebts].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
 
     let remainingToApply = amount;
-
-    // Which debt direction does this flow pay DOWN?
-    //  INFLOW  + any method → pays down OwedToMe
-    //  OUTFLOW + any method → pays down iOwe
     const paydownDirection: DebtDirection = flow === 'inflow' ? 'OwedToMe' : 'iOwe';
-    // Which direction does this flow GROW (if residual spills over)?
     const growDirection: DebtDirection = flow === 'inflow' ? 'iOwe' : 'OwedToMe';
 
-    // Phase 1 — pay down debts in the natural direction.
+    // Phase 1 — pay down the natural direction.
     for (const d of sortedOpen) {
       if (remainingToApply <= 0) break;
       if (d.direction !== paydownDirection) continue;
@@ -678,61 +675,110 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
       if (settleAmt <= 0) continue;
 
       if (method === 'offset') {
-        // Non-cash offset against the natural direction.
         const dir: 'iOweMore' | 'theyOweMore' =
           d.direction === 'OwedToMe' ? 'iOweMore' : 'theyOweMore';
         await settleDebtOffset(d.id, settleAmt, dir);
       } else {
         await settleDebtCash(d.id, settleAmt, method);
       }
-
       remainingToApply -= settleAmt;
     }
 
-    // Phase 2 — any residual grows the opposite-direction debt.
+    // Phase 2 — residual grows the opposite direction.
     if (remainingToApply > 0) {
       const growTargets = sortedOpen.filter((d) => d.direction === growDirection);
-
       if (growTargets.length > 0) {
         for (const d of growTargets) {
           if (remainingToApply <= 0) break;
-          const growAmt = remainingToApply;
           const dir: 'iOweMore' | 'theyOweMore' =
             d.direction === 'iOwe' ? 'iOweMore' : 'theyOweMore';
-          await settleDebtOffset(d.id, growAmt, dir);
-          remainingToApply -= growAmt;
+          await settleDebtOffset(d.id, remainingToApply, dir);
+          remainingToApply = 0;
         }
       } else {
-        // No existing debt of the opposite direction — create a new one
-        // (without a wallet movement, since the "flow" here is the growth).
-        const newDebt = await addDebt({
+        await addDebt({
           counterparty: g.name,
           direction: growDirection,
           amountALL: remainingToApply,
           note: method === 'offset' ? 'Offset' : `${flow === 'inflow' ? 'Received' : 'Paid'} (${method})`,
         });
-        // We already counted this as a wallet-flow at the caller level; the
-        // addDebt above would try to create a wallet expense if we pass
-        // moveWalletWith. We don't, so this is purely a ledger entry.
-        void newDebt;
         remainingToApply = 0;
       }
     }
 
     setBusyPerson(null);
-    setInflowMap((prev) => ({ ...prev, [g.key]: '' }));
-    setOutflowMap((prev) => ({ ...prev, [g.key]: '' }));
+    setAmountMap((prev) => ({ ...prev, [g.key]: '' }));
   };
 
+  /**
+   * Forgive the typed amount — clamped to the total open balance for this
+   * person. Partial forgiveness reduces remainingALL on the oldest debts
+   * first (rather than zeroing everything like a full write-off).
+   */
   const handleForgive = async (g: CounterpartyGroup) => {
-    if (g.openDebts.length === 0) return;
+    const raw = amountMap[g.key];
+    const parsed = parseFloat(raw ?? '');
+    const requested = !Number.isNaN(parsed) && parsed > 0 ? parsed : 0;
+    if (requested <= 0) return;
+
+    const totalOpen = g.receivables + g.payables;
+    if (totalOpen <= 0) return;
+
+    const amount = Math.min(requested, totalOpen);
     setBusyPerson(g.key);
-    for (const d of g.openDebts) {
-      await writeOffDebt(d.id);
+
+    const sortedOpen = [...g.openDebts].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+
+    let remaining = amount;
+    for (const d of sortedOpen) {
+      if (remaining <= 0) break;
+      const slice = Math.min(d.remainingALL, remaining);
+
+      if (slice >= d.remainingALL) {
+        // Full forgiveness of this row
+        await writeOffDebt(d.id);
+      } else {
+        // Partial forgiveness — reduce remainingALL and log a forgiveness
+        // expense for just the forgiven slice, keeping sign consistent with
+        // writeOffDebt (iOwe = negative, OwedToMe = positive).
+        const isIOwe = d.direction === 'iOwe';
+        const baseName = isIOwe
+          ? `Forgiven by ${d.counterparty}`
+          : `Forgiven to ${d.counterparty}`;
+        const itemName = d.note ? `${baseName} (${d.note})` : baseName;
+
+        await db.expenses.add({
+          id: crypto.randomUUID(),
+          amount: isIOwe ? -slice : slice,
+          currency: 'ALL',
+          amountInALL: slice,
+          category: 'Other',
+          itemName,
+          timestamp: new Date().toISOString(),
+          isSynced: false,
+          updatedAt: new Date().toISOString(),
+          walletNeutral: true,
+          isForgiveness: true,
+          debtId: d.id,
+        });
+
+        const newRemaining = d.remainingALL - slice;
+        await db.debts.update(d.id, {
+          remainingALL: newRemaining,
+          status: newRemaining <= 0 ? 'resolved' : 'open',
+          resolvedAt: newRemaining <= 0 ? new Date().toISOString() : undefined,
+          isSynced: false,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
+      remaining -= slice;
     }
+
     setBusyPerson(null);
-    setInflowMap((prev) => ({ ...prev, [g.key]: '' }));
-    setOutflowMap((prev) => ({ ...prev, [g.key]: '' }));
+    setAmountMap((prev) => ({ ...prev, [g.key]: '' }));
   };
 
   const handleDeleteDebt = async (debt: DebtRecord) => {
@@ -774,7 +820,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
         className="w-full max-w-lg max-h-[85vh] flex flex-col bg-white border border-slate-200/90 rounded-3xl shadow-xl overflow-hidden font-sans my-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Clean Header */}
+        {/* Header */}
         <div className="flex items-center justify-between px-4.5 pt-3.5 pb-2.5 border-b border-slate-100 shrink-0 bg-white">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center">
@@ -794,7 +840,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Delicate Net Position Card */}
+        {/* Net Position Card */}
         <div className="px-4.5 pt-3 shrink-0">
           <div className="p-3.5 rounded-2xl bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 border border-slate-200/80 shadow-2xs flex items-center justify-between">
             <div>
@@ -827,7 +873,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        {/* Search & Add Controls */}
+        {/* Search & Add */}
         <div className="px-4.5 pt-2.5 pb-2 flex items-center justify-between gap-2 shrink-0">
           <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -850,7 +896,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Content Feed */}
+        {/* Feed */}
         <div className="flex-1 min-h-0 overflow-y-auto px-4.5 pb-4 space-y-2.5 touch-pan-y">
           {showNewForm && (
             <NewDebtForm
@@ -878,6 +924,8 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                 );
                 const isBusy = busyPerson === g.key;
                 const hasOpen = g.openDebts.length > 0;
+                const currentDirection =
+                  directionMap[g.key] ?? (net < 0 ? 'outflow' : 'inflow');
 
                 return (
                   <div
@@ -928,60 +976,24 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
 
                     {isExpanded && (
                       <div className="px-3 pb-3 pt-1.5 space-y-2.5 border-t border-slate-100 bg-slate-50/40">
-                        {/* Dual-box Inflow / Outflow settlement controls */}
                         {hasOpen && (
-                          <div className="p-2.5 rounded-xl bg-white border border-slate-200/80 space-y-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                                Settle / Adjust Balance
-                              </p>
-                              <p className="text-[9px] text-slate-400 italic">
-                                Cash / Bank move the wallet · Offset doesn't
-                              </p>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2">
-                              <FlowBox
-                                variant="inflow"
-                                amount={inflowMap[g.key] ?? ''}
-                                onAmountChange={(v) =>
-                                  setInflowMap((prev) => ({ ...prev, [g.key]: v }))
-                                }
-                                disabled={isBusy}
-                                onAction={(method) => applyFlow(g, 'inflow', method)}
-                              />
-                              <FlowBox
-                                variant="outflow"
-                                amount={outflowMap[g.key] ?? ''}
-                                onAmountChange={(v) =>
-                                  setOutflowMap((prev) => ({ ...prev, [g.key]: v }))
-                                }
-                                disabled={isBusy}
-                                onAction={(method) => applyFlow(g, 'outflow', method)}
-                              />
-                            </div>
-
-                            <button
-                              type="button"
-                              disabled={isBusy}
-                              onClick={() => handleForgive(g)}
-                              className="w-full py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-200/70 cursor-pointer flex items-center justify-center gap-1 transition-colors disabled:opacity-50"
-                              title="Forgive all open balances with this person (logs a gift/write-off)"
-                            >
-                              <Gift className="w-3 h-3 text-amber-600" />
-                              Forgive / Gift full balance
-                            </button>
-
-                            {isBusy && (
-                              <p className="text-[9px] text-slate-400 text-center flex items-center justify-center gap-1">
-                                <Check className="w-3 h-3 text-emerald-500" />
-                                Applying…
-                              </p>
-                            )}
-                          </div>
+                          <SettlementControls
+                            groupName={g.name}
+                            amount={amountMap[g.key] ?? ''}
+                            onAmountChange={(v) =>
+                              setAmountMap((prev) => ({ ...prev, [g.key]: v }))
+                            }
+                            direction={currentDirection}
+                            onDirectionChange={(d) =>
+                              setDirectionMap((prev) => ({ ...prev, [g.key]: d }))
+                            }
+                            disabled={isBusy}
+                            onMethod={(method) => applyFlow(g, currentDirection, method)}
+                            onForgive={() => handleForgive(g)}
+                            canForgive={g.receivables + g.payables > 0}
+                          />
                         )}
 
-                        {/* Person Ledger Feed */}
                         <div className="space-y-1.5">
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-0.5">
                             Transaction Feed
@@ -1001,7 +1013,6 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                 );
               })}
 
-              {/* Group Balances */}
               {Array.isArray(convexGroups) && convexGroups.length > 0 && (
                 <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
