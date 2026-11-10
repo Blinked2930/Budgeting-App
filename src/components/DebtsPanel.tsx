@@ -23,6 +23,7 @@ import {
   RotateCcw,
   Sparkles,
   Calendar,
+  Ban,
 } from 'lucide-react';
 import { useDebts } from '../hooks/useDebts';
 import {
@@ -443,7 +444,7 @@ const DebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void
   }
 
   return (
-    <div className="p-3.5 rounded-2xl bg-white border border-slate-200 space-y-2.5 shadow-xs font-sans">
+    <div className="p-3 rounded-2xl bg-white border border-slate-200 space-y-2 shadow-xs font-sans">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span
@@ -510,7 +511,7 @@ const DebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void
         )}
       </div>
 
-      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+      <div className="p-2 rounded-xl bg-slate-50 border border-slate-200 space-y-1.5">
         <div className="flex items-center gap-2">
           <div className="flex-1 min-w-0">
             <input
@@ -578,9 +579,10 @@ const DebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void
               type="button"
               onClick={handleWriteOff}
               disabled={busyAction !== null}
-              className="py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-amber-200"
+              className="py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-amber-200 flex items-center justify-center gap-0.5"
               title="Forgive debt"
             >
+              <Ban className="w-3 h-3 text-amber-600" />
               Forgive
             </button>
           </div>
@@ -620,9 +622,10 @@ const DebtRow: React.FC<{ debt: DebtRecord; onDelete: (debt: DebtRecord) => void
                 type="button"
                 onClick={handleWriteOff}
                 disabled={busyAction !== null}
-                className="py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-amber-200"
+                className="py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 text-[10px] font-bold cursor-pointer disabled:opacity-50 border border-amber-200 flex items-center justify-center gap-0.5"
                 title="They forgave this debt"
               >
+                <Ban className="w-3 h-3 text-amber-600" />
                 They Forgave
               </button>
             </div>
@@ -738,6 +741,14 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
     });
   }, [debts, searchQuery]);
 
+  // Set the first active group expanded by default when panel opens or search changes
+  useEffect(() => {
+    if (groups.length > 0 && !expandedKey) {
+      const firstActive = groups.find((g) => g.openDebts.length > 0);
+      if (firstActive) setExpandedKey(firstActive.key);
+    }
+  }, [groups]);
+
   const activeGroups = useMemo(() => groups.filter((g) => g.openDebts.length > 0), [groups]);
   const fulfilledList = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -796,6 +807,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
         className="w-full max-w-lg max-h-[85vh] flex flex-col bg-white border border-slate-200 rounded-3xl shadow-2xl overflow-hidden font-sans my-auto"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Header */}
         <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-slate-200 shrink-0 bg-white">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center">
@@ -803,7 +815,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
             </div>
             <div>
               <h2 className="text-base font-extrabold text-slate-900">Debts & Group Balances</h2>
-              <p className="text-[10px] text-slate-400">Personal loans, splits, and Splitup sync</p>
+              <p className="text-[10px] text-slate-400">Personal loans, splits, and group balances</p>
             </div>
           </div>
           <button
@@ -815,8 +827,9 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
+        {/* Net Position Summary */}
         <div className="px-5 pt-4 shrink-0">
-          <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white shadow-md flex items-center justify-between">
+          <div className="p-4 rounded-2xl bg-slate-900 text-white shadow-md flex items-center justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Net Position</p>
               <p
@@ -847,6 +860,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
+        {/* View Tabs */}
         <div className="px-5 pt-3 shrink-0">
           <div className="p-1 bg-slate-100 rounded-2xl grid grid-cols-3 text-xs font-bold">
             <button
@@ -885,6 +899,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
+        {/* Controls */}
         <div className="px-5 pt-3 pb-2 flex items-center justify-between gap-2 shrink-0">
           <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -907,6 +922,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
+        {/* Content List */}
         <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5 space-y-3 touch-pan-y">
           {showNewForm && (
             <NewDebtForm
