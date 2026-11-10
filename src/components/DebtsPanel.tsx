@@ -20,12 +20,13 @@ import {
   Sparkles,
   ArrowRightLeft,
   Gift,
+  Check,
 } from 'lucide-react';
 import { useDebts } from '../hooks/useDebts';
 import {
   addDebt,
   settleDebtCash,
-  settleDebtNonCash,
+  settleDebtOffset,
   writeOffDebt,
   deleteDebt,
   getCounterparties,
@@ -428,12 +429,129 @@ const LedgerItemRow: React.FC<{
   );
 };
 
+// ---------------------------------------------------------------------------
+// Dual-box settlement controls
+// ---------------------------------------------------------------------------
+
+interface FlowBoxProps {
+  variant: 'inflow' | 'outflow';
+  amount: string;
+  onAmountChange: (v: string) => void;
+  disabled: boolean;
+  onAction: (method: PaymentSource | 'offset') => void;
+}
+
+const FlowBox: React.FC<FlowBoxProps> = ({ variant, amount, onAmountChange, disabled, onAction }) => {
+  const isInflow = variant === 'inflow';
+  const headerLabel = isInflow ? 'I Received' : 'I Paid';
+  const headerSub = isInflow ? 'money / value came to me' : 'money / value left me';
+  const Icon = isInflow ? ArrowDownLeft : ArrowUpRight;
+  const amountNum = parseFloat(amount) || 0;
+  const canAct = !disabled && amountNum > 0;
+
+  return (
+    <div
+      className={cn(
+        'p-2.5 rounded-xl border space-y-1.5 transition-colors',
+        isInflow
+          ? 'bg-emerald-50/50 border-emerald-200/70'
+          : 'bg-rose-50/50 border-rose-200/70'
+      )}
+    >
+      <div className="flex items-start justify-between gap-1">
+        <div className="min-w-0">
+          <p
+            className={cn(
+              'text-[10px] font-bold uppercase tracking-wider flex items-center gap-1',
+              isInflow ? 'text-emerald-800' : 'text-rose-800'
+            )}
+          >
+            <Icon className={cn('w-3 h-3', isInflow ? 'text-emerald-600' : 'text-rose-600')} />
+            {headerLabel}
+          </p>
+          <p className={cn('text-[9px] mt-0.5', isInflow ? 'text-emerald-700/70' : 'text-rose-700/70')}>
+            {headerSub}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1">
+        <input
+          type="number"
+          inputMode="decimal"
+          step="any"
+          value={amount}
+          onChange={(e) => onAmountChange(e.target.value)}
+          placeholder="0"
+          className={cn(
+            'flex-1 min-w-0 px-2 py-1 rounded-md bg-white border text-xs font-mono font-bold text-right',
+            isInflow
+              ? 'border-emerald-200 focus:border-emerald-500 text-emerald-900'
+              : 'border-rose-200 focus:border-rose-500 text-rose-900',
+            'focus:outline-none'
+          )}
+        />
+        <span className={cn('text-[9px] font-mono font-semibold', isInflow ? 'text-emerald-700/70' : 'text-rose-700/70')}>
+          ALL
+        </span>
+      </div>
+
+      <div className="grid grid-cols-3 gap-1">
+        <button
+          type="button"
+          onClick={() => onAction('Cash')}
+          disabled={!canAct}
+          className={cn(
+            'py-1 rounded-md text-[10px] font-bold border flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed',
+            isInflow
+              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200/70'
+              : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200/70'
+          )}
+        >
+          <Banknote className="w-3 h-3" />
+          Cash
+        </button>
+        <button
+          type="button"
+          onClick={() => onAction('Card')}
+          disabled={!canAct}
+          className={cn(
+            'py-1 rounded-md text-[10px] font-bold border flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed',
+            isInflow
+              ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200/70'
+              : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-200/70'
+          )}
+        >
+          <Wallet className="w-3 h-3" />
+          Bank
+        </button>
+        <button
+          type="button"
+          onClick={() => onAction('offset')}
+          disabled={!canAct}
+          className={cn(
+            'py-1 rounded-md text-[10px] font-bold border flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed',
+            isInflow
+              ? 'bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border-indigo-200/70'
+              : 'bg-amber-50 hover:bg-amber-100 text-amber-800 border-amber-200/70'
+          )}
+          title="Non-cash offset — no wallet movement"
+        >
+          <ArrowRightLeft className="w-3 h-3" />
+          Offset
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
   const { debts, totalOwedToMe, totalIOwe, netBalance } = useDebts();
   const [showNewForm, setShowNewForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
-  const [actionAmountMap, setActionAmountMap] = useState<Record<string, string>>({});
+  const [inflowMap, setInflowMap] = useState<Record<string, string>>({});
+  const [outflowMap, setOutflowMap] = useState<Record<string, string>>({});
   const [busyPerson, setBusyPerson] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
@@ -484,57 +602,137 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
     if (groups.length > 0 && !expandedKey) {
       setExpandedKey(groups[0].key);
     }
-  }, [groups]);
+  }, [groups, expandedKey]);
 
-  const handlePersonAction = async (
+  /**
+   * Apply a flow action against a person's open debts.
+   *
+   * `flow` says whether money came IN or went OUT of my wallet (or, for
+   * offset, which direction value flowed).
+   *
+   * `method`:
+   *   'Cash'   → real cash wallet movement
+   *   'Card'   → real bank wallet movement
+   *   'offset' → no wallet movement, value offset only
+   *
+   * The matrix of (flow × method) vs. debt direction:
+   *
+   *   INFLOW + Cash/Card  → they paid me.
+   *     Against an OwedToMe debt: pay it down (settleDebtCash).
+   *     Against an iOwe debt:     they paid on my behalf → grow the debt
+   *                               (settleDebtOffset, iOweMore).
+   *
+   *   INFLOW + offset     → I received value from them without cash.
+   *     Against an OwedToMe debt: pay it down (settleDebtOffset, iOweMore).
+   *     Against an iOwe debt:     grow the debt (settleDebtOffset, iOweMore).
+   *
+   *   OUTFLOW + Cash/Card → I paid them.
+   *     Against an OwedToMe debt: I'm growing what they owe me OR they
+   *                               paid me back — ambiguous. We treat it as
+   *                               "I gave them money" → they now owe me more
+   *                               (grow with settleDebtOffset, theyOweMore).
+   *     Against an iOwe debt:     pay it down (settleDebtCash).
+   *
+   *   OUTFLOW + offset    → They received value from me without cash.
+   *     Against an OwedToMe debt: grow what they owe me
+   *                               (settleDebtOffset, theyOweMore).
+   *     Against an iOwe debt:     pay it down (settleDebtOffset, theyOweMore).
+   *
+   * The panel walks the person's open debts oldest-first, applying as much
+   * of the entered amount as each debt can absorb in the *primary* direction
+   * (pays-down first), then any residual grows the first debt of the
+   * opposite direction (or creates fresh growth on an existing record).
+   */
+  const applyFlow = async (
     g: CounterpartyGroup,
-    actionType: 'pay_cash' | 'pay_card' | 'offset_cash' | 'offset_card' | 'forgive'
+    flow: 'inflow' | 'outflow',
+    method: PaymentSource | 'offset'
   ) => {
-    const net = g.receivables - g.payables;
-    const defaultAmount = Math.abs(net);
-    const inputVal = actionAmountMap[g.key];
-    const parsed = parseFloat(inputVal ?? '');
-    const amountToApply = !Number.isNaN(parsed) && parsed > 0 ? parsed : defaultAmount;
+    const raw = flow === 'inflow' ? inflowMap[g.key] : outflowMap[g.key];
+    const parsed = parseFloat(raw ?? '');
+    const amount = !Number.isNaN(parsed) && parsed > 0 ? parsed : 0;
+    if (amount <= 0) return;
 
-    if (amountToApply <= 0) return;
     setBusyPerson(g.key);
 
-    let remainingToApply = amountToApply;
+    // Sort oldest-first so we pay down the oldest debts first.
     const sortedOpen = [...g.openDebts].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
     );
 
+    let remainingToApply = amount;
+
+    // Which debt direction does this flow pay DOWN?
+    //  INFLOW  + any method → pays down OwedToMe
+    //  OUTFLOW + any method → pays down iOwe
+    const paydownDirection: DebtDirection = flow === 'inflow' ? 'OwedToMe' : 'iOwe';
+    // Which direction does this flow GROW (if residual spills over)?
+    const growDirection: DebtDirection = flow === 'inflow' ? 'iOwe' : 'OwedToMe';
+
+    // Phase 1 — pay down debts in the natural direction.
     for (const d of sortedOpen) {
       if (remainingToApply <= 0) break;
-      const settleAmt = Math.min(d.remainingALL, remainingToApply);
+      if (d.direction !== paydownDirection) continue;
 
-      if (actionType === 'pay_cash') {
-        await settleDebtCash(d.id, settleAmt, 'Cash');
-      } else if (actionType === 'pay_card') {
-        await settleDebtCash(d.id, settleAmt, 'Card');
-      } else if (actionType === 'offset_cash') {
-        await settleDebtNonCash(d.id, settleAmt, 'Cash');
-      } else if (actionType === 'offset_card') {
-        await settleDebtNonCash(d.id, settleAmt, 'Card');
-      } else if (actionType === 'forgive') {
-        if (settleAmt >= d.remainingALL) {
-          await writeOffDebt(d.id);
-        } else {
-          const newRemaining = d.remainingALL - settleAmt;
-          await db.debts.update(d.id, {
-            remainingALL: newRemaining,
-            status: newRemaining === 0 ? 'resolved' : 'open',
-            resolvedAt: newRemaining === 0 ? new Date().toISOString() : undefined,
-            updatedAt: new Date().toISOString(),
-          });
-        }
+      const settleAmt = Math.min(d.remainingALL, remainingToApply);
+      if (settleAmt <= 0) continue;
+
+      if (method === 'offset') {
+        // Non-cash offset against the natural direction.
+        const dir: 'iOweMore' | 'theyOweMore' =
+          d.direction === 'OwedToMe' ? 'iOweMore' : 'theyOweMore';
+        await settleDebtOffset(d.id, settleAmt, dir);
+      } else {
+        await settleDebtCash(d.id, settleAmt, method);
       }
 
       remainingToApply -= settleAmt;
     }
 
+    // Phase 2 — any residual grows the opposite-direction debt.
+    if (remainingToApply > 0) {
+      const growTargets = sortedOpen.filter((d) => d.direction === growDirection);
+
+      if (growTargets.length > 0) {
+        for (const d of growTargets) {
+          if (remainingToApply <= 0) break;
+          const growAmt = remainingToApply;
+          const dir: 'iOweMore' | 'theyOweMore' =
+            d.direction === 'iOwe' ? 'iOweMore' : 'theyOweMore';
+          await settleDebtOffset(d.id, growAmt, dir);
+          remainingToApply -= growAmt;
+        }
+      } else {
+        // No existing debt of the opposite direction — create a new one
+        // (without a wallet movement, since the "flow" here is the growth).
+        const newDebt = await addDebt({
+          counterparty: g.name,
+          direction: growDirection,
+          amountALL: remainingToApply,
+          note: method === 'offset' ? 'Offset' : `${flow === 'inflow' ? 'Received' : 'Paid'} (${method})`,
+        });
+        // We already counted this as a wallet-flow at the caller level; the
+        // addDebt above would try to create a wallet expense if we pass
+        // moveWalletWith. We don't, so this is purely a ledger entry.
+        void newDebt;
+        remainingToApply = 0;
+      }
+    }
+
     setBusyPerson(null);
-    setActionAmountMap((prev) => ({ ...prev, [g.key]: '' }));
+    setInflowMap((prev) => ({ ...prev, [g.key]: '' }));
+    setOutflowMap((prev) => ({ ...prev, [g.key]: '' }));
+  };
+
+  const handleForgive = async (g: CounterpartyGroup) => {
+    if (g.openDebts.length === 0) return;
+    setBusyPerson(g.key);
+    for (const d of g.openDebts) {
+      await writeOffDebt(d.id);
+    }
+    setBusyPerson(null);
+    setInflowMap((prev) => ({ ...prev, [g.key]: '' }));
+    setOutflowMap((prev) => ({ ...prev, [g.key]: '' }));
   };
 
   const handleDeleteDebt = async (debt: DebtRecord) => {
@@ -679,7 +877,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                   (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
                 );
                 const isBusy = busyPerson === g.key;
-                const currentActionInput = actionAmountMap[g.key] ?? '';
+                const hasOpen = g.openDebts.length > 0;
 
                 return (
                   <div
@@ -730,84 +928,56 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
 
                     {isExpanded && (
                       <div className="px-3 pb-3 pt-1.5 space-y-2.5 border-t border-slate-100 bg-slate-50/40">
-                        {/* Person Settlement Controls */}
-                        {net !== 0 && (
+                        {/* Dual-box Inflow / Outflow settlement controls */}
+                        {hasOpen && (
                           <div className="p-2.5 rounded-xl bg-white border border-slate-200/80 space-y-2">
                             <div className="flex items-center justify-between gap-2">
                               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                                 Settle / Adjust Balance
                               </p>
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="number"
-                                  inputMode="decimal"
-                                  step="any"
-                                  placeholder={String(Math.abs(net))}
-                                  value={currentActionInput}
-                                  onChange={(e) =>
-                                    setActionAmountMap({ ...actionAmountMap, [g.key]: e.target.value })
-                                  }
-                                  className="w-20 px-2 py-0.5 rounded-md bg-slate-50 border border-slate-200 text-xs font-mono font-bold text-right text-slate-900 focus:outline-none focus:border-indigo-500"
-                                />
-                                <span className="text-[9px] font-mono text-slate-400">ALL</span>
-                              </div>
+                              <p className="text-[9px] text-slate-400 italic">
+                                Cash / Bank move the wallet · Offset doesn't
+                              </p>
                             </div>
 
-                            <div className="space-y-1">
-                              <div className="grid grid-cols-2 gap-1">
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() => handlePersonAction(g, 'pay_cash')}
-                                  className="py-1 px-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-200/60 cursor-pointer flex items-center justify-center gap-1 transition-colors disabled:opacity-50"
-                                >
-                                  <Banknote className="w-3 h-3 text-emerald-600" />
-                                  {net > 0 ? 'Got Paid Cash' : 'Paid Cash'}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() => handlePersonAction(g, 'pay_card')}
-                                  className="py-1 px-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-[10px] font-bold border border-emerald-200/60 cursor-pointer flex items-center justify-center gap-1 transition-colors disabled:opacity-50"
-                                >
-                                  <Wallet className="w-3 h-3 text-emerald-600" />
-                                  {net > 0 ? 'Got Paid Bank' : 'Paid Bank'}
-                                </button>
-                              </div>
-
-                              <div className="grid grid-cols-3 gap-1">
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() => handlePersonAction(g, 'offset_cash')}
-                                  className="py-1 px-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-[10px] font-semibold border border-indigo-200/60 cursor-pointer flex items-center justify-center gap-1 transition-colors disabled:opacity-50"
-                                  title="Offset balance with Cash"
-                                >
-                                  <ArrowRightLeft className="w-3 h-3 text-indigo-600" />
-                                  Offset Cash
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() => handlePersonAction(g, 'offset_card')}
-                                  className="py-1 px-1 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-800 text-[10px] font-semibold border border-indigo-200/60 cursor-pointer flex items-center justify-center gap-1 transition-colors disabled:opacity-50"
-                                  title="Offset balance with Bank transfer"
-                                >
-                                  <ArrowRightLeft className="w-3 h-3 text-indigo-600" />
-                                  Offset Bank
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() => handlePersonAction(g, 'forgive')}
-                                  className="py-1 px-1 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-semibold border border-amber-200/60 cursor-pointer flex items-center justify-center gap-1 transition-colors disabled:opacity-50"
-                                  title="Forgive / Gift this amount"
-                                >
-                                  <Gift className="w-3 h-3 text-amber-600" />
-                                  Forgive/Gift
-                                </button>
-                              </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <FlowBox
+                                variant="inflow"
+                                amount={inflowMap[g.key] ?? ''}
+                                onAmountChange={(v) =>
+                                  setInflowMap((prev) => ({ ...prev, [g.key]: v }))
+                                }
+                                disabled={isBusy}
+                                onAction={(method) => applyFlow(g, 'inflow', method)}
+                              />
+                              <FlowBox
+                                variant="outflow"
+                                amount={outflowMap[g.key] ?? ''}
+                                onAmountChange={(v) =>
+                                  setOutflowMap((prev) => ({ ...prev, [g.key]: v }))
+                                }
+                                disabled={isBusy}
+                                onAction={(method) => applyFlow(g, 'outflow', method)}
+                              />
                             </div>
+
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => handleForgive(g)}
+                              className="w-full py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-200/70 cursor-pointer flex items-center justify-center gap-1 transition-colors disabled:opacity-50"
+                              title="Forgive all open balances with this person (logs a gift/write-off)"
+                            >
+                              <Gift className="w-3 h-3 text-amber-600" />
+                              Forgive / Gift full balance
+                            </button>
+
+                            {isBusy && (
+                              <p className="text-[9px] text-slate-400 text-center flex items-center justify-center gap-1">
+                                <Check className="w-3 h-3 text-emerald-500" />
+                                Applying…
+                              </p>
+                            )}
                           </div>
                         )}
 
