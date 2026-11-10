@@ -16,6 +16,7 @@ import {
   Search,
   Plus,
   Trash2,
+  HandCoins,
 } from 'lucide-react';
 import type { BudgetCycle, CustomAccount, PaymentSource } from '../types';
 import type { BudgetStats } from '../utils/budget';
@@ -377,7 +378,7 @@ const CustomAccountsManager: React.FC<{
   };
 
   return (
-    <div className="pt-3 border-t border-slate-100 space-y-2">
+    <div className="pt-3 border-t border-slate-100 space-y-2 font-sans">
       <div className="flex items-center justify-between">
         <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
           Auxiliary Accounts ({customAccounts.length})
@@ -871,7 +872,17 @@ export const BudgetView: React.FC = () => {
         </div>
       </div>
 
-      <DebtsAndSharedCard localDebts={openDebts} />
+      <div className="relative">
+        <DebtsAndSharedCard localDebts={openDebts} />
+        <button
+          type="button"
+          onClick={() => setIsDebtsOpen(true)}
+          className="mt-2 w-full py-2.5 px-3 rounded-2xl bg-indigo-50/80 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+        >
+          <HandCoins className="w-4 h-4 text-indigo-600" />
+          <span>Manage All Debts & Loans →</span>
+        </button>
+      </div>
 
       <BigExpensesCard cycle={cycle} expenses={expenses} />
 
