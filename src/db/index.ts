@@ -622,6 +622,7 @@ export async function settleDebtNonCash(
       category: 'Other',
       itemName: itemName,
       paidWith,
+      walletNeutral: true,
       debtId: debt.id,
       debtRelated: true,
     });
@@ -645,6 +646,19 @@ export async function writeOffDebt(debtId: string): Promise<void> {
   if (amount <= 0) return;
 
   if (debt.direction === 'iOwe') {
+    const baseName = `Forgiven by ${debt.counterparty}`;
+    const itemName = debt.note ? `${baseName} (${debt.note})` : baseName;
+
+    await addExpense({
+      amount: -amount,
+      currency: 'ALL',
+      category: 'Other',
+      itemName,
+      walletNeutral: true,
+      isForgiveness: true,
+      debtId: debt.id,
+    });
+
     await db.debts.update(debt.id, {
       remainingALL: 0,
       status: 'resolved',
