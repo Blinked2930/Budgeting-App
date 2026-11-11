@@ -726,8 +726,8 @@ export const BudgetView: React.FC = () => {
   };
 
   const handleOpenDebtsPanel = (counterpartyName?: string | unknown) => {
-    if (typeof counterpartyName === 'string') {
-      setSelectedCounterparty(counterpartyName);
+    if (typeof counterpartyName === 'string' && counterpartyName.trim().length > 0) {
+      setSelectedCounterparty(counterpartyName.trim());
     } else {
       setSelectedCounterparty(null);
     }

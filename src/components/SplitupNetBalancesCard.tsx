@@ -30,7 +30,7 @@ interface GroupSummary {
 
 interface DebtsAndSharedCardProps {
   localDebts: LocalDebt[];
-  onOpenDebtsPanel?: () => void;
+  onOpenDebtsPanel?: (counterparty?: string) => void;
 }
 
 export const DebtsAndSharedCard: React.FC<DebtsAndSharedCardProps> = ({ localDebts, onOpenDebtsPanel }) => {
@@ -80,7 +80,7 @@ export const DebtsAndSharedCard: React.FC<DebtsAndSharedCardProps> = ({ localDeb
     <div className="rounded-3xl bg-white border border-slate-200 p-4 sm:p-5 shadow-sm space-y-3 font-sans">
       <div
         className="flex items-center justify-between cursor-pointer group"
-        onClick={onOpenDebtsPanel}
+        onClick={() => onOpenDebtsPanel?.()}
       >
         <div className="flex items-center gap-2">
           <div className="p-2 rounded-xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100 transition-colors">
@@ -114,7 +114,7 @@ export const DebtsAndSharedCard: React.FC<DebtsAndSharedCardProps> = ({ localDeb
           <button
             key={`person-${p.key}`}
             type="button"
-            onClick={onOpenDebtsPanel}
+            onClick={() => onOpenDebtsPanel?.(p.name)}
             className="w-full flex items-center justify-between px-3 py-2.5 rounded-2xl border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2 min-w-0">
@@ -142,7 +142,7 @@ export const DebtsAndSharedCard: React.FC<DebtsAndSharedCardProps> = ({ localDeb
           <button
             key={`group-${g._id}`}
             type="button"
-            onClick={onOpenDebtsPanel}
+            onClick={() => onOpenDebtsPanel?.(g.name)}
             className="w-full flex items-center justify-between px-3 py-2.5 rounded-2xl border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2 min-w-0">

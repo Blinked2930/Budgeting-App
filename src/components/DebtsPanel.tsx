@@ -621,13 +621,17 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initial
   useEffect(() => {
     if (isOpen) {
       if (typeof initialCounterparty === 'string' && initialCounterparty.trim().length > 0) {
-        const targetKey = initialCounterparty.trim().toLowerCase();
+        const targetStr = initialCounterparty.trim().toLowerCase();
+        const match = groups.find(
+          (g) => g.key === targetStr || g.name.trim().toLowerCase() === targetStr
+        );
+        const targetKey = match ? match.key : targetStr;
         setExpandedKey(targetKey);
         setTimeout(() => {
           cardRefs.current[targetKey]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }, 150);
       } else {
-        setExpandedKey((prev) => (prev !== null ? prev : groups.length > 0 ? groups[0].key : null));
+        setExpandedKey(null);
       }
     }
   }, [isOpen, initialCounterparty]);
