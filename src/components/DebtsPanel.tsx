@@ -651,7 +651,7 @@ const SettlementControls: React.FC<SettlementControlsProps> = ({
 };
 
 export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initialCounterparty }) => {
-  const { debts, totalOwedToMe, totalIOwe, netBalance } = useDebts();
+  const { debts, netBalance } = useDebts();
   const { expenses } = useExpenses();
   const [showNewForm, setShowNewForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -935,18 +935,6 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initial
               <p className="text-[10px] text-slate-500 mt-0.5">
                 {netBalance > 0 ? 'Net Receivable (Owed to you)' : netBalance < 0 ? 'Net Payable (You owe)' : 'Balanced overall'}
               </p>
-            </div>
-
-            <div className="space-y-1 text-right">
-              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 border border-emerald-200/60 text-emerald-700 text-xs font-mono font-bold">
-                <ArrowUpRight className="w-3 h-3 text-emerald-600" />
-                +{format(totalOwedToMe)}
-              </div>
-              <br />
-              <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-rose-50 border border-rose-200/60 text-rose-700 text-xs font-mono font-bold">
-                <ArrowDownLeft className="w-3 h-3 text-rose-600" />
-                -{format(totalIOwe)}
-              </div>
             </div>
           </div>
         </div>
