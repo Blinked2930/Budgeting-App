@@ -1,4 +1,3 @@
-// src/hooks/useConvexSync.ts
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -96,7 +95,7 @@ export function useConvexSync() {
             for (const cycle of unsynced) {
                 const updatedAt = cycle.updatedAt ?? cycle.startDate;
 
-                const convexId = await (upsertBudgetCycleMutation as any)({
+                const convexId = await upsertBudgetCycleMutation({
                     localId: cycle.id,
                     startDate: cycle.startDate,
                     targetEndDate: cycle.targetEndDate,
