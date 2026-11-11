@@ -628,7 +628,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initial
         const targetKey = match ? match.key : targetStr;
         setExpandedKey(targetKey);
         setTimeout(() => {
-          cardRefs.current[targetKey]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          cardRefs.current[targetKey]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }, 150);
       } else {
         setExpandedKey(null);
