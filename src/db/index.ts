@@ -172,9 +172,12 @@ export async function getExpenses(limit?: number): Promise<ExpenseRecord[]> {
 
 export async function deleteExpense(id: string): Promise<void> {
   const expense = await db.expenses.get(id);
-  if (!expense) return;
+  if (!expense || expense.deleted) return;
 
-  if (expense.debtId) {
+  const now = new Date().toISOString();
+
+  // If this expense is the origin creation of a debt, delete the debt record
+  if (expense.debtId && (expense.isDebtOrigin || expense.id === expense.debtId)) {
     await deleteDebt(expense.debtId);
     return;
   }
@@ -186,10 +189,26 @@ export async function deleteExpense(id: string): Promise<void> {
     await deleteDebt(d.id);
   }
 
+  // If this expense is a settlement / offset / repayment counter-entry linked to a debt, restore balance
+  if (expense.debtId) {
+    const debt = await db.debts.get(expense.debtId);
+    if (debt && !debt.deleted) {
+      const settledAmt = Math.abs(expense.amountInALL || expense.amount);
+      const newRemaining = Math.min(debt.amountALL, debt.remainingALL + settledAmt);
+      await db.debts.update(debt.id, {
+        remainingALL: newRemaining,
+        status: 'open',
+        resolvedAt: undefined,
+        isSynced: false,
+        updatedAt: now,
+      });
+    }
+  }
+
   await db.expenses.update(id, {
     deleted: true,
     isSynced: false,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
   });
 }
 

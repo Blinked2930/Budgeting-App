@@ -22,12 +22,14 @@ import {
   Gift,
 } from 'lucide-react';
 import { useDebts } from '../hooks/useDebts';
+import { useExpenses } from '../hooks/useExpenses';
 import {
   addDebt,
   settleDebtCash,
   settleDebtOffset,
   writeOffDebt,
   deleteDebt,
+  deleteExpense,
   getCounterparties,
   updateDebt,
   hasLinkedExpenses,
@@ -35,7 +37,7 @@ import {
 } from '../db';
 import { useCurrency } from '../hooks/useCurrency';
 import { cn } from '../utils/cn';
-import type { DebtDirection, DebtRecord, PaymentSource } from '../types';
+import type { DebtDirection, DebtRecord, ExpenseRecord, PaymentSource } from '../types';
 
 interface DebtsPanelProps {
   isOpen: boolean;
@@ -51,6 +53,10 @@ interface CounterpartyGroup {
   receivables: number;
   payables: number;
 }
+
+type FeedItem =
+  | { id: string; type: 'debt'; data: DebtRecord; timestamp: string }
+  | { id: string; type: 'expense'; data: ExpenseRecord; timestamp: string };
 
 function formatDebtDate(iso: string): string {
   try {
@@ -273,6 +279,87 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
       >
         {isSaving ? 'Saving…' : 'Add to Ledger'}
       </button>
+    </div>
+  );
+};
+
+const SettlementExpenseRow: React.FC<{
+  expense: ExpenseRecord;
+  onDelete: (expense: ExpenseRecord) => void;
+}> = ({ expense, onDelete }) => {
+  const { format } = useCurrency();
+  const isOffset = expense.walletNeutral && !expense.isForgiveness;
+  const isForgive = expense.isForgiveness;
+  const isCash = !expense.walletNeutral && !expense.isForgiveness;
+
+  return (
+    <div className="p-2.5 rounded-xl border border-slate-200/80 bg-slate-50/70 flex items-center justify-between gap-2.5 font-sans transition-colors">
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {isOffset && (
+            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200/60 flex items-center gap-1">
+              <ArrowRightLeft className="w-2.5 h-2.5 text-amber-600" />
+              Offset
+            </span>
+          )}
+          {isForgive && (
+            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200/60 flex items-center gap-1">
+              <Gift className="w-2.5 h-2.5 text-purple-600" />
+              Forgiveness
+            </span>
+          )}
+          {isCash && expense.amount < 0 && (
+            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60 flex items-center gap-1">
+              <ArrowDownLeft className="w-2.5 h-2.5 text-emerald-600" />
+              Received
+            </span>
+          )}
+          {isCash && expense.amount > 0 && (
+            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200/60 flex items-center gap-1">
+              <ArrowUpRight className="w-2.5 h-2.5 text-rose-600" />
+              Paid
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-slate-700 font-medium mt-1 truncate">
+          {expense.itemName || 'Settlement Entry'}
+        </p>
+        <p className="text-[10px] text-slate-400 mt-0.5">
+          {formatDebtDate(expense.timestamp)}
+          {expense.paidWith && ` · ${expense.paidWith}`}
+        </p>
+      </div>
+
+      <div className="flex items-center gap-1 shrink-0">
+        <div className="text-right">
+          <p
+            className={cn(
+              'text-xs font-mono font-bold',
+              isOffset
+                ? 'text-amber-700'
+                : isForgive
+                  ? 'text-purple-700'
+                  : expense.amount < 0
+                    ? 'text-emerald-600'
+                    : 'text-rose-600'
+            )}
+          >
+            {isOffset || isForgive
+              ? format(Math.abs(expense.amountInALL || expense.amount))
+              : `${expense.amount < 0 ? '+' : '−'}${format(Math.abs(expense.amountInALL || expense.amount))}`}
+          </p>
+          <p className="text-[9px] text-slate-400">counter-entry</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => onDelete(expense)}
+          className="p-1 rounded text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+          title="Delete settlement entry"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+      </div>
     </div>
   );
 };
@@ -565,6 +652,7 @@ const SettlementControls: React.FC<SettlementControlsProps> = ({
 
 export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initialCounterparty }) => {
   const { debts, totalOwedToMe, totalIOwe, netBalance } = useDebts();
+  const { expenses } = useExpenses();
   const [showNewForm, setShowNewForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
@@ -778,6 +866,19 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initial
     await deleteDebt(debt.id);
   };
 
+  const handleDeleteExpense = async (expense: ExpenseRecord) => {
+    setConfirm({
+      isOpen: true,
+      title: 'Delete settlement entry?',
+      message:
+        'This will remove the counter-entry from your transaction feed and restore the debt balance.',
+      confirmLabel: 'Delete Entry',
+      onConfirm: async () => {
+        await deleteExpense(expense.id);
+      },
+    });
+  };
+
   const handleReopenDebt = async (debt: DebtRecord) => {
     await db.debts.update(debt.id, {
       status: 'open',
@@ -894,15 +995,65 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initial
               {groups.map((g) => {
                 const isExpanded = expandedKey === g.key;
                 const net = g.receivables - g.payables;
-                const allPersonDebts = [...g.openDebts, ...g.resolvedDebts].sort(
-                  (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-                );
                 const isBusy = busyPerson === g.key;
                 const hasOpen = g.openDebts.length > 0;
                 const currentDirection =
                   directionMap[g.key] ?? (net < 0 ? 'outflow' : 'inflow');
 
-                const numEntries = allPersonDebts.length;
+                // Build unified feed items for this counterparty (both DebtRecords and linked ExpenseRecords)
+                const personDebtIds = new Set([
+                  ...g.openDebts.map((d) => d.id),
+                  ...g.resolvedDebts.map((d) => d.id),
+                ]);
+
+                const matchingExpenses = expenses.filter((e) => {
+                  if (e.deleted || e.isDebtOrigin) return false;
+                  if (e.debtId && personDebtIds.has(e.debtId)) return true;
+
+                  if (e.itemName) {
+                    const itemLower = e.itemName.toLowerCase();
+                    const nameLower = g.name.toLowerCase();
+                    const isDebtRelated =
+                      e.debtRelated ||
+                      e.walletNeutral ||
+                      e.isForgiveness ||
+                      (e.category as string) === 'Offset' ||
+                      itemLower.includes('offset') ||
+                      itemLower.includes('repaid') ||
+                      itemLower.includes('payment') ||
+                      itemLower.includes('forgiven');
+
+                    if (isDebtRelated && itemLower.includes(nameLower)) {
+                      return true;
+                    }
+                  }
+                  return false;
+                });
+
+                const feedItems: FeedItem[] = [
+                  ...g.openDebts.map((d) => ({
+                    id: `debt-${d.id}`,
+                    type: 'debt' as const,
+                    data: d,
+                    timestamp: d.createdAt,
+                  })),
+                  ...g.resolvedDebts.map((d) => ({
+                    id: `debt-${d.id}`,
+                    type: 'debt' as const,
+                    data: d,
+                    timestamp: d.createdAt,
+                  })),
+                  ...matchingExpenses.map((e) => ({
+                    id: `exp-${e.id}`,
+                    type: 'expense' as const,
+                    data: e,
+                    timestamp: e.timestamp,
+                  })),
+                ].sort(
+                  (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+                );
+
+                const numEntries = feedItems.length;
                 const entryText = numEntries === 1 ? '1 entry' : `${numEntries} entries`;
 
                 return (
@@ -977,14 +1128,25 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initial
                           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider pt-0.5">
                             Transaction Feed
                           </p>
-                          {allPersonDebts.map((d) => (
-                            <LedgerItemRow
-                              key={d.id}
-                              debt={d}
-                              onDelete={handleDeleteDebt}
-                              onReopen={handleReopenDebt}
-                            />
-                          ))}
+                          {feedItems.map((item) => {
+                            if (item.type === 'debt') {
+                              return (
+                                <LedgerItemRow
+                                  key={item.id}
+                                  debt={item.data}
+                                  onDelete={handleDeleteDebt}
+                                  onReopen={handleReopenDebt}
+                                />
+                              );
+                            }
+                            return (
+                              <SettlementExpenseRow
+                                key={item.id}
+                                expense={item.data}
+                                onDelete={handleDeleteExpense}
+                              />
+                            );
+                          })}
                         </div>
                       </div>
                     )}
