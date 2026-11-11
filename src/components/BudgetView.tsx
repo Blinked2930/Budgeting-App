@@ -710,6 +710,7 @@ export const BudgetView: React.FC = () => {
 
   const [formMode, setFormMode] = useState<FormMode | null>(null);
   const [isDebtsOpen, setIsDebtsOpen] = useState(false);
+  const [selectedCounterparty, setSelectedCounterparty] = useState<string | null>(null);
   const [isTravelStashOpen, setIsTravelStashOpen] = useState(false);
   const [isAuditOpen, setIsAuditOpen] = useState(false);
   const [infoModal, setInfoModal] = useState<{ title: string; description: string } | null>(null);
@@ -722,6 +723,11 @@ export const BudgetView: React.FC = () => {
     const id = mode === 'edit' && cycle ? cycle.id : crypto.randomUUID();
     await saveBudgetCycle({ id, ...values });
     setFormMode(null);
+  };
+
+  const handleOpenDebtsPanel = (counterpartyName?: string) => {
+    setSelectedCounterparty(counterpartyName || null);
+    setIsDebtsOpen(true);
   };
 
   if (!cycle || !stats) {
@@ -818,7 +824,14 @@ export const BudgetView: React.FC = () => {
   return (
     <div className="w-full max-w-md mx-auto px-3 sm:px-4 py-4 space-y-3.5 font-sans">
       {infoModal && <InfoModal title={infoModal.title} description={infoModal.description} onClose={() => setInfoModal(null)} />}
-      <DebtsPanel isOpen={isDebtsOpen} onClose={() => setIsDebtsOpen(false)} />
+      <DebtsPanel
+        isOpen={isDebtsOpen}
+        onClose={() => {
+          setIsDebtsOpen(false);
+          setSelectedCounterparty(null);
+        }}
+        initialCounterparty={selectedCounterparty}
+      />
       <TravelStashModal isOpen={isTravelStashOpen} onClose={() => setIsTravelStashOpen(false)} cycle={cycle} stats={stats} />
       <AuditPanel isOpen={isAuditOpen} onClose={() => setIsAuditOpen(false)} />
 
@@ -874,7 +887,7 @@ export const BudgetView: React.FC = () => {
       <div>
         <DebtsAndSharedCard
           localDebts={openDebts}
-          onOpenDebtsPanel={() => setIsDebtsOpen(true)}
+          onOpenDebtsPanel={handleOpenDebtsPanel}
         />
       </div>
 

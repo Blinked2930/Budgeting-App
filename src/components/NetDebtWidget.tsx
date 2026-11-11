@@ -1,9 +1,14 @@
+// src/components/NetDebtWidget.tsx
 import React from 'react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { Users, ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 
-export const NetDebtWidget: React.FC = () => {
+interface NetDebtWidgetProps {
+  onOpenDebtsPanel?: (counterparty?: string) => void;
+}
+
+export const NetDebtWidget: React.FC<NetDebtWidgetProps> = ({ onOpenDebtsPanel }) => {
   const groups = useQuery((api as any).groups?.getMyGroups || (api as any).groups?.listGroups, {});
 
   if (groups === undefined) {
@@ -20,7 +25,10 @@ export const NetDebtWidget: React.FC = () => {
   }
 
   return (
-    <div className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-3 font-sans">
+    <div
+      onClick={() => onOpenDebtsPanel?.()}
+      className="p-5 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-3 font-sans cursor-pointer hover:border-slate-300 transition-colors"
+    >
       <div className="flex items-center justify-between border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2">
           <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">

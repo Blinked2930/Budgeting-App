@@ -1,5 +1,5 @@
 // src/components/DebtsPanel.tsx
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -40,6 +40,7 @@ import type { DebtDirection, DebtRecord, PaymentSource } from '../types';
 interface DebtsPanelProps {
   isOpen: boolean;
   onClose: () => void;
+  initialCounterparty?: string | null;
 }
 
 interface CounterpartyGroup {
@@ -428,10 +429,6 @@ const LedgerItemRow: React.FC<{
   );
 };
 
-// ---------------------------------------------------------------------------
-// Compact settlement control — one direction toggle, one amount, three methods
-// ---------------------------------------------------------------------------
-
 interface SettlementControlsProps {
   groupName: string;
   amount: string;
@@ -462,7 +459,6 @@ const SettlementControls: React.FC<SettlementControlsProps> = ({
 
   return (
     <div className="rounded-2xl bg-white border border-slate-200/80 p-3 space-y-2.5">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
           Settle with {groupName}
@@ -470,7 +466,6 @@ const SettlementControls: React.FC<SettlementControlsProps> = ({
         <p className="text-[9px] text-slate-400 italic">tap a method to apply</p>
       </div>
 
-      {/* Direction segmented control */}
       <div className="grid grid-cols-2 gap-1 p-0.5 rounded-xl bg-slate-100/70 border border-slate-200/60">
         <button
           type="button"
@@ -502,7 +497,6 @@ const SettlementControls: React.FC<SettlementControlsProps> = ({
         </button>
       </div>
 
-      {/* Hero amount input */}
       <div className="flex items-baseline justify-center gap-1.5 py-1">
         <input
           type="number"
@@ -523,15 +517,12 @@ const SettlementControls: React.FC<SettlementControlsProps> = ({
         <span className="text-[11px] font-mono font-bold text-slate-400">ALL</span>
       </div>
 
-      {/* Method row — one tap fires the action */}
       <div className="grid grid-cols-3 gap-1.5">
         <button
           type="button"
           onClick={() => onMethod('Cash')}
           disabled={!canAct}
-          className={cn(
-            'py-2 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-[0.97] border border-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer flex flex-col items-center gap-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100'
-          )}
+          className="py-2 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-[0.97] border border-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer flex flex-col items-center gap-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
         >
           <Banknote className="w-4 h-4 text-teal-600" />
           Cash
@@ -540,9 +531,7 @@ const SettlementControls: React.FC<SettlementControlsProps> = ({
           type="button"
           onClick={() => onMethod('Card')}
           disabled={!canAct}
-          className={cn(
-            'py-2 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-[0.97] border border-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer flex flex-col items-center gap-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100'
-          )}
+          className="py-2 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-[0.97] border border-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer flex flex-col items-center gap-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
         >
           <Wallet className="w-4 h-4 text-indigo-600" />
           Bank
@@ -551,16 +540,13 @@ const SettlementControls: React.FC<SettlementControlsProps> = ({
           type="button"
           onClick={() => onMethod('offset')}
           disabled={!canAct}
-          className={cn(
-            'py-2 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-[0.97] border border-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer flex flex-col items-center gap-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100'
-          )}
+          className="py-2 rounded-xl bg-slate-50 hover:bg-slate-100 active:scale-[0.97] border border-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer flex flex-col items-center gap-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
         >
           <ArrowRightLeft className="w-4 h-4 text-amber-600" />
           Offset
         </button>
       </div>
 
-      {/* Forgive — subtle, right-aligned, applies to typed amount only */}
       <div className="flex justify-end pt-0.5">
         <button
           type="button"
@@ -577,7 +563,7 @@ const SettlementControls: React.FC<SettlementControlsProps> = ({
   );
 };
 
-export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
+export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initialCounterparty }) => {
   const { debts, totalOwedToMe, totalIOwe, netBalance } = useDebts();
   const [showNewForm, setShowNewForm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -586,6 +572,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
   const [directionMap, setDirectionMap] = useState<Record<string, 'inflow' | 'outflow'>>({});
   const [busyPerson, setBusyPerson] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const { format } = useCurrency();
   const convexGroups = useQuery((api as any).groups?.getMyGroups || (api as any).groups?.listGroups, {});
@@ -630,22 +617,21 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
     });
   }, [debts, searchQuery]);
 
+  // Handle panel opening and targeted counterparty auto-scrolling
   useEffect(() => {
-    if (groups.length > 0 && !expandedKey) {
-      setExpandedKey(groups[0].key);
+    if (isOpen) {
+      if (initialCounterparty) {
+        const targetKey = initialCounterparty.trim().toLowerCase();
+        setExpandedKey(targetKey);
+        setTimeout(() => {
+          cardRefs.current[targetKey]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 150);
+      } else {
+        setExpandedKey((prev) => (prev !== null ? prev : groups.length > 0 ? groups[0].key : null));
+      }
     }
-  }, [groups, expandedKey]);
+  }, [isOpen, initialCounterparty]);
 
-  /**
-   * Apply a flow against a person's open debts.
-   *
-   * flow 'inflow'  (they paid me)  → pays down OwedToMe, spills into growing iOwe.
-   * flow 'outflow' (I paid them)   → pays down iOwe, spills into growing OwedToMe.
-   *
-   * method 'Cash'/'Card' → real wallet movement via settleDebtCash on paydown,
-   *                        and settleDebtOffset (grow) on spillover.
-   * method 'offset'      → non-cash, always settleDebtOffset.
-   */
   const applyFlow = async (
     g: CounterpartyGroup,
     flow: 'inflow' | 'outflow',
@@ -666,7 +652,6 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
     const paydownDirection: DebtDirection = flow === 'inflow' ? 'OwedToMe' : 'iOwe';
     const growDirection: DebtDirection = flow === 'inflow' ? 'iOwe' : 'OwedToMe';
 
-    // Phase 1 — pay down the natural direction.
     for (const d of sortedOpen) {
       if (remainingToApply <= 0) break;
       if (d.direction !== paydownDirection) continue;
@@ -684,7 +669,6 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
       remainingToApply -= settleAmt;
     }
 
-    // Phase 2 — residual grows the opposite direction.
     if (remainingToApply > 0) {
       const growTargets = sortedOpen.filter((d) => d.direction === growDirection);
       if (growTargets.length > 0) {
@@ -710,11 +694,6 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
     setAmountMap((prev) => ({ ...prev, [g.key]: '' }));
   };
 
-  /**
-   * Forgive the typed amount — clamped to the total open balance for this
-   * person. Partial forgiveness reduces remainingALL on the oldest debts
-   * first (rather than zeroing everything like a full write-off).
-   */
   const handleForgive = async (g: CounterpartyGroup) => {
     const raw = amountMap[g.key];
     const parsed = parseFloat(raw ?? '');
@@ -737,12 +716,8 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
       const slice = Math.min(d.remainingALL, remaining);
 
       if (slice >= d.remainingALL) {
-        // Full forgiveness of this row
         await writeOffDebt(d.id);
       } else {
-        // Partial forgiveness — reduce remainingALL and log a forgiveness
-        // expense for just the forgiven slice, keeping sign consistent with
-        // writeOffDebt (iOwe = negative, OwedToMe = positive).
         const isIOwe = d.direction === 'iOwe';
         const baseName = isIOwe
           ? `Forgiven by ${d.counterparty}`
@@ -820,7 +795,6 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
         className="w-full max-w-lg max-h-[85vh] flex flex-col bg-white border border-slate-200/90 rounded-3xl shadow-xl overflow-hidden font-sans my-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="flex items-center justify-between px-4.5 pt-3.5 pb-2.5 border-b border-slate-100 shrink-0 bg-white">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 flex items-center justify-center">
@@ -840,7 +814,6 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Net Position Card */}
         <div className="px-4.5 pt-3 shrink-0">
           <div className="p-3.5 rounded-2xl bg-gradient-to-br from-slate-50 via-white to-indigo-50/40 border border-slate-200/80 shadow-2xs flex items-center justify-between">
             <div>
@@ -873,7 +846,6 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
           </div>
         </div>
 
-        {/* Search & Add */}
         <div className="px-4.5 pt-2.5 pb-2 flex items-center justify-between gap-2 shrink-0">
           <div className="relative flex-1">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -896,7 +868,6 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
           </button>
         </div>
 
-        {/* Feed */}
         <div className="flex-1 min-h-0 overflow-y-auto px-4.5 pb-4 space-y-2.5 touch-pan-y">
           {showNewForm && (
             <NewDebtForm
@@ -927,9 +898,15 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                 const currentDirection =
                   directionMap[g.key] ?? (net < 0 ? 'outflow' : 'inflow');
 
+                const numEntries = allPersonDebts.length;
+                const entryText = numEntries === 1 ? '1 entry' : `${numEntries} entries`;
+
                 return (
                   <div
                     key={g.key}
+                    ref={(el) => {
+                      cardRefs.current[g.key] = el;
+                    }}
                     className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-2xs"
                   >
                     <button
@@ -945,9 +922,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose }) => {
                         </div>
                         <div className="min-w-0">
                           <p className="text-xs font-bold text-slate-900 truncate">{g.name}</p>
-                          <p className="text-[10px] text-slate-400">
-                            {allPersonDebts.length} entry{allPersonDebts.length === 1 ? '' : 'ies'}
-                          </p>
+                          <p className="text-[10px] text-slate-400">{entryText}</p>
                         </div>
                       </div>
 
