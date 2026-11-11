@@ -417,8 +417,6 @@ async function applyDebtDelta(
   deltaRemaining: number
 ): Promise<void> {
   const now = new Date().toISOString();
-
-  // If we grow a debt that was resolved, re-open it.
   const wasResolved = debt.status === 'resolved';
 
   await addExpense({
@@ -434,15 +432,11 @@ async function applyDebtDelta(
     isDebtOrigin: expense.isDebtOrigin,
     isForgiveness: expense.isForgiveness,
     budgetAmountALL: expense.budgetAmountALL,
-    timestamp: expense.timestamp,
+    timestamp: expense.timestamp ?? now,
   });
 
   const newRemaining = debt.remainingALL + deltaRemaining;
-  const isResolved = newRemaining <= 0 && debt.direction === 'OwedToMe'
-    ? true
-    : newRemaining <= 0 && debt.direction === 'iOwe'
-      ? true
-      : false;
+  const isResolved = newRemaining <= 0;
 
   await db.debts.update(debt.id, {
     remainingALL: Math.max(0, newRemaining),
@@ -499,6 +493,7 @@ export async function addDebt(data: {
       debtId: record.id,
       debtRelated: true,
       isDebtOrigin: true,
+      timestamp: data.timestamp ?? now,
     });
   } else if (data.purchaseDetails) {
     const myShare = data.myShareAmountALL ?? data.amountALL;
@@ -512,7 +507,7 @@ export async function addDebt(data: {
       budgetAmountALL: myShare,
       debtId: record.id,
       walletNeutral: true,
-      timestamp: data.timestamp,
+      timestamp: data.timestamp ?? now,
     });
   }
 
@@ -552,7 +547,7 @@ export async function updateDebt(id: string, updates: Partial<DebtRecord>): Prom
   });
 
   if (updates.amountALL !== undefined && updates.amountALL !== existing.amountALL) {
-    const linkedExps = await db.expenses.filter(e => e.debtId === id && !e.deleted).toArray();
+    const linkedExps = await db.expenses.filter((e) => e.debtId === id && !e.deleted).toArray();
     for (const e of linkedExps) {
       if (e.isDebtOrigin || e.walletNeutral) {
         const newAmount = existing.direction === 'iOwe' ? -updates.amountALL : updates.amountALL;
@@ -569,10 +564,12 @@ export async function deleteDebt(id: string): Promise<void> {
   const debt = await db.debts.get(id);
   if (!debt || debt.deleted) return;
 
+  const now = new Date().toISOString();
+
   await db.debts.update(id, {
     deleted: true,
     isSynced: false,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
   });
 
   const linkedExpenses = await db.expenses
@@ -582,7 +579,7 @@ export async function deleteDebt(id: string): Promise<void> {
     await db.expenses.update(e.id, {
       deleted: true,
       isSynced: false,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
     });
   }
 }
@@ -605,7 +602,7 @@ export async function hasLinkedDebt(expenseId: string, debtId?: string): Promise
 
 /**
  * Real cash/bank settlement — money actually moved through the wallet.
- * Reduces `remainingALL` toward zero.
+ * Reduces `remainingALL` toward zero and logs an expense entry for root feed history.
  */
 export async function settleDebtCash(
   debtId: string,
@@ -633,37 +630,23 @@ export async function settleDebtCash(
     paidWith,
     debtId: debt.id,
     debtRelated: true,
+    walletNeutral: false,
   });
 
   const newRemaining = debt.remainingALL - clamped;
   const isResolved = newRemaining <= 0;
+  const now = new Date().toISOString();
   await db.debts.update(debt.id, {
     remainingALL: Math.max(0, newRemaining),
     status: isResolved ? 'resolved' : 'open',
-    resolvedAt: isResolved ? new Date().toISOString() : undefined,
+    resolvedAt: isResolved ? now : undefined,
     isSynced: false,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
   });
 }
 
 /**
- * Non-cash offset — no wallet movement. `direction` tells us which way value
- * flowed:
- *   - 'iOweMore'      = I received value from them (my debt to them grows,
- *                        or their debt to me shrinks)
- *   - 'theyOweMore'   = They received value from me (their debt to me grows,
- *                        or my debt to them shrinks)
- *
- * The expense record is ALWAYS named `Offset from ${counterparty}` so that
- * `classifyExpense` in budget.ts recognises it as a debt settlement and
- * excludes it from spending. The sign on the expense record follows the
- * writeOffDebt convention so that sign-aware reporting stays consistent:
- *   - Negative amount = a gain to me (I paid less than I owed)
- *   - Positive amount = a loss to me (I gave up value I was owed)
- *
- * `remainingALL` can move up or down depending on how `direction` interacts
- * with the debt's own direction. A previously-resolved debt will re-open if
- * the offset pushes the balance back above zero.
+ * Non-cash offset — no wallet movement.
  */
 export async function settleDebtOffset(
   debtId: string,
@@ -674,36 +657,9 @@ export async function settleDebtOffset(
   if (!debt) return;
   if (amountALL <= 0) return;
 
-  // Does this offset pay DOWN the existing debt, or GROW it (possibly into
-  // the opposite direction — but a single debt record only tracks one
-  // direction, so growing beyond zero re-flips the sign and keeps the same
-  // counterparty).
-  //
-  // For an OwedToMe debt:
-  //   theyOweMore  → they owe me MORE (growth, +delta)
-  //   iOweMore     → I received value → my side of the ledger grows; since
-  //                  the debt is recorded as "they owe me", this REDUCES
-  //                  that direction first, and only re-flips to iOwe once
-  //                  it crosses zero.
-  //
-  // For an iOwe debt:
-  //   iOweMore     → I owe them MORE (growth, +delta)
-  //   theyOweMore  → they received value → REDUCES what I owe them, re-flip
-  //                  past zero would mean they now owe me.
-  //
-  // For simplicity we do NOT auto-flip direction on a single record — the
-  // caller is expected to have chosen a debt whose direction matches the
-  // offset they're applying, OR to apply the residual against another debt
-  // record of the opposite direction. Direction flipping is done at the
-  // group level by the panel (see handlePersonAction).
-
   const debtPaysDown = (debt.direction === 'OwedToMe' && direction === 'iOweMore')
     || (debt.direction === 'iOwe' && direction === 'theyOweMore');
 
-  // Amount of change to apply to this specific debt row. If debtPaysDown,
-  // we reduce remaining by the amount (clamped). If growing, we add the
-  // full amount (no clamp — growing a debt is allowed to exceed the
-  // original amountALL).
   const deltaRemaining = debtPaysDown
     ? -Math.min(amountALL, debt.remainingALL)
     : amountALL;
@@ -711,13 +667,6 @@ export async function settleDebtOffset(
   const appliedAmount = Math.abs(deltaRemaining);
   if (appliedAmount <= 0) return;
 
-  // Expense sign convention matches writeOffDebt:
-  //   Negative = gain to me (reduces what I owed or grows what they owe me)
-  //   Positive = loss to me (reduces what they owed me or grows what I owe)
-  //
-  // For our two directions:
-  //   'iOweMore'    → gain to me    → NEGATIVE amount
-  //   'theyOweMore' → loss to me    → POSITIVE amount
   const expenseAmount = direction === 'iOweMore' ? -appliedAmount : appliedAmount;
 
   const baseName = `Offset from ${debt.counterparty}`;
@@ -737,7 +686,6 @@ export async function settleDebtOffset(
 
 /**
  * Backwards-compatible wrapper for old callers. Always pays the debt down.
- * Delegates to settleDebtOffset based on the debt's own direction.
  */
 export async function settleDebtNonCash(
   debtId: string,
@@ -776,12 +724,13 @@ export async function writeOffDebt(debtId: string): Promise<void> {
     debtId: debt.id,
   });
 
+  const now = new Date().toISOString();
   await db.debts.update(debt.id, {
     remainingALL: 0,
     status: 'resolved',
-    resolvedAt: new Date().toISOString(),
+    resolvedAt: now,
     isSynced: false,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
   });
 }
 
