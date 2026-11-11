@@ -620,7 +620,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initial
   // Handle panel opening and targeted counterparty auto-scrolling
   useEffect(() => {
     if (isOpen) {
-      if (initialCounterparty) {
+      if (typeof initialCounterparty === 'string' && initialCounterparty.trim().length > 0) {
         const targetKey = initialCounterparty.trim().toLowerCase();
         setExpandedKey(targetKey);
         setTimeout(() => {
