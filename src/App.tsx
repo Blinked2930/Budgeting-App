@@ -16,8 +16,25 @@ export function App() {
     }
   }, [tab]);
 
+  // Snap outer viewport back to (0, 0) whenever iOS keyboard closes
+  useEffect(() => {
+    const resetViewportScroll = () => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    };
+
+    window.addEventListener('focusout', resetViewportScroll);
+    window.visualViewport?.addEventListener('resize', resetViewportScroll);
+
+    return () => {
+      window.removeEventListener('focusout', resetViewportScroll);
+      window.visualViewport?.removeEventListener('resize', resetViewportScroll);
+    };
+  }, []);
+
   return (
-    <div className="h-[100dvh] bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-emerald-500/20 selection:text-emerald-900 overflow-hidden">
+    <div className="h-full bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-emerald-500/20 selection:text-emerald-900 overflow-hidden">
       <main
         ref={mainRef}
         className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y pb-[90px]"
