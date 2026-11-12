@@ -295,7 +295,7 @@ export const QuickEntryView: React.FC = () => {
     };
   }, []);
 
-  // Query details of selected Splitup groups to extract member names
+  // Query details of selected Divvy groups to extract member names
   const splitGroupDetails = useQuery(
     (api as any).groups?.getGroupDetails,
     splitSyncGroupId ? { groupId: splitSyncGroupId } : 'skip'
@@ -503,7 +503,7 @@ export const QuickEntryView: React.FC = () => {
     }
   };
 
-  const mirrorLendToSplitup = async (lendRecord: { counterparty: string }): Promise<string> => {
+  const mirrorLendToDivvy = async (lendRecord: { counterparty: string }): Promise<string> => {
     if (!lendSyncGroupId) return '';
 
     try {
@@ -518,7 +518,7 @@ export const QuickEntryView: React.FC = () => {
         (m: any) => (m.name || '').trim().toLowerCase() === target
       );
       if (!matchedMember) {
-        return ' · Splitup mirror skipped (no matching member)';
+        return ' · Divvy mirror skipped (no matching member)';
       }
 
       const selfMember =
@@ -555,14 +555,14 @@ export const QuickEntryView: React.FC = () => {
           },
         ],
       });
-      return ' · Synced to Splitup';
+      return ' · Synced to Divvy';
     } catch (err) {
-      console.warn('Splitup lend mirror failed:', err);
-      return ' · Splitup mirror failed';
+      console.warn('Divvy lend mirror failed:', err);
+      return ' · Divvy mirror failed';
     }
   };
 
-  const mirrorSplitToSplitup = async (params: {
+  const mirrorSplitToDivvy = async (params: {
     groupId: string;
     friendName: string;
     totalAmount: number;
@@ -583,7 +583,7 @@ export const QuickEntryView: React.FC = () => {
         (m: any) => (m.name || '').trim().toLowerCase() === target
       );
       if (!matchedMember) {
-        return ' · Splitup mirror skipped (no matching member)';
+        return ' · Divvy mirror skipped (no matching member)';
       }
 
       const selfMember =
@@ -622,10 +622,10 @@ export const QuickEntryView: React.FC = () => {
           { memberId: matchedMember._id, amountGroup: friendGroup, amountALL: friendCents / 100 },
         ],
       });
-      return ' · Synced to Splitup';
+      return ' · Synced to Divvy';
     } catch (err) {
-      console.warn('Splitup mirror failed:', err);
-      return ' · Splitup mirror failed';
+      console.warn('Divvy mirror failed:', err);
+      return ' · Divvy mirror failed';
     }
   };
 
@@ -733,7 +733,7 @@ export const QuickEntryView: React.FC = () => {
 
             let mirrorSuffix = '';
             if (splitSyncGroupId) {
-              mirrorSuffix = await mirrorSplitToSplitup({
+              mirrorSuffix = await mirrorSplitToDivvy({
                 groupId: splitSyncGroupId,
                 friendName: friendName.trim(),
                 totalAmount: parsedAmount,
@@ -782,7 +782,7 @@ export const QuickEntryView: React.FC = () => {
           moveWalletWith: payMethod === 'SomeoneElse' ? 'Cash' : (payMethod as PaymentSource),
         });
 
-        const mirrorSuffix = await mirrorLendToSplitup(lendRecord);
+        const mirrorSuffix = await mirrorLendToDivvy(lendRecord);
 
         setFeedback(
           (lendDirection === 'OwedToMe'
@@ -1148,7 +1148,7 @@ export const QuickEntryView: React.FC = () => {
                     {convexGroups.length > 0 && (
                       <div>
                         <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                          Mirror to Splitup Group (Optional)
+                          Mirror to Divvy Group (Optional)
                         </p>
                         <StyledSelect
                           value={splitSyncGroupId}
@@ -1440,7 +1440,7 @@ export const QuickEntryView: React.FC = () => {
             {convexGroups.length > 0 && (
               <div>
                 <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Record in Splitup Group (Optional)
+                  Record in Divvy Group (Optional)
                 </p>
                 <StyledSelect
                   value={lendSyncGroupId}

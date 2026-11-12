@@ -1157,7 +1157,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initial
               {Array.isArray(convexGroups) && convexGroups.length > 0 && (
                 <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                    Shared Trip & Group Balances (Splitup)
+                    Shared Trip & Group Balances (Divvy)
                   </p>
                   {convexGroups.map((cg: any) => {
                     const net = cg.myNetBalanceALL ?? cg.netBalanceALL ?? cg.netBalance ?? 0;
