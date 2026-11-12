@@ -280,7 +280,7 @@ const ReconcileRow: React.FC<{
               <div className="min-w-0">
                 <h3 className="text-base font-bold text-slate-900">Log a {label} discrepancy?</h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  LekFlow expects {format(estimated)} in {label.toLowerCase()}, but you entered {format(actual)}.
+                  Pulse expects {format(estimated)} in {label.toLowerCase()}, but you entered {format(actual)}.
                 </p>
               </div>
             </div>

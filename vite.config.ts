@@ -14,8 +14,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['apple-touch-icon.png'],
       manifest: {
-        name: 'LekFlow — Offline Budget & Expense Tracker',
-        short_name: 'LekFlow',
+        name: 'Pulse — Offline Budget & Expense Tracker',
+        short_name: 'Pulse',
         description:
           'Offline-first expense tracking and budgeting for Albania.',
         start_url: '/',

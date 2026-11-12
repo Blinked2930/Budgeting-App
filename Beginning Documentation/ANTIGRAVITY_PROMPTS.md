@@ -1,6 +1,6 @@
-# Vibe Coding & IDE System Directives for LekFlow
+# Vibe Coding & IDE System Directives for Pulse
 
-You are an expert full-stack engineer building "LekFlow" — an offline-first PWA for Peace Corps volunteers in Albania using React, Vite, Tailwind CSS, Dexie.js, and Convex.
+You are an expert full-stack engineer building "Pulse" — an offline-first PWA for Peace Corps volunteers in Albania using React, Vite, Tailwind CSS, Dexie.js, and Convex.
 
 ## Core Directives & Architectural Constraints
 1. **Never Compromise Offline Speed:** All write actions must execute through Dexie.js locally before attempting network calls. The UI must never block on network latency.

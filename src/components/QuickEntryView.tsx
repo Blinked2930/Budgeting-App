@@ -1043,10 +1043,10 @@ export const QuickEntryView: React.FC = () => {
                 onFocus={() => setIsItemFocused(true)}
                 onBlur={() => setIsItemFocused(false)}
                 placeholder={CATEGORY_CONFIG[category]?.itemPlaceholder || CATEGORY_CONFIG.Other.itemPlaceholder}
-                list="lekflow-item-names"
+                list="pulse-item-names"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
               />
-              <datalist id="lekflow-item-names">
+              <datalist id="pulse-item-names">
                 {itemSuggestions.map((s) => (
                   <option key={s.name} value={s.name} />
                 ))}
@@ -1190,10 +1190,10 @@ export const QuickEntryView: React.FC = () => {
                             value={friendName}
                             onChange={(e) => setFriendName(e.target.value)}
                             placeholder="Person Name"
-                            list="lekflow-friend-names"
+                            list="pulse-friend-names"
                             className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
                           />
-                          <datalist id="lekflow-friend-names">
+                          <datalist id="pulse-friend-names">
                             {lendSuggestions.map((p) => (
                               <option key={p} value={p} />
                             ))}
@@ -1293,10 +1293,10 @@ export const QuickEntryView: React.FC = () => {
                     value={payerName}
                     onChange={(e) => setPayerName(e.target.value)}
                     placeholder="Payer Name"
-                    list="lekflow-payer-names"
+                    list="pulse-payer-names"
                     className="w-full bg-white border border-indigo-200 rounded-xl px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
                   />
-                  <datalist id="lekflow-payer-names">
+                  <datalist id="pulse-payer-names">
                     {lendSuggestions.map((p) => (
                       <option key={p} value={p} />
                     ))}
@@ -1482,10 +1482,10 @@ export const QuickEntryView: React.FC = () => {
                     value={lendPerson}
                     onChange={(e) => setLendPerson(e.target.value)}
                     placeholder="Name"
-                    list="lekflow-lend-persons"
+                    list="pulse-lend-persons"
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white"
                   />
-                  <datalist id="lekflow-lend-persons">
+                  <datalist id="pulse-lend-persons">
                     {lendSuggestions.map((p) => (
                       <option key={p} value={p} />
                     ))}

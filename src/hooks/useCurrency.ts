@@ -6,24 +6,24 @@ import { formatCurrency as baseFormat } from '../utils/currency';
 
 export function useCurrency() {
     const [currency, setCurrency] = useState<Currency>(() => {
-        const saved = localStorage.getItem('lekflow:currency');
+        const saved = localStorage.getItem('pulse:currency');
         return (saved as Currency) || 'ALL';
     });
     
     const [rates, setRates] = useState<ExchangeRates>(() => {
-        const saved = localStorage.getItem('lekflow:rates');
+        const saved = localStorage.getItem('pulse:rates');
         return saved ? JSON.parse(saved) : DEFAULT_EXCHANGE_RATES;
     });
 
     useEffect(() => {
         const handleChange = () => {
-            const savedCurrency = localStorage.getItem('lekflow:currency');
-            const savedRates = localStorage.getItem('lekflow:rates');
+            const savedCurrency = localStorage.getItem('pulse:currency');
+            const savedRates = localStorage.getItem('pulse:rates');
             if (savedCurrency) setCurrency(savedCurrency as Currency);
             if (savedRates) setRates(JSON.parse(savedRates));
         };
-        window.addEventListener('lekflow:currency-changed', handleChange);
-        return () => window.removeEventListener('lekflow:currency-changed', handleChange);
+        window.addEventListener('pulse:currency-changed', handleChange);
+        return () => window.removeEventListener('pulse:currency-changed', handleChange);
     }, []);
 
     const format = (amountInALL: number) => {

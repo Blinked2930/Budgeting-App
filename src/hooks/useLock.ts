@@ -1,7 +1,7 @@
 // src/hooks/useLock.ts
 import { useCallback, useState } from 'react';
 
-const STORAGE_KEY = 'lekflow:unlocked';
+const STORAGE_KEY = 'pulse:unlocked';
 
 export function useLock() {
     const [isUnlocked, setIsUnlocked] = useState<boolean>(() => {

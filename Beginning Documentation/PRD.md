@@ -1,7 +1,7 @@
-# Product Requirements Document (PRD) — LekFlow
+# Product Requirements Document (PRD) — Pulse
 
 ## 1. Overview
-LekFlow is an ultra-lightweight, offline-first Progressive Web Application (PWA) tailored for Peace Corps Volunteers in Albania. Its primary goal is frictionless daily food expenditure tracking, transitioning effortlessly into deeper budget management, travel savings (Travel Stash), and bank account reconciliation.
+Pulse is an ultra-lightweight, offline-first Progressive Web Application (PWA) tailored for Peace Corps Volunteers in Albania. Its primary goal is frictionless daily food expenditure tracking, transitioning effortlessly into deeper budget management, travel savings (Travel Stash), and bank account reconciliation.
 
 ## 2. Target Persona & Core Constraints
 - **User:** Peace Corps Volunteer operating in Albania (Peshkopi / Lezhë / regional sites).

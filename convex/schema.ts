@@ -3,7 +3,7 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
-  // ---------- LekFlow Personal Tables ----------
+  // ---------- Pulse Personal Tables ----------
   expenses: defineTable({
     localId: v.string(),
     userId: v.optional(v.string()),

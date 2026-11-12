@@ -77,7 +77,7 @@ export const LockScreen = ({ onUnlock }: LockScreenProps) => {
                         <Lock className="w-6 h-6 text-emerald-600" />
                     </div>
                     <div className="text-center">
-                        <h1 className="text-xl font-bold text-slate-900">LekFlow is locked</h1>
+                        <h1 className="text-xl font-bold text-slate-900">Pulse is locked</h1>
                         <p className="text-xs text-slate-500 mt-1">Enter your PIN to continue</p>
                     </div>
                 </div>

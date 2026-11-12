@@ -67,7 +67,7 @@ export function exportToJSON(
 ): string {
   const data = {
     exportedAt: new Date().toISOString(),
-    app: 'LekFlow',
+    app: 'Pulse',
     version: 1,
     expenses: expenses.filter((e) => !e.deleted),
     debts: debts.filter((d) => !d.deleted),

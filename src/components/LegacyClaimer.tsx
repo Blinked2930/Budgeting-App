@@ -14,11 +14,11 @@ export const LegacyClaimer = () => {
 
     useEffect(() => {
         if (!isAuthenticated) return;
-        if (localStorage.getItem('lekflow:legacy-claimed') === 'true') return;
+        if (localStorage.getItem('pulse:legacy-claimed') === 'true') return;
 
         claim()
             .then((count) => {
-                localStorage.setItem('lekflow:legacy-claimed', 'true');
+                localStorage.setItem('pulse:legacy-claimed', 'true');
                 if (count > 0) {
                     console.log(`[LegacyClaimer] claimed ${count} unowned records`);
                 }

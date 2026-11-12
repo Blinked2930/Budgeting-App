@@ -213,10 +213,10 @@ const NewDebtForm: React.FC<{ onSaved: () => void }> = ({ onSaved }) => {
             value={counterparty}
             onChange={(e) => setCounterparty(e.target.value)}
             placeholder="Person Name"
-            list="lekflow-counterparties-panel"
+            list="pulse-counterparties-panel"
             className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
           />
-          <datalist id="lekflow-counterparties-panel">
+          <datalist id="pulse-counterparties-panel">
             {suggestions.map((s) => (
               <option key={s} value={s} />
             ))}

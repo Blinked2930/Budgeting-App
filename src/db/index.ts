@@ -17,14 +17,14 @@ import type {
 import { convertToALL } from '../utils/currency';
 import { exportToCSV as generateCSV, exportToJSON as generateJSON } from '../utils/export';
 
-export class LekFlowDatabase extends Dexie {
+export class PulseDatabase extends Dexie {
   expenses!: Table<ExpenseRecord, string>;
   budgetCycles!: Table<BudgetCycle, string>;
   transfers!: Table<TransferRecord, string>;
   debts!: Table<DebtRecord, string>;
 
   constructor() {
-    super('LekFlowDB');
+    super('PulseDB');
     this.version(1).stores({
       expenses: 'id, timestamp, category, vendorType, isSynced, amountInALL',
       budgetCycles: 'id, startDate, targetEndDate',
@@ -47,7 +47,7 @@ export class LekFlowDatabase extends Dexie {
   }
 }
 
-export const db = new LekFlowDatabase();
+export const db = new PulseDatabase();
 
 export interface RemoteExpense {
   _id?: string;

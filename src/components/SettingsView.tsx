@@ -78,7 +78,7 @@ export const SettingsView: React.FC = () => {
     const [defaultCurrency, setDefaultCurrency] = useState<Currency>('ALL');
 
     useEffect(() => {
-        const savedRates = localStorage.getItem('lekflow:rates');
+        const savedRates = localStorage.getItem('pulse:rates');
         if (savedRates) {
             try {
                 setRates(JSON.parse(savedRates));
@@ -89,21 +89,21 @@ export const SettingsView: React.FC = () => {
             setRates(DEFAULT_EXCHANGE_RATES);
         }
 
-        const savedCurrency = localStorage.getItem('lekflow:currency') as Currency;
+        const savedCurrency = localStorage.getItem('pulse:currency') as Currency;
         if (savedCurrency) setDefaultCurrency(savedCurrency);
     }, []);
 
     const saveRates = (newRates: ExchangeRates) => {
         setRates(newRates);
-        localStorage.setItem('lekflow:rates', JSON.stringify(newRates));
-        window.dispatchEvent(new Event('lekflow:currency-changed'));
+        localStorage.setItem('pulse:rates', JSON.stringify(newRates));
+        window.dispatchEvent(new Event('pulse:currency-changed'));
         showToast('Exchange rates updated');
     };
 
     const saveCurrency = (cur: Currency) => {
         setDefaultCurrency(cur);
-        localStorage.setItem('lekflow:currency', cur);
-        window.dispatchEvent(new Event('lekflow:currency-changed'));
+        localStorage.setItem('pulse:currency', cur);
+        window.dispatchEvent(new Event('pulse:currency-changed'));
         showToast(`Default currency set to ${cur}`);
     };
 
@@ -115,14 +115,14 @@ export const SettingsView: React.FC = () => {
     const handleExportCSV = async () => {
         const csv = await exportToCSV();
         const dateStr = new Date().toISOString().split('T')[0];
-        downloadFile(csv, `lekflow-full-${dateStr}.csv`, 'text/csv;charset=utf-8;');
+        downloadFile(csv, `pulse-full-${dateStr}.csv`, 'text/csv;charset=utf-8;');
         showToast('CSV exported!');
     };
 
     const handleExportJSON = async () => {
         const json = await exportToJSON();
         const dateStr = new Date().toISOString().split('T')[0];
-        downloadFile(json, `lekflow-full-${dateStr}.json`, 'application/json;charset=utf-8;');
+        downloadFile(json, `pulse-full-${dateStr}.json`, 'application/json;charset=utf-8;');
         showToast('JSON backup exported!');
     };
 

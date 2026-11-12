@@ -286,7 +286,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
     const L: string[] = [];
     const n = (v: number) => String(Math.round(v));
 
-    L.push('=== LEKFLOW AUDIT REPORT ===');
+    L.push('=== PULSE AUDIT REPORT ===');
     L.push(`Cycle: ${cycle.startDate} → ${cycle.targetEndDate}`);
     L.push('All numbers below in ALL (Lekë) unless formatted otherwise.');
     L.push('');

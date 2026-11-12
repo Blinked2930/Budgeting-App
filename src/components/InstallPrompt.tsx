@@ -13,13 +13,13 @@ export default function InstallPrompt({ onBypass }: { onBypass: () => void }) {
       (window.navigator as any).standalone ||
       document.referrer.includes('android-app://');
 
-    const hasBypassed = sessionStorage.getItem('lekflow:bypassed_install') === 'true';
+    const hasBypassed = sessionStorage.getItem('pulse:bypassed_install') === 'true';
 
     setIsStandalone(isPWA || hasBypassed);
   }, []);
 
   const handleBypass = () => {
-    sessionStorage.setItem('lekflow:bypassed_install', 'true');
+    sessionStorage.setItem('pulse:bypassed_install', 'true');
     setIsStandalone(true);
     onBypass();
   };
@@ -42,12 +42,12 @@ export default function InstallPrompt({ onBypass }: { onBypass: () => void }) {
       </div>
 
       <h1 className="text-3xl font-black text-slate-900 mb-3 tracking-tight text-center leading-none">
-        {localLang === 'sq' ? 'Instalo LekFlow' : 'Install LekFlow'}
+        {localLang === 'sq' ? 'Instalo Pulse' : 'Install Pulse'}
       </h1>
       <p className="text-slate-500 text-center text-sm font-medium leading-relaxed max-w-xs mb-10">
         {localLang === 'sq'
-          ? 'Për përdorim offline dhe performancë më të mirë, instalo LekFlow direkt në pajisjen tuaj.'
-          : 'For offline use and a better experience, install LekFlow directly to your device.'}
+          ? 'Për përdorim offline dhe performancë më të mirë, instalo Pulse direkt në pajisjen tuaj.'
+          : 'For offline use and a better experience, install Pulse directly to your device.'}
       </p>
 
       {device === 'none' ? (

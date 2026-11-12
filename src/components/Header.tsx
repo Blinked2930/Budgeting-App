@@ -21,7 +21,7 @@ export const Header: React.FC<HeaderProps> = ({ unsyncedCount }) => {
     setShowExportMenu(false);
     const csv = await exportToCSV();
     const dateStr = new Date().toISOString().split('T')[0];
-    downloadFile(csv, `lekflow-expenses-${dateStr}.csv`, 'text/csv;charset=utf-8;');
+    downloadFile(csv, `pulse-expenses-${dateStr}.csv`, 'text/csv;charset=utf-8;');
     showToast('Exported CSV successfully!');
   };
 
@@ -29,7 +29,7 @@ export const Header: React.FC<HeaderProps> = ({ unsyncedCount }) => {
     setShowExportMenu(false);
     const json = await exportToJSON();
     const dateStr = new Date().toISOString().split('T')[0];
-    downloadFile(json, `lekflow-expenses-${dateStr}.json`, 'application/json;charset=utf-8;');
+    downloadFile(json, `pulse-expenses-${dateStr}.json`, 'application/json;charset=utf-8;');
     showToast('Exported JSON backup!');
   };
 
