@@ -4,8 +4,8 @@ import { useQuery } from 'convex/react';
 import { ChevronRight, Users, HandCoins } from 'lucide-react';
 import { api } from '../../convex/_generated/api';
 import { cn } from '../utils/cn';
-import { formatCurrency } from '../utils/currency';
-import { DEFAULT_EXCHANGE_RATES } from '../types';
+import { convertFromALL, formatCurrency } from '../utils/currency';
+import { useCurrency } from '../hooks/useCurrency';
 
 interface LocalDebt {
   id: string;
@@ -36,16 +36,13 @@ interface DebtsAndSharedCardProps {
 export const DebtsAndSharedCard: React.FC<DebtsAndSharedCardProps> = ({ localDebts, onOpenDebtsPanel }) => {
   const groups: GroupSummary[] = useQuery((api as any).groups?.getMyGroups, {}) || [];
   const prefs = useQuery((api as any).preferences?.getMyPreferences, {}) as { baseCurrency: string } | undefined;
-  const baseCurrency: string = prefs?.baseCurrency ?? 'ALL';
+  const { currency: activeCurrency } = useCurrency();
 
-  const baseRateToALL: number =
-    baseCurrency === 'ALL' ? 1 : (DEFAULT_EXCHANGE_RATES[baseCurrency] ?? 1);
+  const displayCurrency: string = activeCurrency || prefs?.baseCurrency || 'ALL';
 
-  const fmtBase = (amountALL: number): string => {
-    const inBase = baseCurrency === 'ALL'
-      ? Math.round(amountALL)
-      : Math.round((amountALL / baseRateToALL) * 100) / 100;
-    return formatCurrency(inBase, baseCurrency as any);
+  const fmtDisplay = (amountALL: number): string => {
+    const converted = convertFromALL(amountALL, displayCurrency);
+    return formatCurrency(converted, displayCurrency);
   };
 
   const people = useMemo(() => {
@@ -101,7 +98,7 @@ export const DebtsAndSharedCard: React.FC<DebtsAndSharedCardProps> = ({ localDeb
             'text-sm font-mono font-bold',
             combinedNet > 0 ? 'text-emerald-600' : combinedNet < 0 ? 'text-rose-600' : 'text-slate-400'
           )}>
-            {combinedNet === 0 ? 'Settled' : `${combinedNet > 0 ? '+' : '−'}${fmtBase(Math.abs(combinedNet))}`}
+            {combinedNet === 0 ? 'Settled' : `${combinedNet > 0 ? '+' : '−'}${fmtDisplay(Math.abs(combinedNet))}`}
           </p>
           <p className="text-[10px] text-slate-400">
             {combinedNet > 0 ? 'net owed to you' : combinedNet < 0 ? 'net you owe' : 'all even'}
@@ -133,7 +130,7 @@ export const DebtsAndSharedCard: React.FC<DebtsAndSharedCardProps> = ({ localDeb
               'text-xs font-mono font-bold shrink-0',
               p.localNet > 0 ? 'text-emerald-600' : p.localNet < 0 ? 'text-rose-600' : 'text-slate-400'
             )}>
-              {p.localNet === 0 ? '—' : fmtBase(Math.abs(p.localNet))}
+              {p.localNet === 0 ? '—' : fmtDisplay(Math.abs(p.localNet))}
             </span>
           </button>
         ))}
@@ -152,12 +149,17 @@ export const DebtsAndSharedCard: React.FC<DebtsAndSharedCardProps> = ({ localDeb
               <span className="text-[10px] text-slate-400 shrink-0">
                 {g.memberCount} {g.memberCount === 1 ? 'member' : 'members'}
               </span>
+              {g.currency && g.currency !== displayCurrency && (
+                <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">
+                  {g.currency}
+                </span>
+              )}
             </div>
             <span className={cn(
               'text-xs font-mono font-bold shrink-0',
               g.myNetBalanceALL > 0 ? 'text-emerald-600' : g.myNetBalanceALL < 0 ? 'text-rose-600' : 'text-slate-400'
             )}>
-              {g.myNetBalanceALL === 0 ? '—' : fmtBase(Math.abs(g.myNetBalanceALL))}
+              {g.myNetBalanceALL === 0 ? '—' : fmtDisplay(Math.abs(g.myNetBalanceALL))}
             </span>
           </button>
         ))}

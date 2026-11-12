@@ -53,7 +53,7 @@ import { useTransfers } from '../hooks/useTransfers';
 import { useDebts } from '../hooks/useDebts';
 import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { useCurrency } from '../hooks/useCurrency';
-import { convertToALL, formatCurrency, evaluateAmountExpression } from '../utils/currency';
+import { convertToALL, convertFromALL, formatCurrency, evaluateAmountExpression } from '../utils/currency';
 import { dateToNoonISO, toDateInputValue } from '../utils/budget';
 import { CATEGORY_CONFIG } from '../utils/categoryConfig';
 import { cn } from '../utils/cn';
@@ -528,30 +528,34 @@ export const QuickEntryView: React.FC = () => {
 
       const paidBy =
         lendDirection === 'OwedToMe' ? selfMember._id : matchedMember._id;
+      const borrower =
+        lendDirection === 'OwedToMe' ? matchedMember._id : selfMember._id;
 
-      const cents = Math.round(normalizedALL * 100);
-      const baseCents = Math.floor(cents / 2);
-      const extra = cents - baseCents * 2;
-      const selfShare = (baseCents + (extra > 0 ? 1 : 0)) / 100;
-      const otherShare = (baseCents + (extra > 1 ? 1 : 0)) / 100;
-
-      const splits = [
-        { memberId: selfMember._id, amountALL: selfShare },
-        { memberId: matchedMember._id, amountALL: otherShare },
-      ];
+      const groupCurrency: string = groupDetails.group?.currency || 'EUR';
+      const amountInGroupCurrency =
+        defaultAppCurrency === groupCurrency
+          ? parsedAmount
+          : convertFromALL(normalizedALL, groupCurrency as any);
 
       await addConvexExpense({
         groupId: lendSyncGroupId,
         title: lendNote.trim() || `Loan with ${lendRecord.counterparty}`,
         amount: parsedAmount,
         currency: defaultAppCurrency,
+        amountInGroupCurrency,
         amountInALL: normalizedALL,
         category: 'General',
         paidByMemberId: paidBy,
-        splitType: 'equal',
-        splits,
+        splitType: 'exact',
+        splits: [
+          {
+            memberId: borrower,
+            amountGroup: amountInGroupCurrency,
+            amountALL: normalizedALL,
+          },
+        ],
       });
-      return '';
+      return ' · Synced to Splitup';
     } catch (err) {
       console.warn('Splitup lend mirror failed:', err);
       return ' · Splitup mirror failed';
@@ -587,23 +591,35 @@ export const QuickEntryView: React.FC = () => {
         groupDetails.members[0];
       if (!selfMember) return '';
 
+      const groupCurrency: string = groupDetails.group?.currency || 'EUR';
       const totalALL = convertToALL(params.totalAmount, defaultAppCurrency);
       const friendCents = Math.round(params.friendShare * 100);
       const totalCents = Math.round(totalALL * 100);
       const selfCents = totalCents - friendCents;
+
+      const totalGroup =
+        defaultAppCurrency === groupCurrency
+          ? params.totalAmount
+          : convertFromALL(totalALL, groupCurrency as any);
+      const friendGroup =
+        defaultAppCurrency === groupCurrency
+          ? friendShareAmount
+          : convertFromALL(friendCents / 100, groupCurrency as any);
+      const selfGroup = Math.round((totalGroup - friendGroup) * 100) / 100;
 
       await addConvexExpense({
         groupId: params.groupId,
         title: params.title,
         amount: params.totalAmount,
         currency: defaultAppCurrency,
+        amountInGroupCurrency: totalGroup,
         amountInALL: totalALL,
         category: params.category || 'General',
         paidByMemberId: selfMember._id,
         splitType: 'exact',
         splits: [
-          { memberId: selfMember._id, amountALL: selfCents / 100 },
-          { memberId: matchedMember._id, amountALL: friendCents / 100 },
+          { memberId: selfMember._id, amountGroup: selfGroup, amountALL: selfCents / 100 },
+          { memberId: matchedMember._id, amountGroup: friendGroup, amountALL: friendCents / 100 },
         ],
       });
       return ' · Synced to Splitup';

@@ -39,9 +39,7 @@ export default defineSchema({
     startingRaiffeisenBalanceALL: v.number(),
     startingCashALL: v.optional(v.number()),
     bufferPoolALL: v.number(),
-    // Travel-stash field kept for backward compat; semantically "Dreams".
     travelStashALL: v.number(),
-    // New explicit buckets.
     savingsALL: v.optional(v.number()),
     investmentsALL: v.optional(v.number()),
     plannedBigExpensesALL: v.optional(v.number()),
@@ -97,8 +95,6 @@ export default defineSchema({
   // ---------- Cross-app user preferences ----------
   userPreferences: defineTable({
     userId: v.string(),
-    // Base currency every aggregate in both apps should display in.
-    // Stored as a code string (ALL, EUR, USD, GBP, CHF, CAD, AUD, JPY).
     baseCurrency: v.string(),
     updatedAt: v.number(),
   })
@@ -136,7 +132,10 @@ export default defineSchema({
     title: v.string(),
     amount: v.number(),
     currency: v.string(),
+    amountInGroupCurrency: v.optional(v.number()),
     amountInALL: v.number(),
+    fxRateToGroup: v.optional(v.number()),
+    fxRateToALL: v.optional(v.number()),
     category: v.optional(v.string()),
     paidByMemberId: v.id("groupMembers"),
     paidByUserId: v.optional(v.string()),
@@ -145,6 +144,7 @@ export default defineSchema({
       v.object({
         memberId: v.id("groupMembers"),
         userId: v.optional(v.string()),
+        amountGroup: v.optional(v.number()),
         amountALL: v.number(),
       })
     ),
@@ -161,7 +161,11 @@ export default defineSchema({
     toMemberId: v.id("groupMembers"),
     fromUserId: v.optional(v.string()),
     toUserId: v.optional(v.string()),
+    amount: v.optional(v.number()),
+    amountInGroupCurrency: v.optional(v.number()),
     amountALL: v.number(),
+    fxRateToGroup: v.optional(v.number()),
+    fxRateToALL: v.optional(v.number()),
     currency: v.string(),
     paidWith: v.optional(v.union(v.literal("Cash"), v.literal("Card"))),
     timestamp: v.number(),

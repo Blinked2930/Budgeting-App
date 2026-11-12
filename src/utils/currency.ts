@@ -11,6 +11,26 @@ export function convertToALL(
   return Math.round(amount * rate);
 }
 
+export function convertToALLPrecise(
+  amount: number,
+  currency: Currency,
+  rates: ExchangeRates = DEFAULT_EXCHANGE_RATES
+): number {
+  if (currency === 'ALL') return Math.round(amount * 100) / 100;
+  const rate = rates[currency] ?? 1;
+  return Math.round(amount * rate * 100) / 100;
+}
+
+export function convertFromALL(
+  amountALL: number,
+  currency: Currency = 'ALL',
+  rates: ExchangeRates = DEFAULT_EXCHANGE_RATES
+): number {
+  if (currency === 'ALL') return Math.round(amountALL);
+  const rate = rates[currency] ?? 1;
+  return Math.round((amountALL / rate) * 100) / 100;
+}
+
 export function formatCurrency(amount: number, currency: Currency = 'ALL'): string {
   const formatted = new Intl.NumberFormat('en-US', {
     maximumFractionDigits: currency === 'ALL' ? 0 : 2,
@@ -31,15 +51,9 @@ export function formatCurrency(amount: number, currency: Currency = 'ALL'): stri
   }
 }
 
-/**
- * Safely evaluate a simple arithmetic expression. Supports digits, decimal
- * points, commas, whitespace, parentheses, and + - * / (plus aliases ×, x, ÷, :, –, —).
- * Returns null on any parse error or division by zero. No eval, no Function, no globals.
- */
 export function evaluateAmountExpression(input: string): number | null {
   if (!input) return null;
 
-  // Normalize common symbols
   let src = input
     .replace(/\s+/g, '')
     .replace(/[×xX]/g, '*')
@@ -49,14 +63,12 @@ export function evaluateAmountExpression(input: string): number | null {
 
   if (!src) return null;
 
-  // If ends with a trailing operator or dot (e.g. while typing "500+"), strip it for live partial evaluation
   while (src.length > 0 && /[+\-*/.]$/.test(src)) {
     src = src.slice(0, -1);
   }
   if (!src) return null;
   if (!/^[0-9+\-*/().]+$/.test(src)) return null;
 
-  // Tokenize
   const tokens: Array<number | '+' | '-' | '*' | '/' | '(' | ')'> = [];
   let i = 0;
   while (i < src.length) {
@@ -65,7 +77,6 @@ export function evaluateAmountExpression(input: string): number | null {
     const isUnaryContext = prev === null || prev === '(' || prev === '+' || prev === '-' || prev === '*' || prev === '/';
 
     if (ch === '-' && isUnaryContext && i + 1 < src.length && (/[0-9.]/.test(src[i + 1]))) {
-      // Unary negative number
       let j = i + 1;
       while (j < src.length && (/[0-9.]/.test(src[j]))) j++;
       const raw = src.slice(i, j);
@@ -89,7 +100,6 @@ export function evaluateAmountExpression(input: string): number | null {
     }
   }
 
-  // Shunting-yard to Reverse Polish Notation
   const output: Array<number | '+' | '-' | '*' | '/'> = [];
   const ops: Array<'+' | '-' | '*' | '/' | '('> = [];
   const precedence: Record<string, number> = { '+': 1, '-': 1, '*': 2, '/': 2 };
@@ -103,8 +113,8 @@ export function evaluateAmountExpression(input: string): number | null {
       while (ops.length > 0 && ops[ops.length - 1] !== '(') {
         output.push(ops.pop() as '+' | '-' | '*' | '/');
       }
-      if (ops.length === 0) return null; // unmatched
-      ops.pop(); // discard '('
+      if (ops.length === 0) return null;
+      ops.pop();
     } else {
       while (
         ops.length > 0 &&
@@ -118,11 +128,10 @@ export function evaluateAmountExpression(input: string): number | null {
   }
   while (ops.length > 0) {
     const op = ops.pop();
-    if (op === '(') return null; // unmatched
+    if (op === '(') return null;
     output.push(op as '+' | '-' | '*' | '/');
   }
 
-  // Evaluate RPN
   const stack: number[] = [];
   for (const tok of output) {
     if (typeof tok === 'number') {
