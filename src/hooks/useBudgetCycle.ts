@@ -20,7 +20,7 @@ export function useBudgetCycle() {
     );
 
     const myGroups = useQuery((api as any).groups?.getMyGroups, {}) || [];
-    const splitupSnapshot = useMemo(() => snapshotFromGroups(myGroups), [myGroups]);
+    const divvySnapshot = useMemo(() => snapshotFromGroups(myGroups), [myGroups]);
 
     const prefs = useQuery((api as any).preferences?.getMyPreferences, {}) as
         | { baseCurrency: string }
@@ -38,9 +38,9 @@ export function useBudgetCycle() {
     const stats = useMemo(
         () =>
             cycle
-                ? computeBudgetStats(cycle, expenses, transfers, openDebts, splitupSnapshot, now)
+                ? computeBudgetStats(cycle, expenses, transfers, openDebts, divvySnapshot, now)
                 : null,
-        [cycle, expenses, transfers, openDebts, splitupSnapshot, now]
+        [cycle, expenses, transfers, openDebts, divvySnapshot, now]
     );
 
     return { cycle, stats, baseCurrency, isLoading: cycleResult === undefined };

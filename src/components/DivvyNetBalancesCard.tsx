@@ -1,4 +1,4 @@
-// src/components/SplitupNetBalancesCard.tsx
+// src/components/DivvyNetBalancesCard.tsx
 import React, { useMemo } from 'react';
 import { useQuery } from 'convex/react';
 import { ChevronRight, Users, HandCoins } from 'lucide-react';

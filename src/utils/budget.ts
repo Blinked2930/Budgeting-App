@@ -79,23 +79,23 @@ export function cycleStartMs(cycle: BudgetCycle): number {
 export const EARMARKS_INSIDE_WALLET = true;
 
 // ---------------------------------------------------------------------------
-// Splitup snapshot
+// Divvy snapshot
 // ---------------------------------------------------------------------------
 
-export interface SplitupSnapshot {
+export interface DivvySnapshot {
     receivablesALL: number;
     payablesALL: number;
 }
 
-export const EMPTY_SPLITUP_SNAPSHOT: SplitupSnapshot = {
+export const EMPTY_DIVVY_SNAPSHOT: DivvySnapshot = {
     receivablesALL: 0,
     payablesALL: 0,
 };
 
 export function snapshotFromGroups(
     groups: Array<{ myNetBalanceALL?: number }> | undefined | null
-): SplitupSnapshot {
-    if (!groups || groups.length === 0) return EMPTY_SPLITUP_SNAPSHOT;
+): DivvySnapshot {
+    if (!groups || groups.length === 0) return EMPTY_DIVVY_SNAPSHOT;
     let rec = 0;
     let pay = 0;
     for (const g of groups) {
@@ -177,8 +177,8 @@ export interface BudgetStats {
     // Debts
     receivablesALL: number;
     payablesALL: number;
-    splitupReceivablesALL: number;
-    splitupPayablesALL: number;
+    divvyReceivablesALL: number;
+    divvyPayablesALL: number;
     netOfDebtsALL: number;
     netWorthALL: number;
 
@@ -198,7 +198,7 @@ export function computeBudgetStats(
     expenses: ExpenseRecord[],
     transfers: TransferRecord[] = [],
     debts: DebtRecord[] = [],
-    splitup: SplitupSnapshot = EMPTY_SPLITUP_SNAPSHOT,
+    divvy: DivvySnapshot = EMPTY_DIVVY_SNAPSHOT,
     now: Date = new Date()
 ): BudgetStats {
     const start = parseLocalDate(cycle.startDate);
@@ -298,10 +298,10 @@ export function computeBudgetStats(
         if (d.direction === 'OwedToMe') receivablesALL += d.remainingALL;
         else payablesALL += d.remainingALL;
     }
-    const splitupReceivablesALL = splitup.receivablesALL;
-    const splitupPayablesALL = splitup.payablesALL;
-    const totalReceivablesALL = receivablesALL + splitupReceivablesALL;
-    const totalPayablesALL = payablesALL + splitupPayablesALL;
+    const divvyReceivablesALL = divvy.receivablesALL;
+    const divvyPayablesALL = divvy.payablesALL;
+    const totalReceivablesALL = receivablesALL + divvyReceivablesALL;
+    const totalPayablesALL = payablesALL + divvyPayablesALL;
     const netOfDebtsALL = totalReceivablesALL - totalPayablesALL;
 
     // Bucket balances
@@ -368,8 +368,8 @@ export function computeBudgetStats(
         walletTotal,
         receivablesALL: totalReceivablesALL,
         payablesALL: totalPayablesALL,
-        splitupReceivablesALL,
-        splitupPayablesALL,
+        divvyReceivablesALL,
+        divvyPayablesALL,
         netOfDebtsALL,
         netWorthALL: walletTotal + (EARMARKS_INSIDE_WALLET ? 0 : totalEarmarked) + netOfDebtsALL,
         spent: consumed,

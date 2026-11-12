@@ -40,11 +40,11 @@ import { parseLocalDate } from '../utils/budget';
 import {
     buildCycleRollup,
     findSelfMember,
-    mapSplitupCategory,
+    mapDivvyCategory,
     type BridgeCycleRollup,
     type BridgeGroupDetails,
     type BridgeGroupSummary,
-} from '../utils/splitupBridge';
+} from '../utils/divvyBridge';
 import { cn } from '../utils/cn';
 
 type TimeScope = 'cycle' | '30d' | 'all';
@@ -586,7 +586,7 @@ export const InsightsView: React.FC = () => {
             const myShare = mySplit ? mySplit.amountALL : 0;
             myShareOfPaidALL += myShare;
             if (myShare > 0) {
-                const cat = mapSplitupCategory(exp.category);
+                const cat = mapDivvyCategory(exp.category);
                 categoryTotals[cat] = (categoryTotals[cat] ?? 0) + myShare;
                 categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
             }
@@ -651,7 +651,7 @@ export const InsightsView: React.FC = () => {
         [expenses, timeScope, cycle?.startDate]
     );
 
-    const virtualSplitupExpenses = useMemo<ExpenseRecord[]>(() => {
+    const virtualDivvyExpenses = useMemo<ExpenseRecord[]>(() => {
         const items: ExpenseRecord[] = [];
         for (const exp of rollup.expensesYouPaid) {
             const selfId = selfMemberIdByGroupId[exp.groupId];
@@ -659,11 +659,11 @@ export const InsightsView: React.FC = () => {
             const myShare = mySplit ? mySplit.amountALL : 0;
             if (myShare <= 0) continue;
             items.push({
-                id: `splitup-paid-${exp._id}`,
+                id: `divvy-paid-${exp._id}`,
                 amount: myShare,
                 currency: 'ALL',
                 amountInALL: myShare,
-                category: mapSplitupCategory(exp.category),
+                category: mapDivvyCategory(exp.category),
                 itemName: `${exp.title} (${exp.groupName})`,
                 paidWith: 'Card',
                 timestamp: new Date(exp.timestamp).toISOString(),
@@ -673,7 +673,7 @@ export const InsightsView: React.FC = () => {
         for (const share of rollup.yourSharesOfOthersExpenses) {
             if (share.amountALL <= 0) continue;
             items.push({
-                id: `splitup-share-${share.groupId}-${share.timestamp}-${share.title}`,
+                id: `divvy-share-${share.groupId}-${share.timestamp}-${share.title}`,
                 amount: share.amountALL,
                 currency: 'ALL',
                 amountInALL: share.amountALL,
@@ -688,8 +688,8 @@ export const InsightsView: React.FC = () => {
     }, [rollup, selfMemberIdByGroupId]);
 
     const combinedExplorableExpenses = useMemo(
-        () => [...scopedExpenses, ...virtualSplitupExpenses],
-        [scopedExpenses, virtualSplitupExpenses]
+        () => [...scopedExpenses, ...virtualDivvyExpenses],
+        [scopedExpenses, virtualDivvyExpenses]
     );
 
     const filtered = useMemo(

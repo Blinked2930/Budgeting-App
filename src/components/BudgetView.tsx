@@ -30,7 +30,7 @@ import { cn } from '../utils/cn';
 import { DebtsPanel } from './DebtsPanel';
 import { BigExpensesCard } from './BigExpensesCard';
 import { AuditPanel } from './AuditPanel';
-import { DebtsAndSharedCard } from './SplitupNetBalancesCard';
+import { DebtsAndSharedCard } from './DivvyNetBalancesCard';
 
 type FormMode = 'first' | 'next' | 'edit';
 

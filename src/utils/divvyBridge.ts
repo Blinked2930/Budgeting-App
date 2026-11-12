@@ -1,4 +1,4 @@
-// src/utils/splitupBridge.ts
+// src/utils/divvyBridge.ts
 import { type Category, DEFAULT_EXCHANGE_RATES, type ExchangeRates } from '../types';
 
 export interface BridgeGroupMember {
@@ -113,7 +113,7 @@ function normalizeSettlementAmountALL(
   return set.amountALL;
 }
 
-export function mapSplitupCategory(raw?: string): Category {
+export function mapDivvyCategory(raw?: string): Category {
   if (!raw) return 'Other';
   const s = raw.trim().toLowerCase();
   if (!s) return 'Other';
@@ -193,7 +193,7 @@ export function buildCycleRollup(input: RollupInput): BridgeCycleRollup {
       const youPaid = exp.paidByMemberId === self._id;
 
       if (youPaid) {
-        const category = mapSplitupCategory(exp.category);
+        const category = mapDivvyCategory(exp.category);
         const enriched: BridgeGroupExpense = {
           ...exp,
           amountInALL: normalized.amountInALL,
@@ -209,7 +209,7 @@ export function buildCycleRollup(input: RollupInput): BridgeCycleRollup {
         const yourSplit = normalized.splits.find((s) => s.memberId === self._id);
         if (!yourSplit || yourSplit.amountALL <= 0) continue;
 
-        const category = mapSplitupCategory(exp.category);
+        const category = mapDivvyCategory(exp.category);
         const paidByName = memberNameById.get(exp.paidByMemberId) ?? 'Someone';
         result.yourSharesOfOthersExpenses.push({
           amountALL: yourSplit.amountALL,

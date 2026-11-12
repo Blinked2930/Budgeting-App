@@ -100,7 +100,7 @@ export default defineSchema({
   })
     .index("by_userId", ["userId"]),
 
-  // ---------- Splitup Shared Group Tables ----------
+  // ---------- Divvy Shared Group Tables ----------
   groups: defineTable({
     name: v.string(),
     currency: v.string(),

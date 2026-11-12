@@ -498,7 +498,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                         </span>
                         {item.isConvex && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold">
-                            👥 {item.groupName || 'Splitup'}
+                            👥 {item.groupName || 'Divvy'}
                           </span>
                         )}
                         {expense.vendorType && (

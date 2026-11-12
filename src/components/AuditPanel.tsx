@@ -17,7 +17,7 @@ import {
   type BridgeCycleRollup,
   type BridgeGroupDetails,
   type BridgeGroupSummary,
-} from '../utils/splitupBridge';
+} from '../utils/divvyBridge';
 
 interface AuditPanelProps {
   isOpen: boolean;
@@ -67,9 +67,9 @@ const flagsOf = (e: ExpenseRecord): string => {
 };
 
 /**
- * Synthesize an ExpenseRecord-shaped object from a Splitup contribution so
+ * Synthesize an ExpenseRecord-shaped object from a Divvy contribution so
  * the existing bucket/classifier pipeline can reason about it without any
- * special cases. All Splitup money is in ALL.
+ * special cases. All Divvy money is in ALL.
  */
 function bridgeToRecord(params: {
   id: string;
@@ -172,17 +172,17 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
       .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   }, [expenses, cycle, cycleStart]);
 
-  // Synthesize Splitup contributions as ExpenseRecords so the same classifier
+  // Synthesize Divvy contributions as ExpenseRecords so the same classifier
   // handles everything, keeping the identity checks trustworthy.
-  const splitupAsRecords: ExpenseRecord[] = useMemo(() => {
+  const divvyAsRecords: ExpenseRecord[] = useMemo(() => {
     const out: ExpenseRecord[] = [];
 
     for (const e of rollup.expensesYouPaid) {
       out.push(
         bridgeToRecord({
-          id: `splitup:exp:${e._id}`,
+          id: `divvy:exp:${e._id}`,
           amountALL: e.amountInALL,
-          category: 'Other', // will be recomputed below via mapSplitupCategory
+          category: 'Other', // will be recomputed below via mapDivvyCategory
           paidWith: 'Card',
           bucket: 'regular',
           timestamp: e.timestamp,
@@ -194,7 +194,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
     for (const s of rollup.yourSharesOfOthersExpenses) {
       out.push(
         bridgeToRecord({
-          id: `splitup:share:${s.groupId}:${s.timestamp}:${s.amountALL}`,
+          id: `divvy:share:${s.groupId}:${s.timestamp}:${s.amountALL}`,
           amountALL: s.amountALL,
           category: 'Other',
           paidWith: 'Card',
@@ -208,7 +208,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
     for (const set of rollup.settlementsOut) {
       out.push(
         bridgeToRecord({
-          id: `splitup:setout:${set._id}`,
+          id: `divvy:setout:${set._id}`,
           amountALL: set.amountALL,
           category: 'Other',
           paidWith: set.paidWith ?? 'Cash',
@@ -222,7 +222,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
     for (const set of rollup.settlementsIn) {
       out.push(
         bridgeToRecord({
-          id: `splitup:setin:${set._id}`,
+          id: `divvy:setin:${set._id}`,
           amountALL: -set.amountALL, // negative = money IN
           category: 'Other',
           paidWith: set.paidWith ?? 'Cash',
@@ -236,12 +236,12 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
     return out;
   }, [rollup]);
 
-  // Merged list = local + splitup, in timestamp order.
+  // Merged list = local + divvy, in timestamp order.
   const inCycle = useMemo(() => {
-    const merged = [...localInCycle, ...splitupAsRecords];
+    const merged = [...localInCycle, ...divvyAsRecords];
     merged.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
     return merged;
-  }, [localInCycle, splitupAsRecords]);
+  }, [localInCycle, divvyAsRecords]);
 
   const buckets = useMemo(() => {
     const b = EMPTY_BUCKETS();
@@ -261,14 +261,14 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
   const bigIdentity = stats ? stats.bigExpenseSpent - sumBudget(buckets.big) : 0;
   const travelIdentity = stats ? stats.travelSpent - sumBudget(buckets.travel) : 0;
 
-  // Wallet identity now includes Splitup wallet-moving entries.
+  // Wallet identity now includes Divvy wallet-moving entries.
   const walletIdentity = useMemo(() => {
     if (!stats || !cycle) return 0;
     const localMovedOut = localInCycle
       .filter((e) => !e.walletNeutral)
       .reduce((s, e) => s + e.amountInALL, 0);
-    const splitupMovedOut = -walletDeltaFromRollup(rollup); // walletDelta returns negative for out
-    const movedOut = localMovedOut + splitupMovedOut;
+    const divvyMovedOut = -walletDeltaFromRollup(rollup); // walletDelta returns negative for out
+    const movedOut = localMovedOut + divvyMovedOut;
     const expected =
       cycle.startingRaiffeisenBalanceALL +
       (cycle.startingCashALL ?? 0) +
@@ -321,7 +321,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
     L.push(`Loan settlements (${buckets.debtSettlement.length}): ${n(sumOut(buckets.debtSettlement))}`);
     L.push(`Spent without wallet movement (${buckets.noWalletSpending.length}): ${n(sumBudget(buckets.noWalletSpending))}`);
     L.push('');
-    L.push('--- SHARED ACTIVITY (Splitup) ---');
+    L.push('--- SHARED ACTIVITY (Divvy) ---');
     L.push(`Group expenses you paid (${rollup.expensesYouPaid.length}): ${n(rollup.totalExpensesYouPaidALL)}`);
     L.push(`Your share of group expenses paid by others (${rollup.yourSharesOfOthersExpenses.length}): ${n(rollup.totalYourSharesALL)}`);
     L.push(`Settlements out (${rollup.settlementsOut.length}): ${n(rollup.totalSettlementsOutALL)}`);
@@ -333,7 +333,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
     L.push(`Travel spent = travel bucket? ${ok(travelIdentity) ? 'MATCH' : `OFF by ${n(travelIdentity)}`}`);
     L.push(`Wallet = start + stipend - wallet-moving entries? ${ok(walletIdentity) ? 'MATCH' : `OFF by ${n(walletIdentity)}`}`);
     L.push('');
-    L.push('--- ENTRIES THIS CYCLE (local + Splitup) ---');
+    L.push('--- ENTRIES THIS CYCLE (local + Divvy) ---');
     L.push('date | name | amountInALL | budgetImpact | category | paidWith | bucket | flags');
     for (const e of inCycle) {
       L.push(
@@ -422,7 +422,7 @@ export const AuditPanel: React.FC<AuditPanelProps> = ({ isOpen, onClose }) => {
                 <SectionTitle>
                   <span className="inline-flex items-center gap-1.5">
                     <Users className="w-3 h-3" />
-                    Shared activity (Splitup)
+                    Shared activity (Divvy)
                   </span>
                 </SectionTitle>
                 <Row label={`Group expenses you paid (${rollup.expensesYouPaid.length})`} value={format(rollup.totalExpensesYouPaidALL)} hint="Folded into Regular spending and Wallet" />
