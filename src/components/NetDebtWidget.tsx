@@ -34,7 +34,7 @@ export const NetDebtWidget: React.FC<NetDebtWidgetProps> = ({ onOpenDebtsPanel }
           <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600">
             <Users className="w-4 h-4" />
           </div>
-          <span className="font-bold text-slate-900 text-sm">Splitup Trip Groups</span>
+          <span className="font-bold text-slate-900 text-sm">Divvy Trip Groups</span>
         </div>
         <span className="text-xs font-semibold text-slate-400">{groups.length} Active</span>
       </div>

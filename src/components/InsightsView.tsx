@@ -39,6 +39,8 @@ import {
 import { parseLocalDate } from '../utils/budget';
 import {
     buildCycleRollup,
+    findSelfMember,
+    mapSplitupCategory,
     type BridgeCycleRollup,
     type BridgeGroupDetails,
     type BridgeGroupSummary,
@@ -139,6 +141,7 @@ const CategoryBreakdown: React.FC<{
         }
         if (sharedCategoryTotals) {
             for (const [cat, amount] of Object.entries(sharedCategoryTotals) as [Category, number][]) {
+                if ((amount ?? 0) <= 0 && (sharedCategoryCounts?.[cat] ?? 0) <= 0) continue;
                 const prev = totals.get(cat) ?? { total: 0, count: 0 };
                 totals.set(cat, {
                     total: prev.total + (amount ?? 0),
@@ -159,7 +162,8 @@ const CategoryBreakdown: React.FC<{
     const { format } = useCurrency();
 
     const hasShared =
-        sharedCategoryTotals && Object.keys(sharedCategoryTotals).length > 0;
+        sharedCategoryTotals &&
+        Object.values(sharedCategoryTotals).some((v) => (v ?? 0) > 0);
 
     if (stats.length === 0) {
         return <Card><p className="text-xs text-slate-500">Log some expenses to see where your money went.</p></Card>;
@@ -172,7 +176,7 @@ const CategoryBreakdown: React.FC<{
             {hasShared && (
                 <div className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-2 py-1">
                     <Users className="w-3 h-3 shrink-0" />
-                    <span>Includes shared-group spending</span>
+                    <span>Includes your share of shared-group spending</span>
                 </div>
             )}
             <div className="flex items-baseline justify-between">
@@ -208,7 +212,10 @@ const CategoryBreakdown: React.FC<{
     );
 };
 
-const SpendPaceCard: React.FC<{ timeScope: TimeScope }> = ({ timeScope }) => {
+const SpendPaceCard: React.FC<{
+    timeScope: TimeScope;
+    sharedConsumedALL?: number;
+}> = ({ timeScope, sharedConsumedALL = 0 }) => {
     const { stats } = useBudgetCycle();
     const { format } = useCurrency();
 
@@ -220,10 +227,11 @@ const SpendPaceCard: React.FC<{ timeScope: TimeScope }> = ({ timeScope }) => {
         );
     }
 
+    const effectiveConsumed = stats.consumed + sharedConsumedALL;
     const daysElapsed = stats.dayNumber;
     const daysTotal = stats.totalDays;
     const projectedByNow = (stats.cycleBudget / daysTotal) * daysElapsed;
-    const pace = projectedByNow > 0 ? (stats.consumed / projectedByNow) * 100 : 0;
+    const pace = projectedByNow > 0 ? (effectiveConsumed / projectedByNow) * 100 : 0;
     const isOverPace = pace > 100;
     const barWidth = Math.min(100, Math.max(0, pace));
 
@@ -247,7 +255,7 @@ const SpendPaceCard: React.FC<{ timeScope: TimeScope }> = ({ timeScope }) => {
                         {pace.toFixed(0)}%
                     </p>
                     <p className="text-[11px] text-slate-500 mt-1">
-                        {isOverPace ? 'ahead of' : 'behind'} pace by {format(Math.abs(stats.consumed - projectedByNow))}
+                        {isOverPace ? 'ahead of' : 'behind'} pace by {format(Math.abs(effectiveConsumed - projectedByNow))}
                     </p>
                 </div>
                 <div className="text-right">
@@ -265,7 +273,7 @@ const SpendPaceCard: React.FC<{ timeScope: TimeScope }> = ({ timeScope }) => {
                     />
                 </div>
                 <div className="flex justify-between text-[10px] font-mono text-slate-400">
-                    <span>{format(stats.consumed)} spent</span>
+                    <span>{format(effectiveConsumed)} spent</span>
                     <span>{format(projectedByNow)} expected</span>
                 </div>
             </div>
@@ -371,7 +379,7 @@ const CashFlowCard: React.FC<{
                         Out
                     </div>
                     <p className="text-sm font-mono font-bold text-rose-800">{format(outALL)}</p>
-                    <p className="text-[10px] text-rose-600">Loans given</p>
+                    <p className="text-[10px] text-rose-600">Loans & shared advances</p>
                 </div>
             </div>
         </Card>
@@ -465,6 +473,12 @@ function filterByScope(
     });
 }
 
+function getScopeStartMs(scope: TimeScope, cycleStart?: string): number {
+    if (scope === 'all') return 0;
+    if (scope === '30d') return Date.now() - 30 * 24 * 60 * 60 * 1000;
+    return cycleStart ? parseLocalDate(cycleStart).getTime() : 0;
+}
+
 export const InsightsView: React.FC = () => {
     const { expenses } = useExpenses();
     const { cycle } = useBudgetCycle();
@@ -516,8 +530,23 @@ export const InsightsView: React.FC = () => {
     }, [convex, groupSummaries.map((g) => g._id).join('|')]);
 
     const cycleStartMs = cycle ? parseLocalDate(cycle.startDate).getTime() : 0;
+    const activeScopeStartMs = useMemo(
+        () => getScopeStartMs(timeScope, cycle?.startDate),
+        [timeScope, cycle?.startDate]
+    );
 
-    const rollup: BridgeCycleRollup = useMemo(
+    const selfMemberIdByGroupId = useMemo(() => {
+        const map: Record<string, string> = {};
+        for (const g of groupSummaries) {
+            const details = groupDetailsById[g._id];
+            if (!details) continue;
+            const self = findSelfMember(details.members, clerkUserId, displayNames);
+            if (self) map[g._id] = self._id;
+        }
+        return map;
+    }, [groupSummaries, groupDetailsById, clerkUserId, displayNames]);
+
+    const cycleRollup: BridgeCycleRollup = useMemo(
         () =>
             buildCycleRollup({
                 groupSummaries,
@@ -529,44 +558,159 @@ export const InsightsView: React.FC = () => {
         [groupSummaries, groupDetailsById, cycleStartMs, clerkUserId, displayNames]
     );
 
+    const rollup: BridgeCycleRollup = useMemo(
+        () =>
+            buildCycleRollup({
+                groupSummaries,
+                groupDetailsById,
+                cycleStartMs: activeScopeStartMs,
+                clerkUserId,
+                displayNames,
+            }),
+        [groupSummaries, groupDetailsById, activeScopeStartMs, clerkUserId, displayNames]
+    );
+
+    const computeSharedConsumption = (r: BridgeCycleRollup): {
+        myShareOfPaidALL: number;
+        totalConsumptionALL: number;
+        categoryTotals: Partial<Record<Category, number>>;
+        categoryCounts: Partial<Record<Category, number>>;
+    } => {
+        let myShareOfPaidALL = 0;
+        const categoryTotals: Partial<Record<Category, number>> = {};
+        const categoryCounts: Partial<Record<Category, number>> = {};
+
+        for (const exp of r.expensesYouPaid) {
+            const selfId = selfMemberIdByGroupId[exp.groupId];
+            const mySplit = selfId ? exp.splits.find((s) => s.memberId === selfId) : undefined;
+            const myShare = mySplit ? mySplit.amountALL : 0;
+            myShareOfPaidALL += myShare;
+            if (myShare > 0) {
+                const cat = mapSplitupCategory(exp.category);
+                categoryTotals[cat] = (categoryTotals[cat] ?? 0) + myShare;
+                categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
+            }
+        }
+
+        for (const share of r.yourSharesOfOthersExpenses) {
+            if (share.amountALL > 0) {
+                categoryTotals[share.category] = (categoryTotals[share.category] ?? 0) + share.amountALL;
+                categoryCounts[share.category] = (categoryCounts[share.category] ?? 0) + 1;
+            }
+        }
+
+        return {
+            myShareOfPaidALL,
+            totalConsumptionALL: myShareOfPaidALL + r.totalYourSharesALL,
+            categoryTotals,
+            categoryCounts,
+        };
+    };
+
+    const cycleSharedStats = useMemo(
+        () => computeSharedConsumption(cycleRollup),
+        [cycleRollup, selfMemberIdByGroupId]
+    );
+
+    const scopedSharedStats = useMemo(
+        () => computeSharedConsumption(rollup),
+        [rollup, selfMemberIdByGroupId]
+    );
+
+    const sharedDebtStats = useMemo(() => {
+        let sharedOwedToMe = 0;
+        let sharedIOwe = 0;
+        let activeSharedGroups = 0;
+
+        for (const g of groupSummaries) {
+            const net = g.myNetBalanceALL ?? 0;
+            if (net > 0.5) {
+                sharedOwedToMe += net;
+                activeSharedGroups += 1;
+            } else if (net < -0.5) {
+                sharedIOwe += Math.abs(net);
+                activeSharedGroups += 1;
+            }
+        }
+
+        return {
+            sharedOwedToMe,
+            sharedIOwe,
+            sharedNet: sharedOwedToMe - sharedIOwe,
+            activeSharedGroups,
+        };
+    }, [groupSummaries]);
+
+    const combinedOwedToMe = totalOwedToMe + sharedDebtStats.sharedOwedToMe;
+    const combinedIOwe = totalIOwe + sharedDebtStats.sharedIOwe;
+    const combinedNetBalance = combinedOwedToMe - combinedIOwe;
+    const combinedActiveObligations = openDebts.length + sharedDebtStats.activeSharedGroups;
+
     const scopedExpenses = useMemo(
         () => filterByScope(expenses, timeScope, cycle?.startDate),
         [expenses, timeScope, cycle?.startDate]
     );
 
-    const filtered = useMemo(() => filterExpenses(scopedExpenses, filters), [scopedExpenses, filters]);
+    const virtualSplitupExpenses = useMemo<ExpenseRecord[]>(() => {
+        const items: ExpenseRecord[] = [];
+        for (const exp of rollup.expensesYouPaid) {
+            const selfId = selfMemberIdByGroupId[exp.groupId];
+            const mySplit = selfId ? exp.splits.find((s) => s.memberId === selfId) : undefined;
+            const myShare = mySplit ? mySplit.amountALL : 0;
+            if (myShare <= 0) continue;
+            items.push({
+                id: `splitup-paid-${exp._id}`,
+                amount: myShare,
+                currency: 'ALL',
+                amountInALL: myShare,
+                category: mapSplitupCategory(exp.category),
+                itemName: `${exp.title} (${exp.groupName})`,
+                paidWith: 'Card',
+                timestamp: new Date(exp.timestamp).toISOString(),
+                isSynced: true,
+            });
+        }
+        for (const share of rollup.yourSharesOfOthersExpenses) {
+            if (share.amountALL <= 0) continue;
+            items.push({
+                id: `splitup-share-${share.groupId}-${share.timestamp}-${share.title}`,
+                amount: share.amountALL,
+                currency: 'ALL',
+                amountInALL: share.amountALL,
+                category: share.category,
+                itemName: `${share.title} (${share.groupName})`,
+                paidWith: 'Card',
+                timestamp: new Date(share.timestamp).toISOString(),
+                isSynced: true,
+            });
+        }
+        return items;
+    }, [rollup, selfMemberIdByGroupId]);
+
+    const combinedExplorableExpenses = useMemo(
+        () => [...scopedExpenses, ...virtualSplitupExpenses],
+        [scopedExpenses, virtualSplitupExpenses]
+    );
+
+    const filtered = useMemo(
+        () => filterExpenses(combinedExplorableExpenses, filters),
+        [combinedExplorableExpenses, filters]
+    );
     const filteredAgg = useMemo(() => aggregate(filtered), [filtered]);
-    const monthOptions = useMemo(() => getMonthOptions(scopedExpenses), [scopedExpenses]);
+    const monthOptions = useMemo(
+        () => getMonthOptions(combinedExplorableExpenses),
+        [combinedExplorableExpenses]
+    );
     const outflow = useMemo(() => totalOutflow(scopedExpenses), [scopedExpenses]);
     const spendBudget = useMemo(() => spendAgainstBudget(scopedExpenses), [scopedExpenses]);
 
-    const sharedOutflowForRange = useMemo(() => {
-        if (timeScope === 'cycle') {
-            return (
-                rollup.totalExpensesYouPaidALL +
-                rollup.totalSettlementsOutALL -
-                rollup.totalSettlementsInALL
-            );
-        }
-        if (timeScope === '30d') {
-            const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
-            const exp = rollup.expensesYouPaid
-                .filter((e) => e.timestamp >= cutoff)
-                .reduce((s, e) => s + e.amountInALL, 0);
-            const out = rollup.settlementsOut
-                .filter((e) => e.timestamp >= cutoff)
-                .reduce((s, e) => s + e.amountALL, 0);
-            const inn = rollup.settlementsIn
-                .filter((e) => e.timestamp >= cutoff)
-                .reduce((s, e) => s + e.amountALL, 0);
-            return exp + out - inn;
-        }
-        return (
+    const sharedOutflowForRange = useMemo(
+        () =>
             rollup.totalExpensesYouPaidALL +
             rollup.totalSettlementsOutALL -
-            rollup.totalSettlementsInALL
-        );
-    }, [timeScope, rollup]);
+            rollup.totalSettlementsInALL,
+        [rollup]
+    );
 
     const sharedCardALL = useMemo(() => {
         let sum = 0;
@@ -584,10 +728,13 @@ export const InsightsView: React.FC = () => {
     }, [rollup]);
 
     const sharedIn = useMemo(() => rollup.totalSettlementsInALL, [rollup]);
-    const sharedOut = useMemo(
-        () => rollup.totalSettlementsOutALL + rollup.totalYourSharesALL,
-        [rollup]
-    );
+    const sharedOut = useMemo(() => {
+        const frontedForOthersALL = Math.max(
+            0,
+            rollup.totalExpensesYouPaidALL - scopedSharedStats.myShareOfPaidALL
+        );
+        return rollup.totalSettlementsOutALL + frontedForOthersALL;
+    }, [rollup, scopedSharedStats.myShareOfPaidALL]);
 
     const update = (key: keyof InsightFilters) => (value: string) =>
         setFilters((prev) => ({ ...prev, [key]: value }));
@@ -628,27 +775,44 @@ export const InsightsView: React.FC = () => {
                         <div>
                             <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">I Owe</span>
                             <p className="text-sm font-mono font-bold text-rose-600 mt-0.5">
-                                {format(totalIOwe)}
+                                {format(combinedIOwe)}
                             </p>
                         </div>
                         <div>
                             <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Owed to Me</span>
                             <p className="text-sm font-mono font-bold text-emerald-600 mt-0.5">
-                                {format(totalOwedToMe)}
+                                {format(combinedOwedToMe)}
                             </p>
                         </div>
                         <div>
                             <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Net Position</span>
-                            <p className={cn('text-sm font-mono font-bold mt-0.5', netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
-                                {netBalance > 0 ? '+' : ''}{format(netBalance)}
+                            <p className={cn('text-sm font-mono font-bold mt-0.5', combinedNetBalance >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                                {combinedNetBalance > 0 ? '+' : ''}{format(combinedNetBalance)}
                             </p>
                         </div>
                     </div>
 
                     <div className="space-y-1.5 text-xs">
                         <div className="flex items-center justify-between text-slate-500">
+                            <span>Personal Debts Net:</span>
+                            <span className={cn('font-mono font-bold', netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                                {netBalance > 0 ? '+' : ''}{format(netBalance)}
+                            </span>
+                        </div>
+                        <div className="flex items-center justify-between text-slate-500">
+                            <span className="inline-flex items-center gap-1">
+                                <Users className="w-3 h-3 text-slate-400" />
+                                Shared Groups Net:
+                            </span>
+                            <span className={cn('font-mono font-bold', sharedDebtStats.sharedNet >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                                {sharedDebtStats.sharedNet > 0 ? '+' : ''}{format(sharedDebtStats.sharedNet)}
+                            </span>
+                        </div>
+                        <div className="flex items-center justify-between text-slate-500">
                             <span>Active Obligations:</span>
-                            <span className="font-bold text-slate-900">{openDebts.length} active</span>
+                            <span className="font-bold text-slate-900">
+                                {combinedActiveObligations} active ({openDebts.length} local, {sharedDebtStats.activeSharedGroups} groups)
+                            </span>
                         </div>
                         <div className="flex items-center justify-between text-slate-500">
                             <span>Fulfilled Debts History:</span>
@@ -657,7 +821,7 @@ export const InsightsView: React.FC = () => {
                         <div className="flex items-center justify-between pt-1 border-t border-slate-100 font-bold">
                             <span>Owed Ratio:</span>
                             <span className="font-mono text-indigo-700">
-                                {totalIOwe > 0 ? (totalOwedToMe / totalIOwe).toFixed(2) : '∞'}x
+                                {combinedIOwe > 0 ? (combinedOwedToMe / combinedIOwe).toFixed(2) : '∞'}x
                             </span>
                         </div>
                     </div>
@@ -668,7 +832,10 @@ export const InsightsView: React.FC = () => {
                 <SectionTitle icon={<TrendingUp className="w-3.5 h-3.5 text-slate-400" />}>
                     Spend Pace
                 </SectionTitle>
-                <SpendPaceCard timeScope={timeScope} />
+                <SpendPaceCard
+                    timeScope={timeScope}
+                    sharedConsumedALL={cycleSharedStats.totalConsumptionALL}
+                />
             </section>
 
             <section>
@@ -678,14 +845,31 @@ export const InsightsView: React.FC = () => {
                 <Card className="space-y-2">
                     <div className="flex items-baseline justify-between">
                         <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Budgeted spend</span>
-                        <span className="text-lg font-mono font-bold text-slate-900">{format(spendBudget)}</span>
+                        <span className="text-lg font-mono font-bold text-slate-900">
+                            {format(spendBudget + scopedSharedStats.totalConsumptionALL)}
+                        </span>
                     </div>
+                    {scopedSharedStats.totalConsumptionALL > 0 && (
+                        <div className="space-y-1 text-[10px] text-slate-500">
+                            <div className="flex items-center justify-between">
+                                <span>Local personal</span>
+                                <span className="font-mono">{format(spendBudget)}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="inline-flex items-center gap-1">
+                                    <Users className="w-3 h-3 text-slate-400" />
+                                    Your share in shared groups
+                                </span>
+                                <span className="font-mono">{format(scopedSharedStats.totalConsumptionALL)}</span>
+                            </div>
+                        </div>
+                    )}
                     <p className="text-[10px] text-slate-500 leading-relaxed">
                         {timeScope === 'cycle'
-                            ? 'Regular consumption this cycle (matches the "spent" number on the Budget tab). Excludes rent, loans, and reconciliation corrections.'
+                            ? 'Regular consumption this cycle (matches the "spent" number on the Budget tab, including your share of group expenses). Excludes rent, loans, and reconciliation corrections.'
                             : timeScope === '30d'
-                                ? 'Regular consumption across the last 30 days. Excludes rent, loans, and reconciliation corrections.'
-                                : 'Regular consumption across all logged time. Excludes rent, loans, and reconciliation corrections.'}
+                                ? 'Regular consumption across the last 30 days, including your share of group expenses. Excludes rent, loans, and reconciliation corrections.'
+                                : 'Regular consumption across all logged time, including your share of group expenses. Excludes rent, loans, and reconciliation corrections.'}
                     </p>
                     <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
                         <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Total outflow</span>
@@ -738,8 +922,8 @@ export const InsightsView: React.FC = () => {
                 </SectionTitle>
                 <CategoryBreakdown
                     expenses={scopedExpenses}
-                    sharedCategoryTotals={rollup.categoryTotals}
-                    sharedCategoryCounts={rollup.categoryCounts}
+                    sharedCategoryTotals={scopedSharedStats.categoryTotals}
+                    sharedCategoryCounts={scopedSharedStats.categoryCounts}
                 />
             </section>
 
@@ -796,7 +980,7 @@ export const InsightsView: React.FC = () => {
                     </div>
                 </Card>
                 <p className="text-[10px] text-slate-400 px-1 mt-2">
-                    Totals use each expense's value converted to your current currency.
+                    Totals use each expense's value converted to your current currency, including your share of shared-group expenses.
                 </p>
             </section>
 
