@@ -2,13 +2,15 @@
 export type Currency = 'ALL' | 'EUR' | 'USD' | 'GBP' | 'CHF' | 'CAD' | 'AUD' | 'JPY' | (string & {});
 
 export type Category =
-  | 'Food'
-  | 'Utilities'
+  | 'Groceries'
+  | 'Eating Out'
+  | 'Housing & Bills'
   | 'Transport'
-  | 'Social'
+  | 'Shopping'
+  | 'Personal'
+  | 'Health & Wellness'
+  | 'Social & Fun'
   | 'Travel'
-  | 'Accommodation'
-  | 'Entertainment'
   | 'Other';
 
 export type VendorType =
@@ -189,13 +191,15 @@ export const DEFAULT_EXCHANGE_RATES: ExchangeRates = {
 };
 
 export const CATEGORIES: Category[] = [
-  'Food',
-  'Utilities',
+  'Groceries',
+  'Eating Out',
+  'Housing & Bills',
   'Transport',
-  'Social',
+  'Shopping',
+  'Personal',
+  'Health & Wellness',
+  'Social & Fun',
   'Travel',
-  'Accommodation',
-  'Entertainment',
   'Other',
 ];
 

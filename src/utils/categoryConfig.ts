@@ -1,4 +1,4 @@
-import { type Category, type VendorType } from '../types';
+import { CATEGORIES, type Category, type FoodType, type VendorType } from '../types';
 
 export interface CategoryConfig {
     itemLabel: string;
@@ -6,40 +6,146 @@ export interface CategoryConfig {
 }
 
 export const CATEGORY_CONFIG: Record<Category, CategoryConfig> = {
-    Food: { itemLabel: 'Food item / Place name', itemPlaceholder: 'e.g. Tomatoes, Byrek' },
-    Utilities: { itemLabel: 'Utility name', itemPlaceholder: 'e.g. Electric bill, Phone data' },
-    Transport: { itemLabel: 'Destination / Route', itemPlaceholder: 'e.g. Tirana -> Peshkopi' },
-    Social: { itemLabel: 'Event / Place', itemPlaceholder: 'e.g. Movie, Drinks' },
-    Travel: { itemLabel: 'Location / Item', itemPlaceholder: 'e.g. Hostel, Train ticket' },
-    Accommodation: { itemLabel: 'Hotel / Airbnb / Rent', itemPlaceholder: 'e.g. Hostel booking, Hotel room' },
-    Entertainment: { itemLabel: 'Show / Attraction', itemPlaceholder: 'e.g. Movie, Concert ticket, Museum' },
+    Groceries: { itemLabel: 'Grocery items / Store', itemPlaceholder: 'e.g. Tomatoes, Milk, Bread' },
+    'Eating Out': { itemLabel: 'Place / Dish / Drink', itemPlaceholder: 'e.g. Byrek, Espresso, Dinner' },
+    'Housing & Bills': { itemLabel: 'Bill / Service name', itemPlaceholder: 'e.g. Rent, Electric bill, Internet' },
+    Transport: { itemLabel: 'Route / Transit', itemPlaceholder: 'e.g. Bus, Taxi, Fuel' },
+    Shopping: { itemLabel: 'Item / Store', itemPlaceholder: 'e.g. Jacket, Headphones, Home goods' },
+    Personal: { itemLabel: 'Item / Service', itemPlaceholder: 'e.g. Haircut, Toiletries, Skincare' },
+    'Health & Wellness': { itemLabel: 'Gym / Pharmacy / Clinic', itemPlaceholder: 'e.g. Gym membership, Vitamins, Pharmacy' },
+    'Social & Fun': { itemLabel: 'Event / Activity / Place', itemPlaceholder: 'e.g. Cinema, Drinks, Concert' },
+    Travel: { itemLabel: 'Destination / Booking', itemPlaceholder: 'e.g. Flight, Airbnb, Weekend trip' },
     Other: { itemLabel: 'Item name', itemPlaceholder: 'What was it?' },
 };
 
+export function normalizeCategory(
+    raw?: string,
+    hints?: { vendorType?: VendorType; foodType?: FoodType }
+): Category {
+    if (!raw) return 'Other';
+    const trimmed = raw.trim();
+    if (!trimmed) return 'Other';
+
+    // 1. Exact canonical match (case-insensitive)
+    const exact = CATEGORIES.find((c) => c.toLowerCase() === trimmed.toLowerCase());
+    if (exact) return exact;
+
+    // 2. Legacy & cross-app keyword fallbacks
+    const s = trimmed.toLowerCase();
+    if (s.includes('grocer') || s.includes('supermarket') || s.includes('pazar')) {
+        return 'Groceries';
+    }
+    if (
+        s === 'food' ||
+        s.includes('eating') ||
+        s.includes('dining') ||
+        s.includes('restaurant') ||
+        s.includes('cafe') ||
+        s.includes('café') ||
+        s.includes('coffee') ||
+        s.includes('meal')
+    ) {
+        if (
+            hints?.vendorType === 'Supermarket' ||
+            hints?.vendorType === 'Pazar' ||
+            hints?.foodType === 'Grocery'
+        ) {
+            return 'Groceries';
+        }
+        return 'Eating Out';
+    }
+    if (
+        s.includes('housing') ||
+        s.includes('bill') ||
+        s.includes('rent') ||
+        s.includes('utility') ||
+        s.includes('utilities') ||
+        s.includes('subscript')
+    ) {
+        return 'Housing & Bills';
+    }
+    if (
+        s.includes('transport') ||
+        s.includes('taxi') ||
+        s.includes('bus') ||
+        s.includes('furgon') ||
+        s.includes('fuel') ||
+        s.includes('parking')
+    ) {
+        return 'Transport';
+    }
+    if (s.includes('shop') || s.includes('cloth') || s.includes('retail') || s.includes('gear')) {
+        return 'Shopping';
+    }
+    if (s.includes('personal') || s.includes('toilet') || s.includes('hair') || s.includes('groom')) {
+        return 'Personal';
+    }
+    if (
+        s.includes('health') ||
+        s.includes('wellness') ||
+        s.includes('gym') ||
+        s.includes('pharmac') ||
+        s.includes('doctor') ||
+        s.includes('medical')
+    ) {
+        return 'Health & Wellness';
+    }
+    if (
+        s.includes('social') ||
+        s.includes('fun') ||
+        s.includes('party') ||
+        s.includes('drinks') ||
+        s.includes('entertain') ||
+        s.includes('movie') ||
+        s.includes('cinema') ||
+        s.includes('concert')
+    ) {
+        return 'Social & Fun';
+    }
+    if (
+        s.includes('travel') ||
+        s.includes('trip') ||
+        s.includes('flight') ||
+        s.includes('train') ||
+        s.includes('accommod') ||
+        s.includes('hotel') ||
+        s.includes('hostel') ||
+        s.includes('airbnb') ||
+        s.includes('lodging')
+    ) {
+        return 'Travel';
+    }
+
+    return 'Other';
+}
+
 export function getSubcategories(category: Category): string[] {
     switch (category) {
-        case 'Utilities':
-            return ['Electricity', 'Water', 'Internet', 'Phone', 'Gas'];
+        case 'Housing & Bills':
+            return ['Rent', 'Electricity', 'Water', 'Internet', 'Phone', 'Subscriptions'];
         case 'Transport':
-            return ['Furgon', 'Bus', 'Taxi', 'Train', 'Flight'];
+            return ['Bus', 'Furgon', 'Taxi', 'Fuel', 'Parking'];
+        case 'Health & Wellness':
+            return ['Gym', 'Pharmacy', 'Doctor / Dental', 'Supplements'];
+        case 'Social & Fun':
+            return ['Drinks / Bar', 'Cinema', 'Concert', 'Sports', 'Hobby'];
         case 'Travel':
-            return ['Accommodation', 'Transport', 'Activity', 'Food'];
-        case 'Accommodation':
-            return ['Hostel', 'Hotel', 'Airbnb', 'Rent'];
-        case 'Entertainment':
-            return ['Cinema', 'Concert', 'Museum', 'Theater', 'Sports'];
+            return ['Accommodation', 'Flight / Train', 'Activity', 'Trip Food'];
         default:
             return [];
     }
 }
 
 export function getVendorOptions(category: Category, _subcategory?: string): VendorType[] {
-    if (category === 'Food') {
-        return ['Pazar', 'Supermarket', 'Café', 'Bakery', 'Restaurant', 'Other'];
+    if (category === 'Groceries') {
+        return ['Pazar', 'Supermarket', 'Bakery', 'Other'];
+    }
+    if (category === 'Eating Out') {
+        return ['Café', 'Restaurant', 'Bakery', 'Other'];
     }
     return [];
 }
 
 export function showFoodDetails(category: Category): boolean {
-    return category === 'Food';
+    return category === 'Groceries' || category === 'Eating Out';
 }

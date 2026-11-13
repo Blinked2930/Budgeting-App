@@ -20,9 +20,9 @@ const inputClass =
     'w-full min-w-0 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors';
 
 const BIG_EXPENSE_PRESETS: { label: string; icon: React.ReactNode; category: Category }[] = [
-    { label: 'Rent', icon: <Building2 className="w-3.5 h-3.5" />, category: 'Utilities' },
-    { label: 'Utilities', icon: <Zap className="w-3.5 h-3.5" />, category: 'Utilities' },
-    { label: 'Phone/Internet', icon: <Wifi className="w-3.5 h-3.5" />, category: 'Utilities' },
+    { label: 'Rent', icon: <Building2 className="w-3.5 h-3.5" />, category: 'Housing & Bills' },
+    { label: 'Utilities', icon: <Zap className="w-3.5 h-3.5" />, category: 'Housing & Bills' },
+    { label: 'Phone/Internet', icon: <Wifi className="w-3.5 h-3.5" />, category: 'Housing & Bills' },
     { label: 'Insurance', icon: <Shield className="w-3.5 h-3.5" />, category: 'Other' },
     { label: 'Other', icon: <MoreHorizontal className="w-3.5 h-3.5" />, category: 'Other' },
 ];
@@ -39,7 +39,7 @@ export const LogBigExpenseModal: React.FC<LogBigExpenseModalProps> = ({
 
     const [amountStr, setAmountStr] = useState(String(Math.max(0, plannedTotal - alreadyPaid) || defaultAmount));
     const [label, setLabel] = useState('Rent');
-    const [category, setCategory] = useState<Category>('Utilities');
+    const [category, setCategory] = useState<Category>('Housing & Bills');
     const [paidWith, setPaidWith] = useState<'Card' | 'Cash'>('Card');
     const [dateOverride, setDateOverride] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -83,7 +83,7 @@ export const LogBigExpenseModal: React.FC<LogBigExpenseModalProps> = ({
             });
             setAmountStr('');
             setLabel('Rent');
-            setCategory('Utilities');
+            setCategory('Housing & Bills');
             setPaidWith('Card');
             setIsSaving(false);
             onClose();

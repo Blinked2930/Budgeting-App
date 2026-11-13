@@ -37,6 +37,7 @@ import {
     type InsightFilters,
 } from '../utils/insights';
 import { parseLocalDate } from '../utils/budget';
+import { normalizeCategory } from '../utils/categoryConfig';
 import {
     buildCycleRollup,
     findSelfMember,
@@ -56,13 +57,15 @@ const SCOPES: { id: TimeScope; label: string }[] = [
 ];
 
 const CATEGORY_COLORS: Record<Category, { bar: string; text: string; dot: string }> = {
-    Food: { bar: 'bg-emerald-400', text: 'text-emerald-700', dot: 'bg-emerald-400' },
-    Utilities: { bar: 'bg-amber-400', text: 'text-amber-700', dot: 'bg-amber-400' },
+    Groceries: { bar: 'bg-emerald-500', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+    'Eating Out': { bar: 'bg-orange-400', text: 'text-orange-700', dot: 'bg-orange-400' },
+    'Housing & Bills': { bar: 'bg-amber-400', text: 'text-amber-700', dot: 'bg-amber-400' },
     Transport: { bar: 'bg-cyan-400', text: 'text-cyan-700', dot: 'bg-cyan-400' },
-    Social: { bar: 'bg-purple-400', text: 'text-purple-700', dot: 'bg-purple-400' },
+    Shopping: { bar: 'bg-blue-400', text: 'text-blue-700', dot: 'bg-blue-400' },
+    Personal: { bar: 'bg-violet-400', text: 'text-violet-700', dot: 'bg-violet-400' },
+    'Health & Wellness': { bar: 'bg-teal-400', text: 'text-teal-700', dot: 'bg-teal-400' },
+    'Social & Fun': { bar: 'bg-pink-400', text: 'text-pink-700', dot: 'bg-pink-400' },
     Travel: { bar: 'bg-rose-400', text: 'text-rose-700', dot: 'bg-rose-400' },
-    Accommodation: { bar: 'bg-indigo-400', text: 'text-indigo-700', dot: 'bg-indigo-400' },
-    Entertainment: { bar: 'bg-pink-400', text: 'text-pink-700', dot: 'bg-pink-400' },
     Other: { bar: 'bg-slate-400', text: 'text-slate-700', dot: 'bg-slate-400' },
 };
 
@@ -137,7 +140,9 @@ const CategoryBreakdown: React.FC<{
         const local = aggregateByCategory(expenses);
         const totals = new Map<Category, { total: number; count: number }>();
         for (const row of local) {
-            totals.set(row.category, { total: row.total, count: row.count });
+            const cat = normalizeCategory(row.category);
+            const prev = totals.get(cat) ?? { total: 0, count: 0 };
+            totals.set(cat, { total: prev.total + row.total, count: prev.count + row.count });
         }
         if (sharedCategoryTotals) {
             for (const [cat, amount] of Object.entries(sharedCategoryTotals) as [Category, number][]) {
@@ -455,22 +460,27 @@ function filterByScope(
 ): ExpenseRecord[] {
     const now = Date.now();
 
-    return expenses.filter((e) => {
-        if (e.deleted) return false;
-        const when = new Date(e.timestamp).getTime();
+    return expenses
+        .filter((e) => {
+            if (e.deleted) return false;
+            const when = new Date(e.timestamp).getTime();
 
-        if (scope === 'all') return true;
+            if (scope === 'all') return true;
 
-        if (scope === '30d') {
-            return now - when <= 30 * 24 * 60 * 60 * 1000;
-        }
+            if (scope === '30d') {
+                return now - when <= 30 * 24 * 60 * 60 * 1000;
+            }
 
-        if (cycleStart) {
-            const cycleMs = parseLocalDate(cycleStart).getTime();
-            return when >= cycleMs;
-        }
-        return true;
-    });
+            if (cycleStart) {
+                const cycleMs = parseLocalDate(cycleStart).getTime();
+                return when >= cycleMs;
+            }
+            return true;
+        })
+        .map((e) => ({
+            ...e,
+            category: normalizeCategory(e.category, { vendorType: e.vendorType, foodType: e.foodType }),
+        }));
 }
 
 function getScopeStartMs(scope: TimeScope, cycleStart?: string): number {

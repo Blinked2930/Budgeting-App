@@ -4,14 +4,17 @@ import { useQuery, useMutation, useConvex } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import {
   ArrowRight,
+  ShoppingCart,
   Utensils,
-  Lightbulb,
+  Home,
   Bus,
-  Users,
+  ShoppingBag,
+  Sparkles,
+  HeartPulse,
+  PartyPopper,
   Plane,
-  Building,
-  Film,
   MoreHorizontal,
+  Users,
   RotateCcw,
   Zap,
   Pencil,
@@ -55,7 +58,7 @@ import { useBudgetCycle } from '../hooks/useBudgetCycle';
 import { useCurrency } from '../hooks/useCurrency';
 import { convertToALL, convertFromALL, formatCurrency, evaluateAmountExpression } from '../utils/currency';
 import { dateToNoonISO, toDateInputValue } from '../utils/budget';
-import { CATEGORY_CONFIG } from '../utils/categoryConfig';
+import { CATEGORY_CONFIG, normalizeCategory } from '../utils/categoryConfig';
 import { cn } from '../utils/cn';
 
 type EntryMode = 'expense' | 'withdraw' | 'lend' | 'settle';
@@ -69,13 +72,15 @@ const MODES: { id: EntryMode; label: string; icon: React.ReactNode }[] = [
 ];
 
 const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
-  Food: <Utensils className="w-4 h-4 text-slate-600" />,
-  Utilities: <Lightbulb className="w-4 h-4 text-slate-600" />,
+  Groceries: <ShoppingCart className="w-4 h-4 text-slate-600" />,
+  'Eating Out': <Utensils className="w-4 h-4 text-slate-600" />,
+  'Housing & Bills': <Home className="w-4 h-4 text-slate-600" />,
   Transport: <Bus className="w-4 h-4 text-slate-600" />,
-  Social: <Users className="w-4 h-4 text-slate-600" />,
+  Shopping: <ShoppingBag className="w-4 h-4 text-slate-600" />,
+  Personal: <Sparkles className="w-4 h-4 text-slate-600" />,
+  'Health & Wellness': <HeartPulse className="w-4 h-4 text-slate-600" />,
+  'Social & Fun': <PartyPopper className="w-4 h-4 text-slate-600" />,
   Travel: <Plane className="w-4 h-4 text-slate-600" />,
-  Accommodation: <Building className="w-4 h-4 text-slate-600" />,
-  Entertainment: <Film className="w-4 h-4 text-slate-600" />,
   Other: <MoreHorizontal className="w-4 h-4 text-slate-600" />,
 };
 
@@ -93,7 +98,11 @@ function buildSuggestions(
   const byName = new Map<string, Suggestion>();
 
   for (const e of expenses) {
-    if (e.category !== category || !e.itemName) continue;
+    const normalized = normalizeCategory(e.category, {
+      vendorType: e.vendorType,
+      foodType: e.foodType,
+    });
+    if (normalized !== category || !e.itemName) continue;
     const name = e.itemName.trim();
     if (!name) continue;
     const key = name.toLowerCase();
@@ -244,7 +253,7 @@ export const QuickEntryView: React.FC = () => {
   const [amountStr, setAmountStr] = useState<string>('');
   const [mode, setMode] = useState<EntryMode>('expense');
 
-  const [category, setCategory] = useState<Category>('Food');
+  const [category, setCategory] = useState<Category>('Eating Out');
   const [payMethod, setPayMethod] = useState<PayMethod>('Cash');
   const [payerName, setPayerName] = useState<string>('');
 
@@ -456,7 +465,12 @@ export const QuickEntryView: React.FC = () => {
     setEditingId(expense.id);
     setEditingIsDebt(Boolean(expense.debtId));
     setAmountStr(String(expense.amount));
-    setCategory(expense.category);
+    setCategory(
+      normalizeCategory(expense.category, {
+        vendorType: expense.vendorType,
+        foodType: expense.foodType,
+      })
+    );
     setPayMethod(expense.walletNeutral ? 'SomeoneElse' : ((expense.paidWith as PayMethod) ?? 'Card'));
     setItemName(expense.itemName ?? '');
     setShareAmountStr('');
@@ -544,7 +558,7 @@ export const QuickEntryView: React.FC = () => {
         currency: defaultAppCurrency,
         amountInGroupCurrency,
         amountInALL: normalizedALL,
-        category: 'General',
+        category: 'Other',
         paidByMemberId: paidBy,
         splitType: 'exact',
         splits: [
@@ -614,7 +628,7 @@ export const QuickEntryView: React.FC = () => {
         currency: defaultAppCurrency,
         amountInGroupCurrency: totalGroup,
         amountInALL: totalALL,
-        category: params.category || 'General',
+        category: params.category || 'Other',
         paidByMemberId: selfMember._id,
         splitType: 'exact',
         splits: [
@@ -1012,7 +1026,7 @@ export const QuickEntryView: React.FC = () => {
                   Category
                 </span>
               </div>
-              <div className="grid grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-5 gap-1.5">
                 {CATEGORIES.map((cat) => {
                   const selected = category === cat;
                   return (
@@ -1021,14 +1035,14 @@ export const QuickEntryView: React.FC = () => {
                       type="button"
                       onClick={() => handleCategoryChange(cat)}
                       className={cn(
-                        'flex flex-col items-center justify-center gap-1 p-2 rounded-xl border text-[10px] font-bold transition-all cursor-pointer text-center min-w-0',
+                        'flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl border text-[9.5px] leading-tight font-bold transition-all cursor-pointer text-center min-w-0 min-h-[54px]',
                         selected
                           ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-xs'
                           : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-slate-100'
                       )}
                     >
                       <span className="shrink-0">{CATEGORY_ICONS[cat]}</span>
-                      <span className="truncate max-w-full">{cat}</span>
+                      <span className="line-clamp-2 max-w-full">{cat}</span>
                     </button>
                   );
                 })}

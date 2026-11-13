@@ -1,5 +1,6 @@
 // src/utils/divvyBridge.ts
 import { type Category, DEFAULT_EXCHANGE_RATES, type ExchangeRates } from '../types';
+import { normalizeCategory } from './categoryConfig';
 
 export interface BridgeGroupMember {
   _id: string;
@@ -114,17 +115,7 @@ function normalizeSettlementAmountALL(
 }
 
 export function mapDivvyCategory(raw?: string): Category {
-  if (!raw) return 'Other';
-  const s = raw.trim().toLowerCase();
-  if (!s) return 'Other';
-  if (s.includes('food') || s.includes('dining') || s.includes('restaurant') || s.includes('meal')) return 'Food';
-  if (s.includes('utility') || s.includes('utilities') || s.includes('bill')) return 'Utilities';
-  if (s.includes('transport') || s.includes('taxi') || s.includes('bus') || s.includes('train')) return 'Transport';
-  if (s.includes('social') || s.includes('party') || s.includes('drinks')) return 'Social';
-  if (s.includes('travel') || s.includes('trip') || s.includes('flight')) return 'Travel';
-  if (s.includes('accommod') || s.includes('hotel') || s.includes('lodging')) return 'Accommodation';
-  if (s.includes('entertain') || s.includes('movie') || s.includes('concert')) return 'Entertainment';
-  return 'Other';
+  return normalizeCategory(raw);
 }
 
 function normalizeName(name: string): string {

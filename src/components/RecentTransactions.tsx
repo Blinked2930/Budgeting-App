@@ -6,13 +6,16 @@ import {
   Trash2,
   CheckCircle2,
   Clock,
+  ShoppingBasket,
   Utensils,
-  Lightbulb,
+  Home,
   Bus,
-  Users,
+  ShoppingBag,
+  Sparkles,
+  HeartPulse,
+  PartyPopper,
   Plane,
-  Building,
-  Film,
+  Users,
   MoreHorizontal,
   Banknote,
   CreditCard,
@@ -31,6 +34,7 @@ import type { ExpenseRecord, Category, TransferRecord } from '../types';
 import { deleteExpense, deleteTransfer, hasLinkedDebt } from '../db';
 import { useCurrency } from '../hooks/useCurrency';
 import { classifyExpense, budgetImpactOf, isReconciliationEntry } from '../utils/budget';
+import { normalizeCategory } from '../utils/categoryConfig';
 import { cn } from '../utils/cn';
 
 interface RecentTransactionsProps {
@@ -43,13 +47,15 @@ interface RecentTransactionsProps {
 const PAGE_SIZE = 15;
 
 const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
-  Food: <Utensils className="w-3.5 h-3.5 text-slate-600" />,
-  Utilities: <Lightbulb className="w-3.5 h-3.5 text-slate-600" />,
+  Groceries: <ShoppingBasket className="w-3.5 h-3.5 text-slate-600" />,
+  'Eating Out': <Utensils className="w-3.5 h-3.5 text-slate-600" />,
+  'Housing & Bills': <Home className="w-3.5 h-3.5 text-slate-600" />,
   Transport: <Bus className="w-3.5 h-3.5 text-slate-600" />,
-  Social: <Users className="w-3.5 h-3.5 text-slate-600" />,
+  Shopping: <ShoppingBag className="w-3.5 h-3.5 text-slate-600" />,
+  Personal: <Sparkles className="w-3.5 h-3.5 text-slate-600" />,
+  'Health & Wellness': <HeartPulse className="w-3.5 h-3.5 text-slate-600" />,
+  'Social & Fun': <PartyPopper className="w-3.5 h-3.5 text-slate-600" />,
   Travel: <Plane className="w-3.5 h-3.5 text-slate-600" />,
-  Accommodation: <Building className="w-3.5 h-3.5 text-slate-600" />,
-  Entertainment: <Film className="w-3.5 h-3.5 text-slate-600" />,
   Other: <MoreHorizontal className="w-3.5 h-3.5 text-slate-600" />,
 };
 
@@ -290,7 +296,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
         amount: a.amount,
         amountInALL: a.amount,
         currency: a.currency || 'ALL',
-        category: a.category || 'Other',
+        category: normalizeCategory(a.category),
         itemName: `${a.groupName}: ${a.title}`,
         paidWith: 'Cash',
         timestamp: new Date(a.timestamp).toISOString(),
@@ -422,6 +428,10 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
               }
 
               const expense = item.record;
+              const canonicalCategory = normalizeCategory(expense.category, {
+                vendorType: expense.vendorType,
+                foodType: expense.foodType,
+              });
               const isForeignCurrency = expense.currency !== 'ALL';
               const kind = primaryKind(expense);
               const primary = PRIMARY_META[kind];
@@ -471,7 +481,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                 icon = <PlusCircle className="w-3.5 h-3.5 text-emerald-600" />;
                 tile = 'bg-emerald-50 border-emerald-200';
               } else {
-                icon = CATEGORY_ICONS[expense.category] || <MoreHorizontal className="w-3.5 h-3.5" />;
+                icon = CATEGORY_ICONS[canonicalCategory] || <MoreHorizontal className="w-3.5 h-3.5" />;
               }
 
               const showsBudgetShare =
@@ -494,7 +504,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-semibold text-slate-900 truncate">
-                          {expense.itemName || (isIn ? 'Income' : expense.category)}
+                          {expense.itemName || (isIn ? 'Income' : canonicalCategory)}
                         </span>
                         {item.isConvex && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold">
