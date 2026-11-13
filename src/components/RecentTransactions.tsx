@@ -1,10 +1,10 @@
+// src/components/RecentTransactions.tsx
 import React, { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import {
   Trash2,
-  CheckCircle2,
   Clock,
   ShoppingBasket,
   Utensils,
@@ -24,10 +24,7 @@ import {
   PlusCircle,
   TriangleAlert,
   ChevronDown,
-  Gift,
   Scale,
-  Ban,
-  TrendingDown,
   Handshake,
 } from 'lucide-react';
 import type { ExpenseRecord, Category, TransferRecord } from '../types';
@@ -47,16 +44,16 @@ interface RecentTransactionsProps {
 const PAGE_SIZE = 15;
 
 const CATEGORY_ICONS: Record<Category, React.ReactNode> = {
-  Groceries: <ShoppingBasket className="w-3.5 h-3.5 text-slate-600" />,
-  'Eating Out': <Utensils className="w-3.5 h-3.5 text-slate-600" />,
-  'Housing & Bills': <Home className="w-3.5 h-3.5 text-slate-600" />,
-  Transport: <Bus className="w-3.5 h-3.5 text-slate-600" />,
-  Shopping: <ShoppingBag className="w-3.5 h-3.5 text-slate-600" />,
-  Personal: <Sparkles className="w-3.5 h-3.5 text-slate-600" />,
-  'Health & Wellness': <HeartPulse className="w-3.5 h-3.5 text-slate-600" />,
-  'Social & Fun': <PartyPopper className="w-3.5 h-3.5 text-slate-600" />,
-  Travel: <Plane className="w-3.5 h-3.5 text-slate-600" />,
-  Other: <MoreHorizontal className="w-3.5 h-3.5 text-slate-600" />,
+  Groceries: <ShoppingBasket className="w-4 h-4 text-slate-700" />,
+  'Eating Out': <Utensils className="w-4 h-4 text-slate-700" />,
+  'Housing & Bills': <Home className="w-4 h-4 text-slate-700" />,
+  Transport: <Bus className="w-4 h-4 text-slate-700" />,
+  Shopping: <ShoppingBag className="w-4 h-4 text-slate-700" />,
+  Personal: <Sparkles className="w-4 h-4 text-slate-700" />,
+  'Health & Wellness': <HeartPulse className="w-4 h-4 text-slate-700" />,
+  'Social & Fun': <PartyPopper className="w-4 h-4 text-slate-700" />,
+  Travel: <Plane className="w-4 h-4 text-slate-700" />,
+  Other: <MoreHorizontal className="w-4 h-4 text-slate-700" />,
 };
 
 function formatRelativeTime(isoString: string): string {
@@ -112,17 +109,16 @@ type PrimaryKind =
   | 'income'
   | 'reconciliation';
 
-const PRIMARY_META: Record<PrimaryKind, { label: string; cls: string }> = {
-  expense: { label: 'Expense', cls: 'bg-slate-100 text-slate-700' },
-  gift: { label: 'Gift', cls: 'bg-rose-50 text-rose-700' },
-  lent: { label: 'Lent out', cls: 'bg-indigo-50 text-indigo-700' },
-  borrowed: { label: 'Borrowed', cls: 'bg-indigo-50 text-indigo-700' },
-  repaid_to_me: { label: 'Repaid to me', cls: 'bg-emerald-50 text-emerald-700' },
-  i_repaid: { label: 'I repaid', cls: 'bg-emerald-50 text-emerald-700' },
-  offset: { label: 'Offset', cls: 'bg-slate-100 text-slate-700' },
-  big: { label: 'Big Expense', cls: 'bg-purple-50 text-purple-700' },
-  income: { label: 'Income', cls: 'bg-emerald-50 text-emerald-700' },
-  reconciliation: { label: 'Reconciliation', cls: 'bg-amber-50 text-amber-700' },
+const NON_STANDARD_LABELS: Partial<Record<PrimaryKind, string>> = {
+  gift: 'Gift',
+  lent: 'Lent out',
+  borrowed: 'Borrowed',
+  repaid_to_me: 'Repaid to me',
+  i_repaid: 'I repaid',
+  offset: 'Offset',
+  big: 'Big expense',
+  income: 'Income',
+  reconciliation: 'Reconciliation',
 };
 
 function primaryKind(e: ExpenseRecord): PrimaryKind {
@@ -147,17 +143,6 @@ function primaryKind(e: ExpenseRecord): PrimaryKind {
   if (e.amount < 0) return 'income';
   return 'expense';
 }
-
-const Pill: React.FC<{ className?: string; children: React.ReactNode }> = ({ className, children }) => (
-  <span
-    className={cn(
-      'text-[10px] px-1.5 py-0.5 rounded-md font-medium inline-flex items-center gap-0.5 whitespace-nowrap',
-      className
-    )}
-  >
-    {children}
-  </span>
-);
 
 const SPENT_BUCKETS = new Set(['regular', 'noWalletSpending', 'forgiveness', 'travel', 'big']);
 
@@ -378,50 +363,41 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                 return (
                   <div
                     key={t.id}
-                    className="flex items-center justify-between p-3 rounded-2xl bg-white border border-slate-200 transition-all shadow-sm"
+                    className="flex items-center justify-between px-3 py-2.5 rounded-2xl bg-white border border-slate-200 transition-all shadow-sm"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center shrink-0">
-                        <ArrowLeftRight className="w-3.5 h-3.5 text-amber-600" />
+                      <div
+                        className="w-9 h-9 rounded-xl bg-amber-50/70 border border-dashed border-amber-300 flex items-center justify-center shrink-0"
+                        title="Not an expense · Internal wallet transfer"
+                      >
+                        <ArrowLeftRight className="w-4 h-4 text-amber-600" />
                       </div>
                       <div className="min-w-0">
-                        <span className="text-xs font-semibold text-slate-900 truncate">{label}</span>
-                        <div className="flex items-center gap-1 flex-wrap mt-1">
-                          <Pill className="bg-amber-50 text-amber-700">Transfer</Pill>
-                          <Pill className="bg-slate-100 text-slate-600">Bank ↔ Cash</Pill>
-                          <Pill className="bg-slate-100 text-slate-500 border border-slate-200">
-                            <Ban className="w-2.5 h-2.5" />
-                            Not spent
-                          </Pill>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400">
+                        <p className="text-xs font-semibold text-slate-900 truncate">{label}</p>
+                        <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-400">
+                          <span className="font-medium text-amber-700">Transfer</span>
+                          <span>·</span>
                           <span>{formatRelativeTime(t.timestamp)}</span>
-                          <span>•</span>
-                          <span className="flex items-center gap-1">
-                            {t.isSynced ? (
-                              <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                            ) : (
+                          {!t.isSynced && (
+                            <span title="Offline" className="inline-flex">
                               <Clock className="w-3 h-3 text-slate-400" />
-                            )}
-                            <span className="text-[10px]">{t.isSynced ? 'Synced' : 'Offline'}</span>
-                          </span>
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 ml-2">
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
                       <p className="text-sm font-bold font-mono text-amber-700 tracking-tight">
                         {format(t.amountALL)}
                       </p>
-                      <div className="flex items-center justify-center w-[26px]">
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteTransfer(t.id, e)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
-                          title="Delete transfer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteTransfer(t.id, e)}
+                        className="p-1.5 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                        title="Delete transfer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 );
@@ -434,21 +410,28 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
               });
               const isForeignCurrency = expense.currency !== 'ALL';
               const kind = primaryKind(expense);
-              const primary = PRIMARY_META[kind];
               const noWallet = Boolean(expense.walletNeutral);
               const isCash = expense.paidWith === 'Cash';
               const spent = isSpent(expense);
               const isIn = expense.amount < 0;
-              const moneyKinds: PrimaryKind[] = ['lent', 'borrowed', 'repaid_to_me', 'i_repaid', 'offset', 'reconciliation'];
+              const isBudgetNeutral = !spent && kind !== 'income';
+              const moneyKinds: PrimaryKind[] = [
+                'lent',
+                'borrowed',
+                'repaid_to_me',
+                'i_repaid',
+                'offset',
+                'reconciliation',
+              ];
 
               let displayAmount: string;
               let amountColor: string;
               if (noWallet) {
                 displayAmount = format(Math.abs(expense.amountInALL));
-                amountColor = 'text-slate-500';
+                amountColor = 'text-slate-600';
               } else if (moneyKinds.includes(kind)) {
                 displayAmount = `${isIn ? '+' : '−'}${format(Math.abs(expense.amountInALL))}`;
-                amountColor = isIn ? 'text-emerald-600' : 'text-rose-600';
+                amountColor = isIn ? 'text-emerald-600' : 'text-indigo-600';
               } else if (isIn) {
                 displayAmount = `+${format(Math.abs(expense.amountInALL))}`;
                 amountColor = 'text-emerald-600';
@@ -458,122 +441,137 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
               }
 
               let icon: React.ReactNode;
-              let tile = 'bg-slate-100 border-slate-200';
+              let tile = 'bg-slate-50 border-slate-200';
               if (item.isConvex) {
-                icon = <Users className="w-3.5 h-3.5 text-emerald-600" />;
-                tile = 'bg-emerald-50 border-emerald-200';
+                icon = CATEGORY_ICONS[canonicalCategory] || <Users className="w-4 h-4 text-emerald-600" />;
+                tile = 'bg-emerald-50/60 border-emerald-200';
               } else if (kind === 'reconciliation') {
-                icon = <Scale className="w-3.5 h-3.5 text-amber-600" />;
-                tile = 'bg-amber-50 border-amber-200';
-              } else if (kind === 'gift') {
-                icon = <Gift className="w-3.5 h-3.5 text-rose-600" />;
-                tile = 'bg-rose-50 border-rose-200';
+                icon = <Scale className="w-4 h-4 text-amber-600" />;
+                tile = 'bg-amber-50/70 border-dashed border-amber-300';
               } else if (kind === 'lent' || kind === 'borrowed') {
-                icon = <HandCoins className="w-3.5 h-3.5 text-indigo-500" />;
-                tile = 'bg-indigo-50 border-indigo-200';
+                icon = <HandCoins className="w-4 h-4 text-indigo-600" />;
+                tile = 'bg-indigo-50/70 border-dashed border-indigo-300';
               } else if (kind === 'repaid_to_me' || kind === 'i_repaid') {
-                icon = <HandCoins className="w-3.5 h-3.5 text-emerald-600" />;
-                tile = 'bg-emerald-50 border-emerald-200';
+                icon = <HandCoins className="w-4 h-4 text-emerald-600" />;
+                tile = 'bg-emerald-50/70 border-dashed border-emerald-300';
               } else if (kind === 'offset') {
-                icon = <HandCoins className="w-3.5 h-3.5 text-slate-500" />;
-                tile = 'bg-slate-100 border-slate-200';
+                icon = <HandCoins className="w-4 h-4 text-slate-500" />;
+                tile = 'bg-slate-50 border-dashed border-slate-300';
               } else if (kind === 'income') {
-                icon = <PlusCircle className="w-3.5 h-3.5 text-emerald-600" />;
+                icon = <PlusCircle className="w-4 h-4 text-emerald-600" />;
                 tile = 'bg-emerald-50 border-emerald-200';
               } else {
-                icon = CATEGORY_ICONS[canonicalCategory] || <MoreHorizontal className="w-3.5 h-3.5" />;
+                icon = CATEGORY_ICONS[canonicalCategory] || <MoreHorizontal className="w-4 h-4 text-slate-700" />;
+                if (kind === 'gift') {
+                  tile = 'bg-rose-50/70 border-rose-200';
+                } else if (kind === 'big') {
+                  tile = 'bg-purple-50/70 border-purple-200';
+                } else if (noWallet) {
+                  tile = 'bg-indigo-50/50 border-indigo-200';
+                }
               }
+
+              const walletBadge = noWallet ? (
+                <span
+                  className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-indigo-100 border border-white text-indigo-700 flex items-center justify-center shadow-2xs"
+                  title="Someone else paid (0 wallet movement)"
+                >
+                  <Handshake className="w-2.5 h-2.5" />
+                </span>
+              ) : isCash ? (
+                <span
+                  className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-teal-100 border border-white text-teal-700 flex items-center justify-center shadow-2xs"
+                  title="Cash moved"
+                >
+                  <Banknote className="w-2.5 h-2.5" />
+                </span>
+              ) : (
+                <span
+                  className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-rose-100 border border-white text-rose-700 flex items-center justify-center shadow-2xs"
+                  title="Bank / Card moved"
+                >
+                  <CreditCard className="w-2.5 h-2.5" />
+                </span>
+              );
 
               const showsBudgetShare =
                 expense.budgetAmountALL !== undefined &&
                 Math.abs(expense.budgetAmountALL - expense.amountInALL) >= 1;
 
+              const kindLabel = NON_STANDARD_LABELS[kind];
+              const walletText = noWallet ? 'Someone else' : isCash ? 'Cash' : 'Card';
+
               return (
                 <div
                   key={expense.id}
                   onClick={() => !item.isConvex && handleRowClick(expense)}
-                  className={`flex items-center justify-between p-3 rounded-2xl bg-white transition-all border border-slate-200 shadow-sm ${
+                  className={`flex items-center justify-between px-3 py-2.5 rounded-2xl bg-white transition-all border border-slate-200 shadow-sm ${
                     !item.isConvex ? 'cursor-pointer hover:border-emerald-300 hover:shadow-md' : ''
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className={cn('w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border', tile)}>
+                    <div
+                      className={cn(
+                        'relative w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border',
+                        tile
+                      )}
+                      title={`${canonicalCategory} · ${spent ? 'Counts as expense' : 'Not an expense'} · ${walletText}`}
+                    >
                       {icon}
+                      {walletBadge}
                     </div>
 
                     <div className="min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1.5">
                         <span className="text-xs font-semibold text-slate-900 truncate">
                           {expense.itemName || (isIn ? 'Income' : canonicalCategory)}
                         </span>
                         {item.isConvex && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-bold">
-                            👥 {item.groupName || 'Divvy'}
-                          </span>
-                        )}
-                        {expense.vendorType && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-500 font-medium">
-                            {expense.vendorType}
+                          <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 font-bold shrink-0">
+                            {item.groupName || 'Divvy'}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1 flex-wrap mt-1">
-                        <Pill className={primary.cls}>{primary.label}</Pill>
-
-                        {noWallet ? (
-                          <Pill className="bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            <Handshake className="w-2.5 h-2.5" />
-                            Someone else
-                          </Pill>
-                        ) : isCash ? (
-                          <Pill className="bg-teal-50 text-teal-700">
-                            <Banknote className="w-2.5 h-2.5" />
-                            Cash
-                          </Pill>
-                        ) : (
-                          <Pill className="bg-rose-50 text-rose-700">
-                            <CreditCard className="w-2.5 h-2.5" />
-                            Card
-                          </Pill>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-400 truncate">
+                        {kindLabel && (
+                          <>
+                            <span
+                              className={cn(
+                                'font-semibold',
+                                isBudgetNeutral
+                                  ? 'text-indigo-600'
+                                  : kind === 'income'
+                                    ? 'text-emerald-600'
+                                    : 'text-slate-600'
+                              )}
+                            >
+                              {kindLabel}
+                            </span>
+                            <span>·</span>
+                          </>
                         )}
-
-                        {showsBudgetShare && (
-                          <Pill className="bg-indigo-50 text-indigo-700 border border-indigo-200">
-                            <Users className="w-2.5 h-2.5" />
-                            Split
-                          </Pill>
-                        )}
-
-                        {spent ? (
-                          <Pill className="bg-emerald-50 text-emerald-700">
-                            <TrendingDown className="w-2.5 h-2.5" />
-                            Spent
-                          </Pill>
-                        ) : (
-                          <Pill className="bg-slate-100 text-slate-500 border border-slate-200">
-                            <Ban className="w-2.5 h-2.5" />
-                            Not spent
-                          </Pill>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-400">
-                        <span>{formatRelativeTime(expense.timestamp)}</span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1">
-                          {expense.isSynced ? (
-                            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                          ) : (
-                            <Clock className="w-3 h-3 text-slate-400" />
-                          )}
-                          <span className="text-[10px]">{expense.isSynced ? 'Synced' : 'Offline'}</span>
+                        <span className={noWallet ? 'text-indigo-600 font-medium' : undefined}>
+                          {walletText}
                         </span>
+                        {showsBudgetShare && (
+                          <>
+                            <span>·</span>
+                            <span className="text-indigo-600 font-medium">Split</span>
+                          </>
+                        )}
+                        <span>·</span>
+                        <span>{formatRelativeTime(expense.timestamp)}</span>
+                        {!expense.isSynced && (
+                          <span title="Offline" className="inline-flex shrink-0">
+                            <Clock className="w-3 h-3 text-slate-400" />
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <div className="flex items-center gap-1.5 shrink-0 ml-2">
                     <div className="text-right">
                       <p className={cn('text-sm font-bold font-mono tracking-tight', amountColor)}>
                         {displayAmount}
@@ -591,16 +589,14 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                     </div>
 
                     {!item.isConvex && (
-                      <div className="flex items-center justify-center w-[26px]">
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteExpense(expense.id, e)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
-                          title="Delete record"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteExpense(expense.id, e)}
+                        className="p-1.5 rounded-lg text-slate-300 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                        title="Delete record"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     )}
                   </div>
                 </div>

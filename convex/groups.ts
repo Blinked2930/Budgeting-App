@@ -175,8 +175,16 @@ export const getMyGroups = query({
 
       for (const exp of expenses) {
         const expGroupTotal =
-          exp.amountInGroupCurrency ??
-          (exp.currency === group.currency ? exp.amount : exp.amountInALL);
+          exp.currency === group.currency
+            ? exp.amount
+            : group.currency === "ALL"
+              ? exp.amountInALL
+              : typeof exp.amountInGroupCurrency === "number" &&
+                  Math.abs(exp.amountInGroupCurrency - exp.amountInALL) > 0.01
+                ? exp.amountInGroupCurrency
+                : Math.round(
+                    (exp.amountInALL / (FALLBACK_RATES_TO_ALL[group.currency] ?? 1)) * 100
+                  ) / 100;
 
         if (exp.paidByMemberId === memberRow._id) {
           netALL += exp.amountInALL;
@@ -186,10 +194,16 @@ export const getMyGroups = query({
           if (split.memberId === memberRow._id) {
             netALL -= split.amountALL;
             const splitGroupAmt =
-              split.amountGroup ??
-              (exp.amountInALL > 0
-                ? (split.amountALL / exp.amountInALL) * expGroupTotal
-                : 0);
+              exp.currency === group.currency && exp.amountInALL > 0
+                ? (split.amountALL / exp.amountInALL) * exp.amount
+                : group.currency === "ALL"
+                  ? split.amountALL
+                  : typeof split.amountGroup === "number" &&
+                      Math.abs(split.amountGroup - split.amountALL) > 0.01
+                    ? split.amountGroup
+                    : exp.amountInALL > 0
+                      ? (split.amountALL / exp.amountInALL) * expGroupTotal
+                      : 0;
             netGroup -= splitGroupAmt;
           }
         }
@@ -197,8 +211,16 @@ export const getMyGroups = query({
 
       for (const set of settlements) {
         const setGroupAmt =
-          set.amountInGroupCurrency ??
-          (set.currency === group.currency ? (set.amount ?? set.amountALL) : set.amountALL);
+          set.currency === group.currency && typeof set.amount === "number"
+            ? set.amount
+            : group.currency === "ALL"
+              ? set.amountALL
+              : typeof set.amountInGroupCurrency === "number" &&
+                  Math.abs(set.amountInGroupCurrency - set.amountALL) > 0.01
+                ? set.amountInGroupCurrency
+                : Math.round(
+                    (set.amountALL / (FALLBACK_RATES_TO_ALL[group.currency] ?? 1)) * 100
+                  ) / 100;
 
         if (set.fromMemberId === memberRow._id) {
           netALL += set.amountALL;
@@ -599,6 +621,7 @@ export const updateGroupSettings = mutation({
     name: v.string(),
     currency: v.string(),
     allowedCurrencies: v.array(v.string()),
+    fxRateToALL: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -635,11 +658,97 @@ export const updateGroupSettings = mutation({
       );
     }
 
+    const currencyChanged = baseCurrency !== group.currency;
+
     await ctx.db.patch(args.groupId, {
       name: args.name.trim(),
       currency: baseCurrency,
       allowedCurrencies: allowed as any,
     });
+
+    if (currencyChanged) {
+      const rateToALL =
+        baseCurrency === "ALL"
+          ? 1
+          : args.fxRateToALL && args.fxRateToALL > 0
+            ? args.fxRateToALL
+            : FALLBACK_RATES_TO_ALL[baseCurrency] ?? 100;
+
+      const expenses = await ctx.db
+        .query("groupExpenses")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("groupId"), args.groupId),
+            q.neq(q.field("deleted"), true)
+          )
+        )
+        .collect();
+
+      for (const exp of expenses) {
+        const nextAmountInGroup =
+          exp.currency === baseCurrency
+            ? exp.amount
+            : baseCurrency === "ALL"
+              ? exp.amountInALL
+              : Math.round((exp.amountInALL / rateToALL) * 100) / 100;
+
+        const weights: Record<string, number> = {};
+        for (const s of exp.splits) {
+          weights[s.memberId] = s.amountALL > 0 ? s.amountALL : 0;
+        }
+        const groupAlloc = allocateByShares(nextAmountInGroup, weights);
+
+        const updatedSplits = exp.splits.map((s) => ({
+          ...s,
+          amountGroup: groupAlloc[s.memberId] ?? 0,
+        }));
+
+        const nextFxRateToGroup =
+          exp.currency === baseCurrency
+            ? 1
+            : exp.amount > 0
+              ? Math.round((nextAmountInGroup / exp.amount) * 1000000) / 1000000
+              : 1;
+
+        await ctx.db.patch(exp._id, {
+          amountInGroupCurrency: nextAmountInGroup,
+          fxRateToGroup: nextFxRateToGroup,
+          splits: updatedSplits,
+        });
+      }
+
+      const settlements = await ctx.db
+        .query("groupSettlements")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("groupId"), args.groupId),
+            q.neq(q.field("deleted"), true)
+          )
+        )
+        .collect();
+
+      for (const set of settlements) {
+        const nativeAmt = set.amount ?? set.amountALL;
+        const nextAmountInGroup =
+          set.currency === baseCurrency && typeof set.amount === "number"
+            ? set.amount
+            : baseCurrency === "ALL"
+              ? set.amountALL
+              : Math.round((set.amountALL / rateToALL) * 100) / 100;
+
+        const nextFxRateToGroup =
+          set.currency === baseCurrency
+            ? 1
+            : nativeAmt > 0
+              ? Math.round((nextAmountInGroup / nativeAmt) * 1000000) / 1000000
+              : 1;
+
+        await ctx.db.patch(set._id, {
+          amountInGroupCurrency: nextAmountInGroup,
+          fxRateToGroup: nextFxRateToGroup,
+        });
+      }
+    }
   },
 });
 
