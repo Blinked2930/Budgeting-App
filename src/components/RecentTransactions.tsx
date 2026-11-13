@@ -25,11 +25,12 @@ import {
   TriangleAlert,
   ChevronDown,
   Scale,
-  Handshake,
+  Receipt,
 } from 'lucide-react';
 import type { ExpenseRecord, Category, TransferRecord } from '../types';
 import { deleteExpense, deleteTransfer, hasLinkedDebt } from '../db';
 import { useCurrency } from '../hooks/useCurrency';
+import { formatCurrency as formatRawCurrency } from '../utils/currency';
 import { classifyExpense, budgetImpactOf, isReconciliationEntry } from '../utils/budget';
 import { normalizeCategory } from '../utils/categoryConfig';
 import { cn } from '../utils/cn';
@@ -128,7 +129,10 @@ function primaryKind(e: ExpenseRecord): PrimaryKind {
   if (isReconciliationEntry(e)) return 'reconciliation';
   if (e.isBigExpense) return 'big';
 
-  if (e.isDebtOrigin || (e.debtRelated && (lowerName.startsWith('lent to ') || lowerName.startsWith('borrowed from ')))) {
+  if (
+    e.isDebtOrigin ||
+    (e.debtRelated && (lowerName.startsWith('lent to ') || lowerName.startsWith('borrowed from ')))
+  ) {
     return e.amount < 0 ? 'borrowed' : 'lent';
   }
   if (lowerName.startsWith('offset')) return 'offset';
@@ -137,7 +141,12 @@ function primaryKind(e: ExpenseRecord): PrimaryKind {
     return 'i_repaid';
   }
 
-  if (e.isForgiveness || lowerName.includes('gift to') || lowerName.includes('forgiven to') || lowerName.includes('bought by')) {
+  if (
+    e.isForgiveness ||
+    lowerName.includes('gift to') ||
+    lowerName.includes('forgiven to') ||
+    lowerName.includes('bought by')
+  ) {
     return 'gift';
   }
   if (e.amount < 0) return 'income';
@@ -149,6 +158,64 @@ const SPENT_BUCKETS = new Set(['regular', 'noWalletSpending', 'forgiveness', 'tr
 function isSpent(e: ExpenseRecord): boolean {
   return e.amount > 0 && SPENT_BUCKETS.has(classifyExpense(e));
 }
+
+type FlowPolarity = 'positive' | 'negative' | 'neutral';
+
+interface AccountingSignals {
+  expense: FlowPolarity; // red = expense incurred, green = income/reversal, gray = neutral
+  cash: FlowPolarity; // green = cash in, red = cash out, gray = neutral
+  bank: FlowPolarity; // green = bank in, red = bank out, gray = neutral
+  summary: string;
+}
+
+function getExpenseSignals(e: ExpenseRecord, kind: PrimaryKind, spent: boolean): AccountingSignals {
+  const noWallet = Boolean(e.walletNeutral);
+  const isCash = e.paidWith === 'Cash';
+  const isInflow = e.amount < 0;
+
+  let expensePolarity: FlowPolarity = 'neutral';
+  if (spent) {
+    expensePolarity = 'negative';
+  } else if (kind === 'income' || (isInflow && !e.debtRelated && !e.isDebtOrigin)) {
+    expensePolarity = 'positive';
+  }
+
+  let cashPolarity: FlowPolarity = 'neutral';
+  let bankPolarity: FlowPolarity = 'neutral';
+  if (!noWallet && e.amount !== 0) {
+    const walletPolarity: FlowPolarity = isInflow ? 'positive' : 'negative';
+    if (isCash) {
+      cashPolarity = walletPolarity;
+    } else {
+      bankPolarity = walletPolarity;
+    }
+  }
+
+  const label = (p: FlowPolarity, pos: string, neg: string) =>
+    p === 'positive' ? pos : p === 'negative' ? neg : 'neutral';
+
+  const summary = `Expense: ${label(expensePolarity, '+income', '−expense')} · Cash: ${label(
+    cashPolarity,
+    '+in',
+    '−out'
+  )} · Bank: ${label(bankPolarity, '+in', '−out')}`;
+
+  return { expense: expensePolarity, cash: cashPolarity, bank: bankPolarity, summary };
+}
+
+const signalColor = (p: FlowPolarity): string =>
+  p === 'positive' ? 'text-emerald-600' : p === 'negative' ? 'text-rose-500' : 'text-slate-300';
+
+const AccountingStrip: React.FC<{ signals: AccountingSignals }> = ({ signals }) => (
+  <span
+    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-50 border border-slate-200/70 shrink-0"
+    title={signals.summary}
+  >
+    <Receipt className={cn('w-3 h-3', signalColor(signals.expense))} />
+    <Banknote className={cn('w-3 h-3', signalColor(signals.cash))} />
+    <CreditCard className={cn('w-3 h-3', signalColor(signals.bank))} />
+  </span>
+);
 
 type MergedItem =
   | { kind: 'expense'; record: ExpenseRecord; timestamp: string; isConvex?: boolean; groupName?: string }
@@ -220,7 +287,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
 }) => {
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const { format } = useCurrency();
+  const { format, currency: activeCurrency } = useCurrency();
 
   const convexActivity = useQuery((api as any).groups?.getActivityFeed, {}) || [];
 
@@ -279,11 +346,11 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
       record: {
         id: a.id || a._id,
         amount: a.amount,
-        amountInALL: a.amount,
-        currency: a.currency || 'ALL',
+        amountInALL: a.amountInALL ?? a.amount,
+        currency: (a.currency || 'ALL') as ExpenseRecord['currency'],
         category: normalizeCategory(a.category),
         itemName: `${a.groupName}: ${a.title}`,
-        paidWith: 'Cash',
+        paidWith: a.paidWith || 'Card',
         timestamp: new Date(a.timestamp).toISOString(),
         isSynced: true,
       } as ExpenseRecord,
@@ -359,7 +426,17 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
             {group.items.map((item) => {
               if (item.kind === 'transfer') {
                 const t = item.record;
-                const label = t.direction === 'BankToCash' ? 'Bank → Cash' : 'Cash → Bank';
+                const isBankToCash = t.direction === 'BankToCash';
+                const label = isBankToCash ? 'Bank → Cash' : 'Cash → Bank';
+                const transferSignals: AccountingSignals = {
+                  expense: 'neutral',
+                  cash: isBankToCash ? 'positive' : 'negative',
+                  bank: isBankToCash ? 'negative' : 'positive',
+                  summary: isBankToCash
+                    ? 'Expense: neutral · Cash: +in · Bank: −out'
+                    : 'Expense: neutral · Cash: −out · Bank: +in',
+                };
+
                 return (
                   <div
                     key={t.id}
@@ -375,6 +452,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                       <div className="min-w-0">
                         <p className="text-xs font-semibold text-slate-900 truncate">{label}</p>
                         <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-400">
+                          <AccountingStrip signals={transferSignals} />
                           <span className="font-medium text-amber-700">Transfer</span>
                           <span>·</span>
                           <span>{formatRelativeTime(t.timestamp)}</span>
@@ -408,13 +486,18 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                 vendorType: expense.vendorType,
                 foodType: expense.foodType,
               });
-              const isForeignCurrency = expense.currency !== 'ALL';
+              const expCurrency = (expense.currency || 'ALL').toUpperCase();
+              const isForeignCurrency = expCurrency !== 'ALL';
+              const showNativePrimary =
+                item.isConvex && expCurrency !== activeCurrency.toUpperCase();
+
               const kind = primaryKind(expense);
               const noWallet = Boolean(expense.walletNeutral);
-              const isCash = expense.paidWith === 'Cash';
               const spent = isSpent(expense);
               const isIn = expense.amount < 0;
               const isBudgetNeutral = !spent && kind !== 'income';
+              const signals = getExpenseSignals(expense, kind, spent);
+
               const moneyKinds: PrimaryKind[] = [
                 'lent',
                 'borrowed',
@@ -426,7 +509,13 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
 
               let displayAmount: string;
               let amountColor: string;
-              if (noWallet) {
+              if (showNativePrimary) {
+                displayAmount = formatRawCurrency(
+                  Math.abs(expense.amount),
+                  expCurrency as ExpenseRecord['currency']
+                );
+                amountColor = 'text-slate-900';
+              } else if (noWallet) {
                 displayAmount = format(Math.abs(expense.amountInALL));
                 amountColor = 'text-slate-600';
               } else if (moneyKinds.includes(kind)) {
@@ -471,35 +560,11 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                 }
               }
 
-              const walletBadge = noWallet ? (
-                <span
-                  className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-indigo-100 border border-white text-indigo-700 flex items-center justify-center shadow-2xs"
-                  title="Someone else paid (0 wallet movement)"
-                >
-                  <Handshake className="w-2.5 h-2.5" />
-                </span>
-              ) : isCash ? (
-                <span
-                  className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-teal-100 border border-white text-teal-700 flex items-center justify-center shadow-2xs"
-                  title="Cash moved"
-                >
-                  <Banknote className="w-2.5 h-2.5" />
-                </span>
-              ) : (
-                <span
-                  className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-rose-100 border border-white text-rose-700 flex items-center justify-center shadow-2xs"
-                  title="Bank / Card moved"
-                >
-                  <CreditCard className="w-2.5 h-2.5" />
-                </span>
-              );
-
               const showsBudgetShare =
                 expense.budgetAmountALL !== undefined &&
                 Math.abs(expense.budgetAmountALL - expense.amountInALL) >= 1;
 
               const kindLabel = NON_STANDARD_LABELS[kind];
-              const walletText = noWallet ? 'Someone else' : isCash ? 'Cash' : 'Card';
 
               return (
                 <div
@@ -512,13 +577,12 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                   <div className="flex items-center gap-3 min-w-0">
                     <div
                       className={cn(
-                        'relative w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border',
+                        'w-9 h-9 rounded-xl flex items-center justify-center shrink-0 border',
                         tile
                       )}
-                      title={`${canonicalCategory} · ${spent ? 'Counts as expense' : 'Not an expense'} · ${walletText}`}
+                      title={`${canonicalCategory} · ${signals.summary}`}
                     >
                       {icon}
-                      {walletBadge}
                     </div>
 
                     <div className="min-w-0">
@@ -534,6 +598,7 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                       </div>
 
                       <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-400 truncate">
+                        <AccountingStrip signals={signals} />
                         {kindLabel && (
                           <>
                             <span
@@ -551,16 +616,12 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                             <span>·</span>
                           </>
                         )}
-                        <span className={noWallet ? 'text-indigo-600 font-medium' : undefined}>
-                          {walletText}
-                        </span>
                         {showsBudgetShare && (
                           <>
-                            <span>·</span>
                             <span className="text-indigo-600 font-medium">Split</span>
+                            <span>·</span>
                           </>
                         )}
-                        <span>·</span>
                         <span>{formatRelativeTime(expense.timestamp)}</span>
                         {!expense.isSynced && (
                           <span title="Offline" className="inline-flex shrink-0">
@@ -581,10 +642,19 @@ export const RecentTransactions: React.FC<RecentTransactionsProps> = ({
                           your share {format(expense.budgetAmountALL as number)}
                         </p>
                       )}
-                      {isForeignCurrency && (
+                      {showNativePrimary ? (
                         <p className="text-[10px] font-mono text-emerald-600 font-medium">
                           ≈ {format(expense.amountInALL)}
                         </p>
+                      ) : (
+                        isForeignCurrency && (
+                          <p className="text-[10px] font-mono text-emerald-600 font-medium">
+                            {formatRawCurrency(
+                              Math.abs(expense.amount),
+                              expCurrency as ExpenseRecord['currency']
+                            )}
+                          </p>
+                        )
                       )}
                     </div>
 

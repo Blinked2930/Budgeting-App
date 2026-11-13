@@ -36,8 +36,9 @@ import {
   db,
 } from '../db';
 import { useCurrency } from '../hooks/useCurrency';
+import { convertFromALL, formatCurrency } from '../utils/currency';
 import { cn } from '../utils/cn';
-import type { DebtDirection, DebtRecord, ExpenseRecord, PaymentSource } from '../types';
+import type { Currency, DebtDirection, DebtRecord, ExpenseRecord, PaymentSource } from '../types';
 
 interface DebtsPanelProps {
   isOpen: boolean;
@@ -1160,7 +1161,13 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initial
                     Shared Trip & Group Balances (Divvy)
                   </p>
                   {convexGroups.map((cg: any) => {
-                    const net = cg.myNetBalanceALL ?? cg.netBalanceALL ?? cg.netBalance ?? 0;
+                    const grpCurrency = (cg.currency || 'ALL').toUpperCase() as Currency;
+                    const netALL = cg.myNetBalanceALL ?? cg.netBalanceALL ?? cg.netBalance ?? 0;
+                    const netGroup =
+                      typeof cg.myNetBalanceGroup === 'number'
+                        ? cg.myNetBalanceGroup
+                        : convertFromALL(netALL, grpCurrency);
+
                     return (
                       <div
                         key={cg._id}
@@ -1173,7 +1180,7 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initial
                           <div>
                             <h4 className="font-bold text-slate-900 text-xs">{cg.name}</h4>
                             <p className="text-[9px] text-slate-400 font-mono">
-                              ID: {cg.inviteCode || cg._id.slice(-6).toUpperCase()}
+                              ID: {cg.inviteCode || cg._id.slice(-6).toUpperCase()} · {grpCurrency}
                             </p>
                           </div>
                         </div>
@@ -1182,11 +1189,22 @@ export const DebtsPanel: React.FC<DebtsPanelProps> = ({ isOpen, onClose, initial
                           <p
                             className={cn(
                               'text-xs font-mono font-bold',
-                              net > 0 ? 'text-emerald-600' : net < 0 ? 'text-rose-600' : 'text-slate-400'
+                              netGroup > 0
+                                ? 'text-emerald-600'
+                                : netGroup < 0
+                                  ? 'text-rose-600'
+                                  : 'text-slate-400'
                             )}
                           >
-                            {net === 0 ? 'Settled' : `${net > 0 ? '+' : '−'}${format(Math.abs(net))}`}
+                            {netGroup === 0
+                              ? 'Settled'
+                              : `${netGroup > 0 ? '+' : '−'}${formatCurrency(Math.abs(netGroup), grpCurrency)}`}
                           </p>
+                          {grpCurrency !== 'ALL' && netALL !== 0 && (
+                            <p className="text-[9px] font-mono text-slate-400">
+                              ≈ {format(Math.abs(netALL))}
+                            </p>
+                          )}
                         </div>
                       </div>
                     );

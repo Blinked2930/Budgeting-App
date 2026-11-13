@@ -6,6 +6,7 @@ import { api } from '../../convex/_generated/api';
 import { cn } from '../utils/cn';
 import { convertFromALL, formatCurrency } from '../utils/currency';
 import { useCurrency } from '../hooks/useCurrency';
+import type { Currency } from '../types';
 
 interface LocalDebt {
   id: string;
@@ -23,6 +24,7 @@ interface GroupSummary {
   _id: string;
   name: string;
   currency: string;
+  myNetBalanceGroup?: number;
   myNetBalanceALL: number;
   memberCount: number;
   isOwner?: boolean;
@@ -38,7 +40,7 @@ export const DebtsAndSharedCard: React.FC<DebtsAndSharedCardProps> = ({ localDeb
   const prefs = useQuery((api as any).preferences?.getMyPreferences, {}) as { baseCurrency: string } | undefined;
   const { currency: activeCurrency } = useCurrency();
 
-  const displayCurrency: string = activeCurrency || prefs?.baseCurrency || 'ALL';
+  const displayCurrency: Currency = (activeCurrency || prefs?.baseCurrency || 'ALL') as Currency;
 
   const fmtDisplay = (amountALL: number): string => {
     const converted = convertFromALL(amountALL, displayCurrency);
@@ -135,34 +137,52 @@ export const DebtsAndSharedCard: React.FC<DebtsAndSharedCardProps> = ({ localDeb
           </button>
         ))}
 
-        {groupRows.map((g) => (
-          <button
-            key={`group-${g._id}`}
-            type="button"
-            onClick={() => onOpenDebtsPanel?.(g.name)}
-            className="w-full flex items-center justify-between px-3 py-2.5 rounded-2xl border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
-              <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-              <span className="text-xs font-semibold text-slate-800 truncate">{g.name}</span>
-              <span className="text-[10px] text-slate-400 shrink-0">
-                {g.memberCount} {g.memberCount === 1 ? 'member' : 'members'}
-              </span>
-              {g.currency && g.currency !== displayCurrency && (
-                <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">
-                  {g.currency}
+        {groupRows.map((g) => {
+          const grpCurrency = (g.currency || 'ALL').toUpperCase() as Currency;
+          const nativeNet =
+            typeof g.myNetBalanceGroup === 'number'
+              ? g.myNetBalanceGroup
+              : convertFromALL(g.myNetBalanceALL, grpCurrency);
+          const showConvertedHint = grpCurrency !== displayCurrency && g.myNetBalanceALL !== 0;
+
+          return (
+            <button
+              key={`group-${g._id}`}
+              type="button"
+              onClick={() => onOpenDebtsPanel?.(g.name)}
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-2xl border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
+                <Users className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                <span className="text-xs font-semibold text-slate-800 truncate">{g.name}</span>
+                <span className="text-[10px] text-slate-400 shrink-0">
+                  {g.memberCount} {g.memberCount === 1 ? 'member' : 'members'}
                 </span>
-              )}
-            </div>
-            <span className={cn(
-              'text-xs font-mono font-bold shrink-0',
-              g.myNetBalanceALL > 0 ? 'text-emerald-600' : g.myNetBalanceALL < 0 ? 'text-rose-600' : 'text-slate-400'
-            )}>
-              {g.myNetBalanceALL === 0 ? '—' : fmtDisplay(Math.abs(g.myNetBalanceALL))}
-            </span>
-          </button>
-        ))}
+                {grpCurrency !== displayCurrency && (
+                  <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 shrink-0">
+                    {grpCurrency}
+                  </span>
+                )}
+              </div>
+              <div className="text-right shrink-0">
+                <span className={cn(
+                  'block text-xs font-mono font-bold',
+                  nativeNet > 0 ? 'text-emerald-600' : nativeNet < 0 ? 'text-rose-600' : 'text-slate-400'
+                )}>
+                  {nativeNet === 0
+                    ? '—'
+                    : `${nativeNet > 0 ? '+' : '−'}${formatCurrency(Math.abs(nativeNet), grpCurrency)}`}
+                </span>
+                {showConvertedHint && (
+                  <span className="block text-[9px] font-mono text-slate-400">
+                    ≈ {fmtDisplay(Math.abs(g.myNetBalanceALL))}
+                  </span>
+                )}
+              </div>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

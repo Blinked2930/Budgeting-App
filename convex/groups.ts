@@ -394,6 +394,7 @@ export const getActivityFeed = query({
       id: string;
       groupId: string;
       groupName: string;
+      groupCurrency: string;
       type: "expense" | "settlement";
       title: string;
       amount: number;
@@ -430,15 +431,25 @@ export const getActivityFeed = query({
         .collect();
 
       for (const exp of expenses) {
+        const cur = (exp.currency || "ALL").toUpperCase();
+        const fallbackRate = FALLBACK_RATES_TO_ALL[cur] ?? 1;
+        const normalizedAmountInALL =
+          cur !== "ALL" &&
+          fallbackRate !== 1 &&
+          Math.abs(exp.amountInALL - exp.amount) < 0.001
+            ? Math.round(exp.amount * fallbackRate * 100) / 100
+            : exp.amountInALL;
+
         activities.push({
           id: exp._id,
           groupId: group._id,
           groupName: group.name,
+          groupCurrency: group.currency,
           type: "expense",
           title: exp.title,
           amount: exp.amount,
           amountInGroupCurrency: exp.amountInGroupCurrency,
-          amountInALL: exp.amountInALL,
+          amountInALL: normalizedAmountInALL,
           currency: exp.currency,
           category: exp.category,
           paidByMemberId: exp.paidByMemberId,
@@ -461,15 +472,23 @@ export const getActivityFeed = query({
       for (const set of settlements) {
         const fromName = memberMap.get(set.fromMemberId) ?? "Someone";
         const toName = memberMap.get(set.toMemberId) ?? "Someone";
+        const cur = (set.currency || "ALL").toUpperCase();
+        const fallbackRate = FALLBACK_RATES_TO_ALL[cur] ?? 1;
+        const normalizedAmountALL =
+          cur !== "ALL" && fallbackRate !== 1 && set.amount === undefined
+            ? Math.round(set.amountALL * fallbackRate * 100) / 100
+            : set.amountALL;
+
         activities.push({
           id: set._id,
           groupId: group._id,
           groupName: group.name,
+          groupCurrency: group.currency,
           type: "settlement",
           title: `${fromName} paid ${toName}`,
           amount: set.amount ?? set.amountALL,
           amountInGroupCurrency: set.amountInGroupCurrency,
-          amountInALL: set.amountALL,
+          amountInALL: normalizedAmountALL,
           currency: set.currency,
           paidWith: set.paidWith,
           timestamp: set.timestamp,
