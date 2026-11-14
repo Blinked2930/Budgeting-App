@@ -23,6 +23,8 @@ export default defineSchema({
     isDebtOrigin: v.optional(v.boolean()),
     isBigExpense: v.optional(v.boolean()),
     isForgiveness: v.optional(v.boolean()),
+    divvyExpenseId: v.optional(v.string()),
+    divvyGroupId: v.optional(v.string()),
     timestamp: v.string(),
     updatedAt: v.optional(v.string()),
     deleted: v.optional(v.boolean()),
@@ -84,6 +86,7 @@ export default defineSchema({
     status: v.string(),
     sourceExpenseId: v.optional(v.string()),
     myShareAmountALL: v.optional(v.number()),
+    divvyExpenseId: v.optional(v.string()),
     createdAt: v.string(),
     resolvedAt: v.optional(v.string()),
     updatedAt: v.optional(v.string()),
@@ -148,6 +151,11 @@ export default defineSchema({
         amountALL: v.number(),
       })
     ),
+    // Pulse Budget Integration Fields
+    paidWith: v.optional(v.union(v.literal("Cash"), v.literal("Card"))),
+    isBigExpense: v.optional(v.boolean()),
+    syncToPulse: v.optional(v.boolean()),
+    pulseSourceExpenseId: v.optional(v.string()),
     timestamp: v.number(),
     createdAt: v.number(),
     deleted: v.optional(v.boolean()),

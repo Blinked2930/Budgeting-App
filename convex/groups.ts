@@ -94,6 +94,58 @@ function assertGroupSplitsBalance(
   }
 }
 
+function resolveGroupAmount(
+  amount: number,
+  currency: string,
+  amountInALL: number,
+  groupCurrency: string,
+  explicitGroupAmount?: number
+): number {
+  if (currency === groupCurrency) {
+    return Math.round(amount * 100) / 100;
+  }
+  if (groupCurrency === "ALL") {
+    return Math.round(amountInALL * 100) / 100;
+  }
+  if (
+    typeof explicitGroupAmount === "number" &&
+    Number.isFinite(explicitGroupAmount) &&
+    explicitGroupAmount > 0 &&
+    Math.abs(explicitGroupAmount - amountInALL) > 0.01
+  ) {
+    return Math.round(explicitGroupAmount * 100) / 100;
+  }
+  const groupRateToALL = FALLBACK_RATES_TO_ALL[groupCurrency] ?? 100;
+  return Math.round((amountInALL / groupRateToALL) * 100) / 100;
+}
+
+function ensureSplitsHaveGroupAmounts(
+  splits: Array<{ memberId: any; userId?: string; amountGroup?: number; amountALL: number }>,
+  amountInGroupCurrency: number
+): Array<{ memberId: any; userId?: string; amountGroup: number; amountALL: number }> {
+  const hasAllGroupAmounts = splits.every(
+    (s) => typeof s.amountGroup === "number" && Number.isFinite(s.amountGroup)
+  );
+  if (hasAllGroupAmounts) {
+    const sum = splits.reduce((acc, s) => acc + (s.amountGroup ?? 0), 0);
+    if (Math.abs(sum - amountInGroupCurrency) <= 0.01) {
+      return splits.map((s) => ({
+        ...s,
+        amountGroup: Math.round((s.amountGroup ?? 0) * 100) / 100,
+      }));
+    }
+  }
+  const weights: Record<string, number> = {};
+  for (const s of splits) {
+    weights[s.memberId] = s.amountALL > 0 ? s.amountALL : 0;
+  }
+  const alloc = allocateByShares(amountInGroupCurrency, weights);
+  return splits.map((s) => ({
+    ...s,
+    amountGroup: alloc[s.memberId] ?? 0,
+  }));
+}
+
 function rebalanceSplits(
   existing: Array<{ memberId: any; userId?: string; amountGroup?: number; amountALL: number }>,
   amountInALL: number
@@ -174,17 +226,13 @@ export const getMyGroups = query({
       let netGroup = 0;
 
       for (const exp of expenses) {
-        const expGroupTotal =
-          exp.currency === group.currency
-            ? exp.amount
-            : group.currency === "ALL"
-              ? exp.amountInALL
-              : typeof exp.amountInGroupCurrency === "number" &&
-                  Math.abs(exp.amountInGroupCurrency - exp.amountInALL) > 0.01
-                ? exp.amountInGroupCurrency
-                : Math.round(
-                    (exp.amountInALL / (FALLBACK_RATES_TO_ALL[group.currency] ?? 1)) * 100
-                  ) / 100;
+        const expGroupTotal = resolveGroupAmount(
+          exp.amount,
+          exp.currency,
+          exp.amountInALL,
+          group.currency,
+          exp.amountInGroupCurrency
+        );
 
         if (exp.paidByMemberId === memberRow._id) {
           netALL += exp.amountInALL;
@@ -210,17 +258,13 @@ export const getMyGroups = query({
       }
 
       for (const set of settlements) {
-        const setGroupAmt =
-          set.currency === group.currency && typeof set.amount === "number"
-            ? set.amount
-            : group.currency === "ALL"
-              ? set.amountALL
-              : typeof set.amountInGroupCurrency === "number" &&
-                  Math.abs(set.amountInGroupCurrency - set.amountALL) > 0.01
-                ? set.amountInGroupCurrency
-                : Math.round(
-                    (set.amountALL / (FALLBACK_RATES_TO_ALL[group.currency] ?? 1)) * 100
-                  ) / 100;
+        const setGroupAmt = resolveGroupAmount(
+          set.amount ?? set.amountALL,
+          set.currency,
+          set.amountALL,
+          group.currency,
+          set.amountInGroupCurrency
+        );
 
         if (set.fromMemberId === memberRow._id) {
           netALL += set.amountALL;
@@ -293,6 +337,88 @@ export const getGroupDetails = query({
       expenses: expenses.sort((a, b) => b.timestamp - a.timestamp),
       settlements: settlements.sort((a, b) => b.timestamp - a.timestamp),
     };
+  },
+});
+
+/**
+ * Single reactive subscription returning full group details (members, expenses,
+ * settlements) for all groups the current user belongs to. Used by Pulse's
+ * useBudgetCycle hook so personal consumption, Card/Cash wallet deltas, Big
+ * Expenses, and Travel Stash recalculate immediately when Divvy changes.
+ */
+export const getAllMyGroupDetails = query({
+  args: {
+    userId: v.optional(v.string()),
+    includeArchived: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const userId = identity?.subject ?? args.userId ?? "anonymous";
+
+    const allMembers = await ctx.db.query("groupMembers").collect();
+    const myMemberRecords = allMembers.filter(
+      (m) => m.userId === userId || (!m.userId && userId === "anonymous")
+    );
+
+    const results: Array<{
+      group: { _id: any; name: string; currency: string; status: string };
+      members: any[];
+      expenses: any[];
+      settlements: any[];
+    }> = [];
+
+    const seenGroupIds = new Set<string>();
+
+    for (const memberRow of myMemberRecords) {
+      const gidStr = String(memberRow.groupId);
+      if (seenGroupIds.has(gidStr)) continue;
+      seenGroupIds.add(gidStr);
+
+      const group = await ctx.db.get(memberRow.groupId);
+      if (!group || group.deleted) continue;
+
+      const groupStatus = group.status ?? "active";
+      if (!args.includeArchived && groupStatus === "archived") continue;
+
+      const members = await ctx.db
+        .query("groupMembers")
+        .filter((q) => q.eq(q.field("groupId"), memberRow.groupId))
+        .collect();
+
+      const expenses = await ctx.db
+        .query("groupExpenses")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("groupId"), memberRow.groupId),
+            q.neq(q.field("deleted"), true)
+          )
+        )
+        .collect();
+
+      const settlements = await ctx.db
+        .query("groupSettlements")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("groupId"), memberRow.groupId),
+            q.neq(q.field("deleted"), true)
+          )
+        )
+        .collect();
+
+      results.push({
+        group: {
+          _id: group._id,
+          name: group.name,
+          currency: group.currency,
+          status: groupStatus,
+        },
+        members,
+        expenses: expenses.sort((a, b) => b.timestamp - a.timestamp),
+        settlements: settlements.sort((a, b) => b.timestamp - a.timestamp),
+      });
+    }
+
+    return results;
   },
 });
 
@@ -400,11 +526,15 @@ export const getActivityFeed = query({
       amount: number;
       amountInGroupCurrency?: number;
       amountInALL: number;
+      myShareALL?: number;
+      youPaid?: boolean;
       currency: string;
       category?: string;
       paidByMemberId?: string;
       splitType?: string;
       paidWith?: "Cash" | "Card";
+      isBigExpense?: boolean;
+      syncToPulse?: boolean;
       timestamp: number;
       actorName: string;
     }> = [];
@@ -418,6 +548,9 @@ export const getActivityFeed = query({
         .filter((q) => q.eq(q.field("groupId"), groupId))
         .collect();
 
+      const selfMember = members.find(
+        (m) => m.userId === userId || (!m.userId && userId === "anonymous")
+      );
       const memberMap = new Map(members.map((m) => [m._id, m.name]));
 
       const expenses = await ctx.db
@@ -433,12 +566,23 @@ export const getActivityFeed = query({
       for (const exp of expenses) {
         const cur = (exp.currency || "ALL").toUpperCase();
         const fallbackRate = FALLBACK_RATES_TO_ALL[cur] ?? 1;
-        const normalizedAmountInALL =
+        const isLegacyUnconverted =
           cur !== "ALL" &&
           fallbackRate !== 1 &&
-          Math.abs(exp.amountInALL - exp.amount) < 0.001
-            ? Math.round(exp.amount * fallbackRate * 100) / 100
-            : exp.amountInALL;
+          Math.abs(exp.amountInALL - exp.amount) < 0.001;
+
+        const normalizedAmountInALL = isLegacyUnconverted
+          ? Math.round(exp.amount * fallbackRate * 100) / 100
+          : exp.amountInALL;
+
+        let myShareALL: number | undefined = undefined;
+        if (selfMember) {
+          const mySplit = exp.splits.find((s) => s.memberId === selfMember._id);
+          const rawShare = mySplit ? mySplit.amountALL : 0;
+          myShareALL = isLegacyUnconverted
+            ? Math.round(rawShare * fallbackRate * 100) / 100
+            : rawShare;
+        }
 
         activities.push({
           id: exp._id,
@@ -450,10 +594,15 @@ export const getActivityFeed = query({
           amount: exp.amount,
           amountInGroupCurrency: exp.amountInGroupCurrency,
           amountInALL: normalizedAmountInALL,
+          myShareALL,
+          youPaid: selfMember ? exp.paidByMemberId === selfMember._id : undefined,
           currency: exp.currency,
           category: exp.category,
           paidByMemberId: exp.paidByMemberId,
           splitType: exp.splitType,
+          paidWith: exp.paidWith ?? "Card",
+          isBigExpense: exp.isBigExpense ?? false,
+          syncToPulse: exp.syncToPulse ?? true,
           timestamp: exp.timestamp,
           actorName: memberMap.get(exp.paidByMemberId) ?? "Someone",
         });
@@ -489,8 +638,9 @@ export const getActivityFeed = query({
           amount: set.amount ?? set.amountALL,
           amountInGroupCurrency: set.amountInGroupCurrency,
           amountInALL: normalizedAmountALL,
+          youPaid: selfMember ? set.fromMemberId === selfMember._id : undefined,
           currency: set.currency,
-          paidWith: set.paidWith,
+          paidWith: set.paidWith ?? "Cash",
           timestamp: set.timestamp,
           actorName: fromName,
         });
@@ -935,6 +1085,10 @@ export const addExpense = mutation({
         amountALL: v.number(),
       })
     ),
+    paidWith: v.optional(v.union(v.literal("Cash"), v.literal("Card"))),
+    isBigExpense: v.optional(v.boolean()),
+    syncToPulse: v.optional(v.boolean()),
+    pulseSourceExpenseId: v.optional(v.string()),
     timestamp: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -948,12 +1102,21 @@ export const addExpense = mutation({
       throw new Error("Expense amount and ALL amount must be greater than 0.");
     }
 
-    const amountInGroupCurrency =
-      args.amountInGroupCurrency ??
-      (currency === group.currency ? args.amount : args.amountInALL);
+    const amountInGroupCurrency = resolveGroupAmount(
+      args.amount,
+      currency,
+      args.amountInALL,
+      group.currency,
+      args.amountInGroupCurrency
+    );
 
-    assertSplitsBalance(args.splits, args.amountInALL);
-    assertGroupSplitsBalance(args.splits, amountInGroupCurrency);
+    const normalizedSplits = ensureSplitsHaveGroupAmounts(
+      args.splits,
+      amountInGroupCurrency
+    );
+
+    assertSplitsBalance(normalizedSplits, args.amountInALL);
+    assertGroupSplitsBalance(normalizedSplits, amountInGroupCurrency);
 
     const now = Date.now();
     const fxRateToGroup =
@@ -978,7 +1141,11 @@ export const addExpense = mutation({
       paidByMemberId: args.paidByMemberId,
       paidByUserId: args.paidByUserId,
       splitType: args.splitType,
-      splits: args.splits,
+      splits: normalizedSplits,
+      paidWith: args.paidWith ?? "Card",
+      isBigExpense: args.isBigExpense ?? false,
+      syncToPulse: args.syncToPulse ?? true,
+      pulseSourceExpenseId: args.pulseSourceExpenseId,
       timestamp: args.timestamp ?? now,
       createdAt: now,
     });
@@ -1009,6 +1176,10 @@ export const updateExpense = mutation({
         amountALL: v.number(),
       })
     ),
+    paidWith: v.optional(v.union(v.literal("Cash"), v.literal("Card"))),
+    isBigExpense: v.optional(v.boolean()),
+    syncToPulse: v.optional(v.boolean()),
+    timestamp: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db.get(args.expenseId);
@@ -1023,12 +1194,21 @@ export const updateExpense = mutation({
       throw new Error("Expense amount and ALL amount must be greater than 0.");
     }
 
-    const amountInGroupCurrency =
-      args.amountInGroupCurrency ??
-      (currency === groupCurrency ? args.amount : args.amountInALL);
+    const amountInGroupCurrency = resolveGroupAmount(
+      args.amount,
+      currency,
+      args.amountInALL,
+      groupCurrency,
+      args.amountInGroupCurrency
+    );
 
-    assertSplitsBalance(args.splits, args.amountInALL);
-    assertGroupSplitsBalance(args.splits, amountInGroupCurrency);
+    const normalizedSplits = ensureSplitsHaveGroupAmounts(
+      args.splits,
+      amountInGroupCurrency
+    );
+
+    assertSplitsBalance(normalizedSplits, args.amountInALL);
+    assertGroupSplitsBalance(normalizedSplits, amountInGroupCurrency);
 
     const { expenseId, ...updates } = args;
     const fxRateToGroup =
@@ -1046,6 +1226,11 @@ export const updateExpense = mutation({
       amountInGroupCurrency,
       fxRateToGroup,
       fxRateToALL,
+      splits: normalizedSplits,
+      paidWith: args.paidWith ?? existing.paidWith ?? "Card",
+      isBigExpense: args.isBigExpense ?? existing.isBigExpense ?? false,
+      syncToPulse: args.syncToPulse ?? existing.syncToPulse ?? true,
+      timestamp: args.timestamp ?? existing.timestamp,
     });
   },
 });
@@ -1080,11 +1265,6 @@ export const repairExpenseSplits = mutation({
   },
 });
 
-/**
- * One-shot repair for non-ALL expenses/settlements that were previously saved
- * with amountInALL === amount (1:1) because the modal converted to groupCurrency
- * instead of ALL. Safe and idempotent.
- */
 export const repairUnconvertedCurrencyRecords = mutation({
   args: {
     customRatesToALL: v.optional(v.record(v.string(), v.number())),
@@ -1134,7 +1314,6 @@ export const repairUnconvertedCurrencyRecords = mutation({
       const rate = rates[cur];
       if (!rate || rate === 1) continue;
 
-      // Only convert settlements that do not yet have a separate native `amount` recorded
       if (set.amount === undefined) {
         const nextAmountALL = Math.round(set.amountALL * rate * 100) / 100;
         await ctx.db.patch(set._id, {
@@ -1189,9 +1368,13 @@ export const settleGroupDebt = mutation({
     }
     const now = Date.now();
     const nativeAmount = args.amount ?? args.amountInGroupCurrency ?? args.amountALL;
-    const amountInGroupCurrency =
-      args.amountInGroupCurrency ??
-      (currency === group.currency ? nativeAmount : args.amountALL);
+    const amountInGroupCurrency = resolveGroupAmount(
+      nativeAmount,
+      currency,
+      args.amountALL,
+      group.currency,
+      args.amountInGroupCurrency
+    );
     const fxRateToGroup =
       args.fxRateToGroup ??
       (currency === group.currency
